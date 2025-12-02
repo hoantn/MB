@@ -1,0 +1,13 @@
+profiles:
+  - id: 1
+    name: "Player1"
+    chrome_profile_path: "C:/Kendz/Profile1"
+    game_id: "mau_binh_siteA"
+  - id: 2
+    name: "Player2"
+    chrome_profile_path: "C:/Kendz/Profile2"
+    game_id: "mau_binh_siteA"
+  - id: 3
+    name: "Player3"
+    chrome_profile_path: "C:/Kendz/Profile3"
+    game_id: "mau_binh_siteA"

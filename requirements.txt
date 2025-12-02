@@ -1,0 +1,10 @@
+selenium
+undetected-chromedriver
+opencv-python
+numpy
+Pillow
+SQLAlchemy
+pydantic
+PyYAML
+websocket-client
+tkinterdnd2

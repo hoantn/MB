@@ -1,0 +1,5 @@
+vision:
+  fps: 8                 # số khung hình/giây để Vision xử lý
+  capture_mode: "screen" # 'screen' (toàn màn hình) hoặc 'window' (sau này)
+  card_confidence_threshold: 0.78
+  debug_save_frame: true
