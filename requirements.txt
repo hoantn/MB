@@ -1,10 +1,6 @@
-selenium
-undetected-chromedriver
+pillow
+imagehash
 opencv-python
 numpy
-Pillow
-SQLAlchemy
-pydantic
-PyYAML
+requests
 websocket-client
-tkinterdnd2

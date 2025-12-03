@@ -1,1 +1,0 @@
-# kendz.cards package
