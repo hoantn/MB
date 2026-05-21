@@ -1,6 +1,0 @@
-2025/12/03-08:39:34.413 5fd8 Creating DB D:\Hoan\TOOL\MB\MB\user-data\P1\Default\WebStorage\3\IndexedDB\indexeddb.leveldb since it was missing.
-2025/12/03-08:39:34.479 5fd8 Reusing MANIFEST D:\Hoan\TOOL\MB\MB\user-data\P1\Default\WebStorage\3\IndexedDB\indexeddb.leveldb/MANIFEST-000001
-2025/12/03-08:49:36.944 6eb0 Level-0 table #5: started
-2025/12/03-08:49:36.999 6eb0 Level-0 table #5: 8227 bytes OK
-2025/12/03-08:49:37.033 6eb0 Delete type=0 #3
-2025/12/03-08:49:37.033 6eb0 Manual compaction at level-0 from (begin) .. (end); will stop at (end)

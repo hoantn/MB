@@ -26,3 +26,8 @@ class Card:
 
     def to_code(self) -> str:
         return f"{self.rank}{self.suit}"
+
+    @property
+    def code(self) -> str:
+        """Compatibility: return compact code like 'AR', '9C'."""
+        return self.to_code()

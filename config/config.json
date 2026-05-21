@@ -1,314 +1,1084 @@
 {
+  "game_ui": {
+    "taixiu": {
+      "tx_bet_values": [
+        "1000",
+        "10000",
+        "50000",
+        "100000",
+        "500000",
+        "1000000",
+        "10000000"
+      ],
+      "tx_bet_points_profile": {
+        "P1": {
+          "1000": {
+            "x": 75,
+            "y": 219
+          },
+          "10000": {
+            "x": 120,
+            "y": 218
+          },
+          "50000": {
+            "x": 163,
+            "y": 220
+          },
+          "100000": {
+            "x": 209,
+            "y": 219
+          },
+          "500000": {
+            "x": 247,
+            "y": 220
+          },
+          "1000000": {
+            "x": 293,
+            "y": 219
+          },
+          "10000000": {
+            "x": 338,
+            "y": 221
+          }
+        },
+        "P2": {
+          "1000": {
+            "x": 75,
+            "y": 219
+          },
+          "10000": {
+            "x": 120,
+            "y": 218
+          },
+          "50000": {
+            "x": 163,
+            "y": 220
+          },
+          "100000": {
+            "x": 209,
+            "y": 219
+          },
+          "500000": {
+            "x": 247,
+            "y": 220
+          },
+          "1000000": {
+            "x": 293,
+            "y": 219
+          },
+          "10000000": {
+            "x": 338,
+            "y": 221
+          }
+        },
+        "P3": {
+          "1000": {
+            "x": 75,
+            "y": 219
+          },
+          "10000": {
+            "x": 120,
+            "y": 218
+          },
+          "50000": {
+            "x": 163,
+            "y": 220
+          },
+          "100000": {
+            "x": 209,
+            "y": 219
+          },
+          "500000": {
+            "x": 247,
+            "y": 220
+          },
+          "1000000": {
+            "x": 293,
+            "y": 219
+          },
+          "10000000": {
+            "x": 338,
+            "y": 221
+          }
+        }
+      },
+      "tai_button_profile": {
+        "P1": {
+          "x": 128,
+          "y": 160
+        },
+        "P2": {
+          "x": 128,
+          "y": 160
+        },
+        "P3": {
+          "x": 128,
+          "y": 160
+        }
+      },
+      "xiu_button_profile": {
+        "P1": {
+          "x": 323,
+          "y": 160
+        },
+        "P2": {
+          "x": 323,
+          "y": 160
+        },
+        "P3": {
+          "x": 323,
+          "y": 160
+        }
+      },
+      "confirm_button_profile": {
+        "P1": {
+          "x": 228,
+          "y": 254
+        },
+        "P2": {
+          "x": 228,
+          "y": 254
+        },
+        "P3": {
+          "x": 228,
+          "y": 254
+        }
+      }
+    },
+    "bet_buttons": {
+      "100": {
+        "x": 251,
+        "y": 173
+      },
+      "500": {
+        "x": 441,
+        "y": 177
+      },
+      "1000": {
+        "x": 622,
+        "y": 174
+      },
+      "2000": {
+        "x": 260,
+        "y": 276
+      },
+      "5000": {
+        "x": 442,
+        "y": 278
+      },
+      "10000": {
+        "x": 617,
+        "y": 279
+      },
+      "20000": {
+        "x": 260,
+        "y": 377
+      },
+      "50000": {
+        "x": 436,
+        "y": 378
+      },
+      "100000": {
+        "x": 621,
+        "y": 376
+      },
+      "200000": {
+        "x": 621,
+        "y": 376
+      },
+      "500000": {
+        "x": 621,
+        "y": 376
+      },
+      "1000000": {
+        "x": 621,
+        "y": 376
+      }
+    },
+    "exit_button": {
+      "x": 58,
+      "y": 50
+    },
+    "bet_buttons_profile": {
+      "P1": {
+        "100": {
+          "x": 181,
+          "y": 125
+        },
+        "500": {
+          "x": 319,
+          "y": 126
+        },
+        "1000": {
+          "x": 450,
+          "y": 126
+        },
+        "2000": {
+          "x": 183,
+          "y": 199
+        },
+        "5000": {
+          "x": 316,
+          "y": 197
+        },
+        "10000": {
+          "x": 445,
+          "y": 199
+        },
+        "20000": {
+          "x": 192,
+          "y": 275
+        },
+        "50000": {
+          "x": 320,
+          "y": 273
+        },
+        "100000": {
+          "x": 440,
+          "y": 273
+        },
+        "200000": {
+          "x": 437,
+          "y": 271
+        },
+        "500000": {
+          "x": 440,
+          "y": 270
+        },
+        "1000000": {
+          "x": 437,
+          "y": 270
+        }
+      },
+      "P2": {
+        "100": {
+          "x": 181,
+          "y": 125
+        },
+        "500": {
+          "x": 319,
+          "y": 126
+        },
+        "1000": {
+          "x": 450,
+          "y": 126
+        },
+        "2000": {
+          "x": 183,
+          "y": 199
+        },
+        "5000": {
+          "x": 316,
+          "y": 197
+        },
+        "10000": {
+          "x": 445,
+          "y": 199
+        },
+        "20000": {
+          "x": 192,
+          "y": 275
+        },
+        "50000": {
+          "x": 320,
+          "y": 273
+        },
+        "100000": {
+          "x": 440,
+          "y": 273
+        },
+        "200000": {
+          "x": 437,
+          "y": 271
+        },
+        "500000": {
+          "x": 440,
+          "y": 270
+        },
+        "1000000": {
+          "x": 437,
+          "y": 270
+        }
+      },
+      "P3": {
+        "100": {
+          "x": 181,
+          "y": 125
+        },
+        "500": {
+          "x": 319,
+          "y": 126
+        },
+        "1000": {
+          "x": 450,
+          "y": 126
+        },
+        "2000": {
+          "x": 183,
+          "y": 199
+        },
+        "5000": {
+          "x": 316,
+          "y": 197
+        },
+        "10000": {
+          "x": 445,
+          "y": 199
+        },
+        "20000": {
+          "x": 192,
+          "y": 275
+        },
+        "50000": {
+          "x": 320,
+          "y": 273
+        },
+        "100000": {
+          "x": 440,
+          "y": 273
+        },
+        "200000": {
+          "x": 437,
+          "y": 271
+        },
+        "500000": {
+          "x": 440,
+          "y": 270
+        },
+        "1000000": {
+          "x": 437,
+          "y": 270
+        }
+      }
+    },
+    "exit_button_profile": {
+      "P1": {
+        "x": 43,
+        "y": 43
+      },
+      "P2": {
+        "x": 43,
+        "y": 43
+      },
+      "P3": {
+        "x": 43,
+        "y": 43
+      }
+    },
+    "exit_button2_profile": {
+      "P1": {
+        "x": 48,
+        "y": 44
+      },
+      "P2": {
+        "x": 48,
+        "y": 44
+      },
+      "P3": {
+        "x": 48,
+        "y": 44
+      }
+    },
+    "auto_spam": {
+      "enabled_profile": {
+        "P1": false,
+        "P2": false
+      },
+      "template_profile": {
+        "P1": "Đẹp trai vào là sáng cửa:[KetQua]\nĐẹp trai chốt nhẹ:[KetQua]\nĐẹp trai nhìn là biết:[KetQua]\nĐẹp trai đoán chuẩn:[KetQua]\nĐẹp trai không lệch:[KetQua]\nĐẹp trai vẫn ổn:[KetQua]\nĐẹp trai quá hợp lý:[KetQua]\nĐẹp trai đọc chuẩn bài:[KetQua]\nĐẹp trai theo là đẹp:[KetQua]\nĐẹp trai không sai nhịp:[KetQua]\nĐẹp trai vẫn là tôi:[KetQua]\nĐẹp trai không cần cãi:[KetQua]\nĐẹp trai chốt cái ăn ngay:[KetQua]\nĐẹp trai thì cứ theo:[KetQua]\nĐẹp trai không làm bạn thất vọng:[KetQua]\nĐẹp trai là chân ái:[KetQua]\nĐẹp trai chọn là chuẩn:[KetQua]\nĐẹp trai vào rất mượt:[KetQua]\nĐẹp trai sáng cả cầu:[KetQua]\nĐẹp trai chơi là nét:[KetQua]\nĐẹp trai vẫn đúng bài:[KetQua]\nĐẹp trai chọn rất êm:[KetQua]\nĐẹp trai thì không lệch đường:[KetQua]\nĐẹp trai vẫn đúng form:[KetQua]\nĐẹp trai là phải thắng:[KetQua]\nĐẹp trai nhẹ nhàng mà ăn:[KetQua]\nĐẹp trai nhìn phát hiểu luôn:[KetQua]\nĐẹp trai nên không sai:[KetQua]\nĐẹp trai thì cứ bình tĩnh:[KetQua]\nĐẹp trai đọc cầu mượt:[KetQua]\nĐẹp trai vào nhịp đẹp:[KetQua]\nĐẹp trai không trật:[KetQua]\nĐẹp trai là chuẩn bài:[KetQua]\nĐẹp trai đi kèo rất mướt:[KetQua]\nĐẹp trai vẫn ăn đều:[KetQua]\nĐẹp trai nói là chuẩn:[KetQua]\nĐẹp trai vào phát sáng:[KetQua]\nĐẹp trai không có lệch pha:[KetQua]\nĐẹp trai theo là an tâm:[KetQua]\nĐẹp trai chưa từng ngại:[KetQua]\nĐẹp trai chốt đúng lúc:[KetQua]\nĐẹp trai cứ thế mà đi:[KetQua]\nĐẹp trai giữ nhịp tốt:[KetQua]\nĐẹp trai nhìn là chốt:[KetQua]\nĐẹp trai quá ổn luôn:[KetQua]\nĐẹp trai thì khỏi lo:[KetQua]\nĐẹp trai đọc đúng trend:[KetQua]\nĐẹp trai là phải nét:[KetQua]\nĐẹp trai vẫn đang bay:[KetQua]\nĐẹp trai nên rất sáng:[KetQua]\nĐẹp trai theo là có quà:[KetQua]\nĐẹp trai luôn đi trước:[KetQua]\nĐẹp trai vào là hợp:[KetQua]\nĐẹp trai nói ít ăn nhiều:[KetQua]\nĐẹp trai không bịp đâu:[KetQua]\nĐẹp trai vào là mịn:[KetQua]\nĐẹp trai đi rất gọn:[KetQua]\nĐẹp trai chọn phát trúng:[KetQua]\nĐẹp trai giữ form cực tốt:[KetQua]\nĐẹp trai nhìn cầu là hiểu:[KetQua]\nĐẹp trai vào phát chuẩn:[KetQua]\nĐẹp trai kèo nào cũng đẹp:[KetQua]\nĐẹp trai không cần nhiều lời:[KetQua]\nĐẹp trai chạm là ăn:[KetQua]\nĐẹp trai thì vẫn uy tín:[KetQua]\nĐẹp trai không làm sai nhịp:[KetQua]\nĐẹp trai có gu chọn kèo:[KetQua]\nĐẹp trai nói là có lý:[KetQua]\nĐẹp trai vào là hợp vía:[KetQua]\nĐẹp trai không cần giải thích:[KetQua]\nĐẹp trai đi tới đâu sáng tới đó:[KetQua]\nĐẹp trai luôn đúng nhịp:[KetQua]\nĐẹp trai mà lại chuẩn:[KetQua]\nĐẹp trai chốt một phát:[KetQua]\nĐẹp trai luôn có điểm rơi:[KetQua]\nĐẹp trai chọn rất chắc:[KetQua]\nĐẹp trai đang đúng hướng:[KetQua]\nĐẹp trai nhìn là tin:[KetQua]\nĐẹp trai thì không lòng vòng:[KetQua]\nĐẹp trai cứ vậy mà đi:[KetQua]\nĐẹp trai vào là êm:[KetQua]\nĐẹp trai vẫn đang đẹp:[KetQua]\nĐẹp trai không hề sai sót:[KetQua]\nĐẹp trai là rất hợp nhịp:[KetQua]\nĐẹp trai đang vào guồng:[KetQua]\nĐẹp trai không để bạn lạc:[KetQua]\nĐẹp trai chọn là sáng:[KetQua]\nĐẹp trai thì khỏi nghĩ:[KetQua]\nĐẹp trai rất biết cách vào kèo:[KetQua]\nĐẹp trai thì dễ hiểu:[KetQua]\nĐẹp trai không có cửa lệch:[KetQua]\nĐẹp trai vẫn đang xanh:[KetQua]\nĐẹp trai chốt có tính toán:[KetQua]\nĐẹp trai là chọn đúng:[KetQua]\nĐẹp trai cực kỳ mượt:[KetQua]\nĐẹp trai thấy là mê:[KetQua]\nĐẹp trai cứ thế là đẹp:[KetQua]\nĐẹp trai vẫn đúng logic:[KetQua]\nĐẹp trai là phải hợp:[KetQua]\nĐẹp trai chọn đúng thời điểm:[KetQua]\nĐẹp trai thì khỏi chỉnh:[KetQua]\nĐẹp trai không ngại cầu khó:[KetQua]\nĐẹp trai chốt phát ra ngay:[KetQua]\nĐẹp trai luôn sáng suốt:[KetQua]\nĐẹp trai nhìn là ra:[KetQua]\nĐẹp trai thì không mơ hồ:[KetQua]\nĐẹp trai rất biết chọn:[KetQua]\nĐẹp trai đang rất bay:[KetQua]\nĐẹp trai là thói quen rồi:[KetQua]\nĐẹp trai kèo này sáng:[KetQua]\nĐẹp trai rất có cảm giác:[KetQua]\nĐẹp trai đi là mượt:[KetQua]\nĐẹp trai cứ nhịp này mà theo:[KetQua]\nĐẹp trai không hề run:[KetQua]\nĐẹp trai là phải mịn:[KetQua]\nĐẹp trai rất biết timing:[KetQua]\nĐẹp trai vẫn đang ổn áp:[KetQua]\nĐẹp trai không có gì phải bàn:[KetQua]\nĐẹp trai đi đâu cũng nét:[KetQua]\nĐẹp trai là hệ chuẩn:[KetQua]\nĐẹp trai không chọn bừa:[KetQua]\nĐẹp trai nhìn là rõ:[KetQua]\nĐẹp trai thì cứ vậy:[KetQua]\nĐẹp trai đang rất vào tay:[KetQua]\nĐẹp trai không sai tần số:[KetQua]\nĐẹp trai chọn phát đúng gu:[KetQua]\nĐẹp trai vẫn đang nóng:[KetQua]\nĐẹp trai luôn rõ kèo:[KetQua]\nĐẹp trai không hề mù mờ:[KetQua]\nĐẹp trai nhẹ mà chất:[KetQua]\nĐẹp trai cứ thế mà sáng:[KetQua]\nĐẹp trai chọn đúng đường:[KetQua]\nĐẹp trai là kèo đẹp:[KetQua]\nĐẹp trai vẫn rất ra gì:[KetQua]\nĐẹp trai không để lỡ nhịp:[KetQua]\nĐẹp trai thì phải có quà:[KetQua]\nĐẹp trai rất hợp nhịp cầu:[KetQua]\nĐẹp trai nói ít hiểu nhiều:[KetQua]\nĐẹp trai đang đúng sóng:[KetQua]\nĐẹp trai cứ nhìn là biết:[KetQua]\nĐẹp trai rất chịu chơi:[KetQua]\nĐẹp trai không nhầm cửa:[KetQua]\nĐẹp trai chọn là mát tay:[KetQua]\nĐẹp trai luôn có cảm hứng:[KetQua]\nĐẹp trai là phải trúng:[KetQua]\nĐẹp trai đi nhịp này đẹp:[KetQua]\nĐẹp trai luôn rất tỉnh:[KetQua]\nĐẹp trai chốt nhẹ mà sâu:[KetQua]\nĐẹp trai không lệch tông:[KetQua]\nĐẹp trai nhìn là sáng bài:[KetQua]\nĐẹp trai đi cầu rất êm:[KetQua]\nĐẹp trai luôn có nước đi đẹp:[KetQua]\nĐẹp trai là quá hợp rồi:[KetQua]\nĐẹp trai rất ra dáng:[KetQua]\nĐẹp trai chọn vậy mới đúng:[KetQua]\nĐẹp trai nhẹ nhàng mà chắc:[KetQua]\nĐẹp trai quá hiểu kèo:[KetQua]\nĐẹp trai thì luôn sáng cửa:[KetQua]\nĐẹp trai không sợ đảo chiều:[KetQua]\nĐẹp trai vẫn đang đúng kèo:[KetQua]\nĐẹp trai đi là có lộc:[KetQua]\nĐẹp trai chọn rất tinh:[KetQua]\nĐẹp trai không để hụt:[KetQua]\nĐẹp trai là hệ ăn chắc:[KetQua]\nĐẹp trai nhìn kỹ là ra:[KetQua]\nĐẹp trai luôn đúng gu:[KetQua]\nĐẹp trai đi cửa này đẹp:[KetQua]\nĐẹp trai thì cứ yên tâm:[KetQua]\nĐẹp trai không chơi cảm tính:[KetQua]\nĐẹp trai rất biết giữ nhịp:[KetQua]\nĐẹp trai là hệ logic:[KetQua]\nĐẹp trai không vào bừa:[KetQua]\nĐẹp trai đang đi đúng track:[KetQua]\nĐẹp trai nhìn là sáng rõ:[KetQua]\nĐẹp trai không lạc quẻ:[KetQua]\nĐẹp trai rất hợp trend:[KetQua]\nĐẹp trai vào rất trơn:[KetQua]\nĐẹp trai là đúng bài luôn:[KetQua]\nĐẹp trai đang thuận tay:[KetQua]\nĐẹp trai không có pha thừa:[KetQua]\nĐẹp trai chọn là mượt:[KetQua]\nĐẹp trai vẫn đang xanh lè:[KetQua]\nĐẹp trai đúng là khác:[KetQua]\nĐẹp trai chơi là biết:[KetQua]\nĐẹp trai không lỡ cơ hội:[KetQua]\nĐẹp trai chọn khéo lắm:[KetQua]\nĐẹp trai đang có vía:[KetQua]\nĐẹp trai rất có lực:[KetQua]\nĐẹp trai là nhịp đẹp:[KetQua]\nĐẹp trai vẫn đang đúng sóng:[KetQua]\nĐẹp trai chọn đúng trọng tâm:[KetQua]\nĐẹp trai không bị nhiễu:[KetQua]\nĐẹp trai thấy là rõ bài:[KetQua]\nĐẹp trai cực dễ vào nhịp:[KetQua]\nĐẹp trai không bị xoắn:[KetQua]\nĐẹp trai đang rất bén:[KetQua]\nĐẹp trai chọn cực mượt:[KetQua]\nĐẹp trai đi đâu cũng chuẩn:[KetQua]\nĐẹp trai không có bước thừa:[KetQua]\nĐẹp trai là phải thế:[KetQua]\nĐẹp trai đúng là cửa sáng:[KetQua]\nĐẹp trai vào là đúng lúc:[KetQua]\nĐẹp trai chọn rất ngọt:[KetQua]\nĐẹp trai rất có duyên:[KetQua]\nĐẹp trai là biết điểm rơi:[KetQua]\nĐẹp trai không ngại test:[KetQua]\nĐẹp trai đang vào sóng lớn:[KetQua]\nĐẹp trai chọn đúng gu đời:[KetQua]\nĐẹp trai nhìn là rõ mồn một:[KetQua]\nĐẹp trai cực kỳ gọn:[KetQua]\nĐẹp trai không để sai nhịp:[KetQua]\nĐẹp trai thì rất mát:[KetQua]\nĐẹp trai đang trúng ý:[KetQua]\nĐẹp trai có chọn lọc:[KetQua]\nĐẹp trai đi là hợp số:[KetQua]\nĐẹp trai luôn rất đều:[KetQua]\nĐẹp trai là ra kết quả:[KetQua]\nĐẹp trai không hề tạp:[KetQua]\nĐẹp trai vẫn là nhịp này:[KetQua]\nĐẹp trai cứ thế mà hợp:[KetQua]\nĐẹp trai nhìn rất có lý:[KetQua]\nĐẹp trai chọn chuẩn vị:[KetQua]\nĐẹp trai không đi sai lane:[KetQua]\nĐẹp trai rất sáng mặt:[KetQua]\nĐẹp trai cực hợp tay:[KetQua]\nĐẹp trai là gu quá đẹp:[KetQua]\nĐẹp trai không có gì phải ngại:[KetQua]\nĐẹp trai nhìn là thấy lộc:[KetQua]\nĐẹp trai vẫn là best:[KetQua]\nĐẹp trai chọn đúng gu kèo:[KetQua]\nĐẹp trai rất tỉnh đòn:[KetQua]\nĐẹp trai đi là mềm:[KetQua]\nĐẹp trai không có pha lỗi:[KetQua]\nĐẹp trai là phải mượt thế này:[KetQua]\nĐẹp trai đang rất khét:[KetQua]\nĐẹp trai chọn không cần nghĩ:[KetQua]\nĐẹp trai đi đâu cũng thấy đúng:[KetQua]\nĐẹp trai nhìn là có cửa:[KetQua]\nĐẹp trai cực kỳ hợp tay nghề:[KetQua]\nĐẹp trai không đùa được đâu:[KetQua]\nĐẹp trai vẫn bám trend:[KetQua]\nĐẹp trai thì vẫn thơm:[KetQua]\nĐẹp trai lựa cực bén:[KetQua]\nĐẹp trai đi là chạm:[KetQua]\nĐẹp trai cực ổn định:[KetQua]\nĐẹp trai không hề chệch:[KetQua]\nĐẹp trai đúng là có nghề:[KetQua]\nĐẹp trai vẫn cứ là sáng:[KetQua]\nĐẹp trai nhìn là đủ hiểu:[KetQua]\nĐẹp trai chọn không sai đi đâu được:[KetQua]\nĐẹp trai là đỡ đau đầu:[KetQua]\nĐẹp trai cực biết cách:[KetQua]\nĐẹp trai đang có điểm nổ:[KetQua]\nĐẹp trai nhìn là thấy hợp:[KetQua]\nĐẹp trai không cần ồn ào:[KetQua]\nĐẹp trai mà tinh tế:[KetQua]\nĐẹp trai cực biết giữ nhịp:[KetQua]\nĐẹp trai thì vẫn vào nét:[KetQua]\nĐẹp trai rất đúng mood:[KetQua]\nĐẹp trai lựa rất khôn:[KetQua]\nĐẹp trai không lệch mood:[KetQua]\nĐẹp trai nhìn rất sáng sân:[KetQua]\nĐẹp trai vẫn đang đúng chiều:[KetQua]\nĐẹp trai là cửa thơm:[KetQua]\nĐẹp trai rất bền nhịp:[KetQua]\nĐẹp trai không vội nhưng đúng:[KetQua]\nĐẹp trai chốt đẹp không cần bàn:[KetQua]\nĐẹp trai là hệ nét căng:[KetQua]\nĐẹp trai nhìn là thấy lời:[KetQua]\nĐẹp trai đi rất gắt:[KetQua]\nĐẹp trai không có nhịp gãy:[KetQua]\nĐẹp trai luôn có lý do:[KetQua]\nĐẹp trai lựa là hợp số:[KetQua]\nĐẹp trai cực biết timing thật:[KetQua]\nĐẹp trai vẫn cứ quá hợp:[KetQua]\nĐẹp trai đi nước rất ngon:[KetQua]\nĐẹp trai không có gì lăn tăn:[KetQua]\nĐẹp trai rất đúng cửa:[KetQua]\nĐẹp trai nhìn là ưng ngay:[KetQua]\nĐẹp trai đang đánh đúng tâm lý:[KetQua]\nĐẹp trai cực kỳ sáng ý:[KetQua]\nĐẹp trai vẫn đang đỉnh:[KetQua]\nĐẹp trai không bỏ lỡ nhịp vàng:[KetQua]\nĐẹp trai là phải có tầm:[KetQua]\nĐẹp trai rất đều tay:[KetQua]\nĐẹp trai nhìn là thấy nét:[KetQua]\nĐẹp trai cứ vậy mà sáng nhất:[KetQua]\nĐẹp trai luôn giữ nhịp tốt:[KetQua]\nĐẹp trai lựa là chuẩn không cần chỉnh:[KetQua]\nĐẹp trai rất biết điểm dừng:[KetQua]\nĐẹp trai đi đâu cũng có lộc:[KetQua]\nĐẹp trai không có pha dư:[KetQua]\nĐẹp trai là thấy hợp liền:[KetQua]\nĐẹp trai vẫn cứ mát tay:[KetQua]\nĐẹp trai rất biết quan sát:[KetQua]\nĐẹp trai không lệch pha chút nào:[KetQua]\nĐẹp trai cực kỳ sáng dạ:[KetQua]\nĐẹp trai vào kèo rất có duyên:[KetQua]\nĐẹp trai là người mở lối:[KetQua]\nĐẹp trai rất biết bắt nhịp:[KetQua]\nĐẹp trai không làm bạn hoang mang:[KetQua]\nĐẹp trai thấy là muốn theo:[KetQua]\nĐẹp trai chốt đúng chỗ ngứa:[KetQua]\nĐẹp trai cực kỳ biết cách ra tay:[KetQua]\nĐẹp trai vẫn đúng như dự tính:[KetQua]\nĐẹp trai không lỡ nhịp vàng:[KetQua]\nĐẹp trai thì quá tín:[KetQua]\nĐẹp trai rất ra dáng anh tài:[KetQua]\nĐẹp trai nhìn là sáng bừng:[KetQua]\nĐẹp trai không đi trật ray:[KetQua]\nĐẹp trai chọn đúng quỹ đạo:[KetQua]\nĐẹp trai cực kỳ dễ thương mà chuẩn:[KetQua]\nĐẹp trai là gu của chiến thắng:[KetQua]\nĐẹp trai vẫn đang đúng tone:[KetQua]\nĐẹp trai đi là đậm nét:[KetQua]\nĐẹp trai không nhầm được đâu:[KetQua]\nĐẹp trai cực kỳ có hồn:[KetQua]\nĐẹp trai thấy là tin ngay:[KetQua]\nĐẹp trai luôn rất rõ hướng:[KetQua]\nĐẹp trai chọn phát là ra:[KetQua]\nĐẹp trai quá mịn luôn:[KetQua]\nĐẹp trai thì cực thơm:[KetQua]\nĐẹp trai rất có tay nghề:[KetQua]\nĐẹp trai không rối nhịp:[KetQua]\nĐẹp trai vào là hợp trend:[KetQua]\nĐẹp trai vẫn là cửa sáng nhất:[KetQua]\nĐẹp trai thì rất vừa vặn:[KetQua]\nĐẹp trai nhìn là thấy chuẩn nhịp:[KetQua]\nĐẹp trai chọn rất có nghề:[KetQua]\nĐẹp trai không có gì ngoài đúng:[KetQua]\nĐẹp trai cực kỳ bắt mắt:[KetQua]\nĐẹp trai rất hợp thời:[KetQua]\nĐẹp trai đi là khớp:[KetQua]\nĐẹp trai không có bước lỗi:[KetQua]\nĐẹp trai quá mềm mại:[KetQua]\nĐẹp trai vẫn đang khớp kèo:[KetQua]\nĐẹp trai lựa là thấy mê:[KetQua]\nĐẹp trai không cần tăng volume:[KetQua]\nĐẹp trai rất biết canh nhịp:[KetQua]\nĐẹp trai là tín hiệu xanh:[KetQua]\nĐẹp trai cực kỳ dễ theo:[KetQua]\nĐẹp trai không sai quỹ đạo:[KetQua]\nĐẹp trai rất biết mình làm gì:[KetQua]\nĐẹp trai vào nhịp ngon lành:[KetQua]\nĐẹp trai vẫn luôn rõ ràng:[KetQua]\nĐẹp trai lựa kèo quá đẹp:[KetQua]\nĐẹp trai thì phải bén:[KetQua]\nĐẹp trai nhìn là thấm:[KetQua]\nĐẹp trai cực sáng đường:[KetQua]\nĐẹp trai không lạc một nhịp nào:[KetQua]\nĐẹp trai là gu của sự chuẩn:[KetQua]\nĐẹp trai rất biết điểm vào:[KetQua]\nĐẹp trai cứ từ tốn mà đúng:[KetQua]\nĐẹp trai cực kỳ gọn gàng:[KetQua]\nĐẹp trai không có một chút mơ hồ:[KetQua]\nĐẹp trai là phải hợp thế này:[KetQua]\nĐẹp trai rất đáng để theo:[KetQua]\nĐẹp trai không ngán nhịp khó:[KetQua]\nĐẹp trai nhìn là ra chân lý:[KetQua]\nĐẹp trai chọn phát là sáng bừng:[KetQua]\nĐẹp trai luôn có cảm nhận tốt:[KetQua]\nĐẹp trai vẫn đang lên tay:[KetQua]\nĐẹp trai không có cửa sai bài:[KetQua]\nĐẹp trai là chuẩn gu người chơi:[KetQua]\nĐẹp trai rất biết chọn thời điểm:[KetQua]\nĐẹp trai nhìn là thấy logic:[KetQua]\nĐẹp trai cực kỳ ngon mắt:[KetQua]\nĐẹp trai vào là lên mood:[KetQua]\nĐẹp trai không làm bạn thất nhịp:[KetQua]\nĐẹp trai rất có độ chín:[KetQua]\nĐẹp trai cứ vậy mà thắng:[KetQua]\nĐẹp trai không sai trọng tâm:[KetQua]\nĐẹp trai cực kỳ ra gì:[KetQua]\nĐẹp trai nhìn là thấy trúng:[KetQua]\nĐẹp trai đi nước không hề thừa:[KetQua]\nĐẹp trai rất biết chốt câu chuyện:[KetQua]\nĐẹp trai là hệ điềm tĩnh:[KetQua]\nĐẹp trai cực kỳ ngầu mà chuẩn:[KetQua]\nĐẹp trai luôn có chiều sâu:[KetQua]\nĐẹp trai không đi sai cửa:[KetQua]\nĐẹp trai rất hợp bài hôm nay:[KetQua]\nĐẹp trai nhìn là muốn đặt theo:[KetQua]\nĐẹp trai cực bén luôn:[KetQua]\nĐẹp trai không làm lỡ sóng:[KetQua]\nĐẹp trai là lựa chọn rất đẹp:[KetQua]\nĐẹp trai luôn đúng điểm rơi:[KetQua]\nĐẹp trai nhìn là biết có lộc:[KetQua]\nĐẹp trai rất biết chọn nhịp đẹp:[KetQua]\nĐẹp trai vào là mướt rượt:[KetQua]\nĐẹp trai không bị lệch đường ray:[KetQua]\nĐẹp trai là chuẩn mực nhan sắc:[KetQua]\nĐẹp trai quá hợp tình hợp lý:[KetQua]\nĐẹp trai nhìn là thấy mượt:[KetQua]\nĐẹp trai rất có khả năng:[KetQua]\nĐẹp trai không cần nói nhiều nữa:[KetQua]\nĐẹp trai vẫn là gu của chiến thắng:[KetQua]\nĐẹp trai lựa kèo nhìn đã thấy mê:[KetQua]\nĐẹp trai đi nhịp này cực đẹp:[KetQua]\nĐẹp trai rất biết cách thắng:[KetQua]\nĐẹp trai luôn đậm chất chuẩn:[KetQua]\nĐẹp trai không phải dạng vừa:[KetQua]\nĐẹp trai nhìn là thấy thơm:[KetQua]\nĐẹp trai rất giỏi bắt trend:[KetQua]\nĐẹp trai chọn đâu trúng đó:[KetQua]\nĐẹp trai không có cửa xịt:[KetQua]\nĐẹp trai cực đẹp và cực chuẩn:[KetQua]\nĐẹp trai vào là ra thành quả:[KetQua]\nĐẹp trai rất biết đọc ý trời:[KetQua]\nĐẹp trai nhìn là biết lối đi:[KetQua]\nĐẹp trai luôn biết lúc nào vào:[KetQua]\nĐẹp trai là vibe chiến thắng:[KetQua]\nĐẹp trai không đi sai thời điểm:[KetQua]\nĐẹp trai cực kỳ sáng nước:[KetQua]\nĐẹp trai nhìn là thấy tự tin:[KetQua]\nĐẹp trai rất biết cách chọn cửa:[KetQua]\nĐẹp trai không làm bạn lăn tăn:[KetQua]\nĐẹp trai đang mở đường thắng:[KetQua]\nĐẹp trai là gu đúng đắn:[KetQua]\nĐẹp trai đi nhịp nào cũng mượt:[KetQua]\nĐẹp trai rất có lực chiến:[KetQua]\nĐẹp trai nhìn là đã hợp:[KetQua]\nĐẹp trai luôn đúng ở phút chót:[KetQua]\nĐẹp trai không có gì ngoài chuẩn:[KetQua]\nĐẹp trai cực kỳ êm tay:[KetQua]\nĐẹp trai là hệ bền bỉ:[KetQua]\nĐẹp trai nhìn là yên tâm đặt:[KetQua]\nĐẹp trai rất biết đường đi nước bước:[KetQua]\nĐẹp trai không bị lệch cửa:[KetQua]\nĐẹp trai là quá mát rồi:[KetQua]\nĐẹp trai luôn giữ tâm thế đẹp:[KetQua]\nĐẹp trai nhìn là đã sướng:[KetQua]\nĐẹp trai rất biết làm chủ nhịp:[KetQua]\nĐẹp trai không có pha vụng:[KetQua]\nĐẹp trai cực kỳ hợp mắt:[KetQua]\nĐẹp trai vẫn cứ là đúng:[KetQua]\nĐẹp trai đi kèo nào cũng mướt:[KetQua]\nĐẹp trai rất biết làm tới:[KetQua]\nĐẹp trai không có gì để chê:[KetQua]\nĐẹp trai là cửa đẹp thật:[KetQua]\nĐẹp trai luôn đúng bài toán:[KetQua]\nĐẹp trai nhìn là thấy ngon:[KetQua]\nĐẹp trai cực biết timing luôn:[KetQua]\nĐẹp trai không lệch khỏi quỹ đạo:[KetQua]\nĐẹp trai thì vẫn là chuẩn nhất:[KetQua]\nĐẹp trai rất đúng gu dân chơi:[KetQua]\nĐẹp trai nhìn là lên tinh thần:[KetQua]\nĐẹp trai cực kỳ biết cách xử lý:[KetQua]\nĐẹp trai không để ai thất vọng:[KetQua]\nĐẹp trai là đường đi rất sáng:[KetQua]\nĐẹp trai nhìn là thấy chân ái:[KetQua]\nĐẹp trai cực kỳ vào phom:[KetQua]\nĐẹp trai rất biết chọn thời khắc:[KetQua]\nĐẹp trai không có bước hụt nào:[KetQua]\nĐẹp trai cứ chốt là đẹp:[KetQua]\nĐẹp trai là quá vừa ý:[KetQua]\nĐẹp trai nhìn là ra chuẩn bài:[KetQua]\nĐẹp trai rất biết chọn sóng:[KetQua]\nĐẹp trai không phải chỉnh sửa gì:[KetQua]\nĐẹp trai cực mượt cực thơm:[KetQua]\nĐẹp trai là đường thắng rõ ràng:[KetQua]\nĐẹp trai nhìn là thấy chắc kèo:[KetQua]\nĐẹp trai rất biết bắt trúng điểm:[KetQua]\nĐẹp trai không làm rối cuộc chơi:[KetQua]\nĐẹp trai là sự lựa chọn đẹp:[KetQua]\nĐẹp trai vẫn luôn hợp lý:[KetQua]\nĐẹp trai nhìn là thấy bén:[KetQua]\nĐẹp trai cực kỳ đúng ý:[KetQua]\nĐẹp trai rất biết cách đi tiếp:[KetQua]\nĐẹp trai không để mất nhịp:[KetQua]\nĐẹp trai là gu của may mắn:[KetQua]\nĐẹp trai nhìn là thấy xanh:[KetQua]\nĐẹp trai cực biết chốt lúc đẹp:[KetQua]\nĐẹp trai rất có đẳng cấp:[KetQua]\nĐẹp trai không có pha ngơ ngác:[KetQua]\nĐẹp trai luôn rất hợp nhịp sống:[KetQua]\nĐẹp trai nhìn là đủ chốt:[KetQua]\nĐẹp trai cực kỳ thơm kèo:[KetQua]\nĐẹp trai rất chuẩn phong cách:[KetQua]\nĐẹp trai không hề chệch nhịp:[KetQua]\nĐẹp trai là tín hiệu quá đẹp:[KetQua]\nĐẹp trai nhìn là biết nên theo:[KetQua]\nĐẹp trai cực biết canh điểm rơi:[KetQua]\nĐẹp trai rất ra kết quả:[KetQua]\nĐẹp trai không làm ai hoài nghi:[KetQua]\nĐẹp trai là gu của sự chắc chắn:[KetQua]\nĐẹp trai nhìn là thấy khác biệt:[KetQua]\nĐẹp trai cực kỳ lên tay rồi:[KetQua]\nĐẹp trai rất biết chọn mặt gửi vàng:[KetQua]\nĐẹp trai không làm sai câu chuyện:[KetQua]\nĐẹp trai là cửa vào rất ngọt:[KetQua]\nĐẹp trai nhìn là mê ngay:[KetQua]\nĐẹp trai cực kỳ biết đọc bài:[KetQua]\nĐẹp trai rất hợp khí hôm nay:[KetQua]\nĐẹp trai không có gì ngoài mượt:[KetQua]\nĐẹp trai là chân lý tối nay:[KetQua]\nĐẹp trai nhìn là thấy quá hợp:[KetQua]\nĐẹp trai cực kỳ tinh mắt:[KetQua]\nĐẹp trai rất biết lựa thời cơ:[KetQua]\nĐẹp trai không có pha rớt nhịp:[KetQua]\nĐẹp trai là tín hiệu đáng tin:[KetQua]\nĐẹp trai nhìn là ra quẻ đẹp:[KetQua]\nĐẹp trai cực kỳ bắt mắt luôn:[KetQua]\nĐẹp trai rất biết chốt cửa đẹp:[KetQua]\nĐẹp trai không bị mất phương hướng:[KetQua]\nĐẹp trai là phải đi đường sáng:[KetQua]\nĐẹp trai nhìn là biết nên chơi:[KetQua]\nĐẹp trai cực kỳ chắc tay:[KetQua]\nĐẹp trai rất có khí chất thắng:[KetQua]\nĐẹp trai không hề lạc quẻ:[KetQua]\nĐẹp trai là gu của nhịp chuẩn:[KetQua]\nĐẹp trai nhìn là thấy cửa ăn:[KetQua]\nĐẹp trai cực kỳ đúng nhịp cầu:[KetQua]\nĐẹp trai rất biết chọn hướng đi:[KetQua]\nĐẹp trai không làm nhịp bị gãy:[KetQua]\nĐẹp trai là đỉnh của nhan sắc:[KetQua]\nĐẹp trai nhìn là thấy hợp vía:[KetQua]\nĐẹp trai cực kỳ giàu cảm giác:[KetQua]\nĐẹp trai rất biết giữ phong độ:[KetQua]\nĐẹp trai không chọn nhầm bài:[KetQua]\nĐẹp trai là tín hiệu xanh nhất:[KetQua]\nĐẹp trai nhìn là biết nên chốt:[KetQua]\nĐẹp trai cực kỳ khớp nhịp:[KetQua]\nĐẹp trai rất biết đường thắng:[KetQua]\nĐẹp trai không để lệch kèo:[KetQua]\nĐẹp trai là gu quá cháy:[KetQua]\nĐẹp trai nhìn là thấy uy tín:[KetQua]\nĐẹp trai cực kỳ đậm nét:[KetQua]\nĐẹp trai rất biết làm chủ game:[KetQua]\nĐẹp trai không phải nghĩ nhiều:[KetQua]\nĐẹp trai là chuẩn chỉnh luôn:[KetQua]",
+        "P2": "Đẹp trai vào là sáng cửa:[KetQua]\nĐẹp trai chốt nhẹ:[KetQua]\nĐẹp trai nhìn là biết:[KetQua]\nĐẹp trai đoán chuẩn:[KetQua]\nĐẹp trai không lệch:[KetQua]\nĐẹp trai vẫn ổn:[KetQua]\nĐẹp trai quá hợp lý:[KetQua]\nĐẹp trai đọc chuẩn bài:[KetQua]\nĐẹp trai theo là đẹp:[KetQua]\nĐẹp trai không sai nhịp:[KetQua]\nĐẹp trai vẫn là tôi:[KetQua]\nĐẹp trai không cần cãi:[KetQua]\nĐẹp trai chốt cái ăn ngay:[KetQua]\nĐẹp trai thì cứ theo:[KetQua]\nĐẹp trai không làm bạn thất vọng:[KetQua]\nĐẹp trai là chân ái:[KetQua]\nĐẹp trai chọn là chuẩn:[KetQua]\nĐẹp trai vào rất mượt:[KetQua]\nĐẹp trai sáng cả cầu:[KetQua]\nĐẹp trai chơi là nét:[KetQua]\nĐẹp trai vẫn đúng bài:[KetQua]\nĐẹp trai chọn rất êm:[KetQua]\nĐẹp trai thì không lệch đường:[KetQua]\nĐẹp trai vẫn đúng form:[KetQua]\nĐẹp trai là phải thắng:[KetQua]\nĐẹp trai nhẹ nhàng mà ăn:[KetQua]\nĐẹp trai nhìn phát hiểu luôn:[KetQua]\nĐẹp trai nên không sai:[KetQua]\nĐẹp trai thì cứ bình tĩnh:[KetQua]\nĐẹp trai đọc cầu mượt:[KetQua]\nĐẹp trai vào nhịp đẹp:[KetQua]\nĐẹp trai không trật:[KetQua]\nĐẹp trai là chuẩn bài:[KetQua]\nĐẹp trai đi kèo rất mướt:[KetQua]\nĐẹp trai vẫn ăn đều:[KetQua]\nĐẹp trai nói là chuẩn:[KetQua]\nĐẹp trai vào phát sáng:[KetQua]\nĐẹp trai không có lệch pha:[KetQua]\nĐẹp trai theo là an tâm:[KetQua]\nĐẹp trai chưa từng ngại:[KetQua]\nĐẹp trai chốt đúng lúc:[KetQua]\nĐẹp trai cứ thế mà đi:[KetQua]\nĐẹp trai giữ nhịp tốt:[KetQua]\nĐẹp trai nhìn là chốt:[KetQua]\nĐẹp trai quá ổn luôn:[KetQua]\nĐẹp trai thì khỏi lo:[KetQua]\nĐẹp trai đọc đúng trend:[KetQua]\nĐẹp trai là phải nét:[KetQua]\nĐẹp trai vẫn đang bay:[KetQua]\nĐẹp trai nên rất sáng:[KetQua]\nĐẹp trai theo là có quà:[KetQua]\nĐẹp trai luôn đi trước:[KetQua]\nĐẹp trai vào là hợp:[KetQua]\nĐẹp trai nói ít ăn nhiều:[KetQua]\nĐẹp trai không bịp đâu:[KetQua]\nĐẹp trai vào là mịn:[KetQua]\nĐẹp trai đi rất gọn:[KetQua]\nĐẹp trai chọn phát trúng:[KetQua]\nĐẹp trai giữ form cực tốt:[KetQua]\nĐẹp trai nhìn cầu là hiểu:[KetQua]\nĐẹp trai vào phát chuẩn:[KetQua]\nĐẹp trai kèo nào cũng đẹp:[KetQua]\nĐẹp trai không cần nhiều lời:[KetQua]\nĐẹp trai chạm là ăn:[KetQua]\nĐẹp trai thì vẫn uy tín:[KetQua]\nĐẹp trai không làm sai nhịp:[KetQua]\nĐẹp trai có gu chọn kèo:[KetQua]\nĐẹp trai nói là có lý:[KetQua]\nĐẹp trai vào là hợp vía:[KetQua]\nĐẹp trai không cần giải thích:[KetQua]\nĐẹp trai đi tới đâu sáng tới đó:[KetQua]\nĐẹp trai luôn đúng nhịp:[KetQua]\nĐẹp trai mà lại chuẩn:[KetQua]\nĐẹp trai chốt một phát:[KetQua]\nĐẹp trai luôn có điểm rơi:[KetQua]\nĐẹp trai chọn rất chắc:[KetQua]\nĐẹp trai đang đúng hướng:[KetQua]\nĐẹp trai nhìn là tin:[KetQua]\nĐẹp trai thì không lòng vòng:[KetQua]\nĐẹp trai cứ vậy mà đi:[KetQua]\nĐẹp trai vào là êm:[KetQua]\nĐẹp trai vẫn đang đẹp:[KetQua]\nĐẹp trai không hề sai sót:[KetQua]\nĐẹp trai là rất hợp nhịp:[KetQua]\nĐẹp trai đang vào guồng:[KetQua]\nĐẹp trai không để bạn lạc:[KetQua]\nĐẹp trai chọn là sáng:[KetQua]\nĐẹp trai thì khỏi nghĩ:[KetQua]\nĐẹp trai rất biết cách vào kèo:[KetQua]\nĐẹp trai thì dễ hiểu:[KetQua]\nĐẹp trai không có cửa lệch:[KetQua]\nĐẹp trai vẫn đang xanh:[KetQua]\nĐẹp trai chốt có tính toán:[KetQua]\nĐẹp trai là chọn đúng:[KetQua]\nĐẹp trai cực kỳ mượt:[KetQua]\nĐẹp trai thấy là mê:[KetQua]\nĐẹp trai cứ thế là đẹp:[KetQua]\nĐẹp trai vẫn đúng logic:[KetQua]\nĐẹp trai là phải hợp:[KetQua]\nĐẹp trai chọn đúng thời điểm:[KetQua]\nĐẹp trai thì khỏi chỉnh:[KetQua]\nĐẹp trai không ngại cầu khó:[KetQua]\nĐẹp trai chốt phát ra ngay:[KetQua]\nĐẹp trai luôn sáng suốt:[KetQua]\nĐẹp trai nhìn là ra:[KetQua]\nĐẹp trai thì không mơ hồ:[KetQua]\nĐẹp trai rất biết chọn:[KetQua]\nĐẹp trai đang rất bay:[KetQua]\nĐẹp trai là thói quen rồi:[KetQua]\nĐẹp trai kèo này sáng:[KetQua]\nĐẹp trai rất có cảm giác:[KetQua]\nĐẹp trai đi là mượt:[KetQua]\nĐẹp trai cứ nhịp này mà theo:[KetQua]\nĐẹp trai không hề run:[KetQua]\nĐẹp trai là phải mịn:[KetQua]\nĐẹp trai rất biết timing:[KetQua]\nĐẹp trai vẫn đang ổn áp:[KetQua]\nĐẹp trai không có gì phải bàn:[KetQua]\nĐẹp trai đi đâu cũng nét:[KetQua]\nĐẹp trai là hệ chuẩn:[KetQua]\nĐẹp trai không chọn bừa:[KetQua]\nĐẹp trai nhìn là rõ:[KetQua]\nĐẹp trai thì cứ vậy:[KetQua]\nĐẹp trai đang rất vào tay:[KetQua]\nĐẹp trai không sai tần số:[KetQua]\nĐẹp trai chọn phát đúng gu:[KetQua]\nĐẹp trai vẫn đang nóng:[KetQua]\nĐẹp trai luôn rõ kèo:[KetQua]\nĐẹp trai không hề mù mờ:[KetQua]\nĐẹp trai nhẹ mà chất:[KetQua]\nĐẹp trai cứ thế mà sáng:[KetQua]\nĐẹp trai chọn đúng đường:[KetQua]\nĐẹp trai là kèo đẹp:[KetQua]\nĐẹp trai vẫn rất ra gì:[KetQua]\nĐẹp trai không để lỡ nhịp:[KetQua]\nĐẹp trai thì phải có quà:[KetQua]\nĐẹp trai rất hợp nhịp cầu:[KetQua]\nĐẹp trai nói ít hiểu nhiều:[KetQua]\nĐẹp trai đang đúng sóng:[KetQua]\nĐẹp trai cứ nhìn là biết:[KetQua]\nĐẹp trai rất chịu chơi:[KetQua]\nĐẹp trai không nhầm cửa:[KetQua]\nĐẹp trai chọn là mát tay:[KetQua]\nĐẹp trai luôn có cảm hứng:[KetQua]\nĐẹp trai là phải trúng:[KetQua]\nĐẹp trai đi nhịp này đẹp:[KetQua]\nĐẹp trai luôn rất tỉnh:[KetQua]\nĐẹp trai chốt nhẹ mà sâu:[KetQua]\nĐẹp trai không lệch tông:[KetQua]\nĐẹp trai nhìn là sáng bài:[KetQua]\nĐẹp trai đi cầu rất êm:[KetQua]\nĐẹp trai luôn có nước đi đẹp:[KetQua]\nĐẹp trai là quá hợp rồi:[KetQua]\nĐẹp trai rất ra dáng:[KetQua]\nĐẹp trai chọn vậy mới đúng:[KetQua]\nĐẹp trai nhẹ nhàng mà chắc:[KetQua]\nĐẹp trai quá hiểu kèo:[KetQua]\nĐẹp trai thì luôn sáng cửa:[KetQua]\nĐẹp trai không sợ đảo chiều:[KetQua]\nĐẹp trai vẫn đang đúng kèo:[KetQua]\nĐẹp trai đi là có lộc:[KetQua]\nĐẹp trai chọn rất tinh:[KetQua]\nĐẹp trai không để hụt:[KetQua]\nĐẹp trai là hệ ăn chắc:[KetQua]\nĐẹp trai nhìn kỹ là ra:[KetQua]\nĐẹp trai luôn đúng gu:[KetQua]\nĐẹp trai đi cửa này đẹp:[KetQua]\nĐẹp trai thì cứ yên tâm:[KetQua]\nĐẹp trai không chơi cảm tính:[KetQua]\nĐẹp trai rất biết giữ nhịp:[KetQua]\nĐẹp trai là hệ logic:[KetQua]\nĐẹp trai không vào bừa:[KetQua]\nĐẹp trai đang đi đúng track:[KetQua]\nĐẹp trai nhìn là sáng rõ:[KetQua]\nĐẹp trai không lạc quẻ:[KetQua]\nĐẹp trai rất hợp trend:[KetQua]\nĐẹp trai vào rất trơn:[KetQua]\nĐẹp trai là đúng bài luôn:[KetQua]\nĐẹp trai đang thuận tay:[KetQua]\nĐẹp trai không có pha thừa:[KetQua]\nĐẹp trai chọn là mượt:[KetQua]\nĐẹp trai vẫn đang xanh lè:[KetQua]\nĐẹp trai đúng là khác:[KetQua]\nĐẹp trai chơi là biết:[KetQua]\nĐẹp trai không lỡ cơ hội:[KetQua]\nĐẹp trai chọn khéo lắm:[KetQua]\nĐẹp trai đang có vía:[KetQua]\nĐẹp trai rất có lực:[KetQua]\nĐẹp trai là nhịp đẹp:[KetQua]\nĐẹp trai vẫn đang đúng sóng:[KetQua]\nĐẹp trai chọn đúng trọng tâm:[KetQua]\nĐẹp trai không bị nhiễu:[KetQua]\nĐẹp trai thấy là rõ bài:[KetQua]\nĐẹp trai cực dễ vào nhịp:[KetQua]\nĐẹp trai không bị xoắn:[KetQua]\nĐẹp trai đang rất bén:[KetQua]\nĐẹp trai chọn cực mượt:[KetQua]\nĐẹp trai đi đâu cũng chuẩn:[KetQua]\nĐẹp trai không có bước thừa:[KetQua]\nĐẹp trai là phải thế:[KetQua]\nĐẹp trai đúng là cửa sáng:[KetQua]\nĐẹp trai vào là đúng lúc:[KetQua]\nĐẹp trai chọn rất ngọt:[KetQua]\nĐẹp trai rất có duyên:[KetQua]\nĐẹp trai là biết điểm rơi:[KetQua]\nĐẹp trai không ngại test:[KetQua]\nĐẹp trai đang vào sóng lớn:[KetQua]\nĐẹp trai chọn đúng gu đời:[KetQua]\nĐẹp trai nhìn là rõ mồn một:[KetQua]\nĐẹp trai cực kỳ gọn:[KetQua]\nĐẹp trai không để sai nhịp:[KetQua]\nĐẹp trai thì rất mát:[KetQua]\nĐẹp trai đang trúng ý:[KetQua]\nĐẹp trai có chọn lọc:[KetQua]\nĐẹp trai đi là hợp số:[KetQua]\nĐẹp trai luôn rất đều:[KetQua]\nĐẹp trai là ra kết quả:[KetQua]\nĐẹp trai không hề tạp:[KetQua]\nĐẹp trai vẫn là nhịp này:[KetQua]\nĐẹp trai cứ thế mà hợp:[KetQua]\nĐẹp trai nhìn rất có lý:[KetQua]\nĐẹp trai chọn chuẩn vị:[KetQua]\nĐẹp trai không đi sai lane:[KetQua]\nĐẹp trai rất sáng mặt:[KetQua]\nĐẹp trai cực hợp tay:[KetQua]\nĐẹp trai là gu quá đẹp:[KetQua]\nĐẹp trai không có gì phải ngại:[KetQua]\nĐẹp trai nhìn là thấy lộc:[KetQua]\nĐẹp trai vẫn là best:[KetQua]\nĐẹp trai chọn đúng gu kèo:[KetQua]\nĐẹp trai rất tỉnh đòn:[KetQua]\nĐẹp trai đi là mềm:[KetQua]\nĐẹp trai không có pha lỗi:[KetQua]\nĐẹp trai là phải mượt thế này:[KetQua]\nĐẹp trai đang rất khét:[KetQua]\nĐẹp trai chọn không cần nghĩ:[KetQua]\nĐẹp trai đi đâu cũng thấy đúng:[KetQua]\nĐẹp trai nhìn là có cửa:[KetQua]\nĐẹp trai cực kỳ hợp tay nghề:[KetQua]\nĐẹp trai không đùa được đâu:[KetQua]\nĐẹp trai vẫn bám trend:[KetQua]\nĐẹp trai thì vẫn thơm:[KetQua]\nĐẹp trai lựa cực bén:[KetQua]\nĐẹp trai đi là chạm:[KetQua]\nĐẹp trai cực ổn định:[KetQua]\nĐẹp trai không hề chệch:[KetQua]\nĐẹp trai đúng là có nghề:[KetQua]\nĐẹp trai vẫn cứ là sáng:[KetQua]\nĐẹp trai nhìn là đủ hiểu:[KetQua]\nĐẹp trai chọn không sai đi đâu được:[KetQua]\nĐẹp trai là đỡ đau đầu:[KetQua]\nĐẹp trai cực biết cách:[KetQua]\nĐẹp trai đang có điểm nổ:[KetQua]\nĐẹp trai nhìn là thấy hợp:[KetQua]\nĐẹp trai không cần ồn ào:[KetQua]\nĐẹp trai mà tinh tế:[KetQua]\nĐẹp trai cực biết giữ nhịp:[KetQua]\nĐẹp trai thì vẫn vào nét:[KetQua]\nĐẹp trai rất đúng mood:[KetQua]\nĐẹp trai lựa rất khôn:[KetQua]\nĐẹp trai không lệch mood:[KetQua]\nĐẹp trai nhìn rất sáng sân:[KetQua]\nĐẹp trai vẫn đang đúng chiều:[KetQua]\nĐẹp trai là cửa thơm:[KetQua]\nĐẹp trai rất bền nhịp:[KetQua]\nĐẹp trai không vội nhưng đúng:[KetQua]\nĐẹp trai chốt đẹp không cần bàn:[KetQua]\nĐẹp trai là hệ nét căng:[KetQua]\nĐẹp trai nhìn là thấy lời:[KetQua]\nĐẹp trai đi rất gắt:[KetQua]\nĐẹp trai không có nhịp gãy:[KetQua]\nĐẹp trai luôn có lý do:[KetQua]\nĐẹp trai lựa là hợp số:[KetQua]\nĐẹp trai cực biết timing thật:[KetQua]\nĐẹp trai vẫn cứ quá hợp:[KetQua]\nĐẹp trai đi nước rất ngon:[KetQua]\nĐẹp trai không có gì lăn tăn:[KetQua]\nĐẹp trai rất đúng cửa:[KetQua]\nĐẹp trai nhìn là ưng ngay:[KetQua]\nĐẹp trai đang đánh đúng tâm lý:[KetQua]\nĐẹp trai cực kỳ sáng ý:[KetQua]\nĐẹp trai vẫn đang đỉnh:[KetQua]\nĐẹp trai không bỏ lỡ nhịp vàng:[KetQua]\nĐẹp trai là phải có tầm:[KetQua]\nĐẹp trai rất đều tay:[KetQua]\nĐẹp trai nhìn là thấy nét:[KetQua]\nĐẹp trai cứ vậy mà sáng nhất:[KetQua]\nĐẹp trai luôn giữ nhịp tốt:[KetQua]\nĐẹp trai lựa là chuẩn không cần chỉnh:[KetQua]\nĐẹp trai rất biết điểm dừng:[KetQua]\nĐẹp trai đi đâu cũng có lộc:[KetQua]\nĐẹp trai không có pha dư:[KetQua]\nĐẹp trai là thấy hợp liền:[KetQua]\nĐẹp trai vẫn cứ mát tay:[KetQua]\nĐẹp trai rất biết quan sát:[KetQua]\nĐẹp trai không lệch pha chút nào:[KetQua]\nĐẹp trai cực kỳ sáng dạ:[KetQua]\nĐẹp trai vào kèo rất có duyên:[KetQua]\nĐẹp trai là người mở lối:[KetQua]\nĐẹp trai rất biết bắt nhịp:[KetQua]\nĐẹp trai không làm bạn hoang mang:[KetQua]\nĐẹp trai thấy là muốn theo:[KetQua]\nĐẹp trai chốt đúng chỗ ngứa:[KetQua]\nĐẹp trai cực kỳ biết cách ra tay:[KetQua]\nĐẹp trai vẫn đúng như dự tính:[KetQua]\nĐẹp trai không lỡ nhịp vàng:[KetQua]\nĐẹp trai thì quá tín:[KetQua]\nĐẹp trai rất ra dáng anh tài:[KetQua]\nĐẹp trai nhìn là sáng bừng:[KetQua]\nĐẹp trai không đi trật ray:[KetQua]\nĐẹp trai chọn đúng quỹ đạo:[KetQua]\nĐẹp trai cực kỳ dễ thương mà chuẩn:[KetQua]\nĐẹp trai là gu của chiến thắng:[KetQua]\nĐẹp trai vẫn đang đúng tone:[KetQua]\nĐẹp trai đi là đậm nét:[KetQua]\nĐẹp trai không nhầm được đâu:[KetQua]\nĐẹp trai cực kỳ có hồn:[KetQua]\nĐẹp trai thấy là tin ngay:[KetQua]\nĐẹp trai luôn rất rõ hướng:[KetQua]\nĐẹp trai chọn phát là ra:[KetQua]\nĐẹp trai quá mịn luôn:[KetQua]\nĐẹp trai thì cực thơm:[KetQua]\nĐẹp trai rất có tay nghề:[KetQua]\nĐẹp trai không rối nhịp:[KetQua]\nĐẹp trai vào là hợp trend:[KetQua]\nĐẹp trai vẫn là cửa sáng nhất:[KetQua]\nĐẹp trai thì rất vừa vặn:[KetQua]\nĐẹp trai nhìn là thấy chuẩn nhịp:[KetQua]\nĐẹp trai chọn rất có nghề:[KetQua]\nĐẹp trai không có gì ngoài đúng:[KetQua]\nĐẹp trai cực kỳ bắt mắt:[KetQua]\nĐẹp trai rất hợp thời:[KetQua]\nĐẹp trai đi là khớp:[KetQua]\nĐẹp trai không có bước lỗi:[KetQua]\nĐẹp trai quá mềm mại:[KetQua]\nĐẹp trai vẫn đang khớp kèo:[KetQua]\nĐẹp trai lựa là thấy mê:[KetQua]\nĐẹp trai không cần tăng volume:[KetQua]\nĐẹp trai rất biết canh nhịp:[KetQua]\nĐẹp trai là tín hiệu xanh:[KetQua]\nĐẹp trai cực kỳ dễ theo:[KetQua]\nĐẹp trai không sai quỹ đạo:[KetQua]\nĐẹp trai rất biết mình làm gì:[KetQua]\nĐẹp trai vào nhịp ngon lành:[KetQua]\nĐẹp trai vẫn luôn rõ ràng:[KetQua]\nĐẹp trai lựa kèo quá đẹp:[KetQua]\nĐẹp trai thì phải bén:[KetQua]\nĐẹp trai nhìn là thấm:[KetQua]\nĐẹp trai cực sáng đường:[KetQua]\nĐẹp trai không lạc một nhịp nào:[KetQua]\nĐẹp trai là gu của sự chuẩn:[KetQua]\nĐẹp trai rất biết điểm vào:[KetQua]\nĐẹp trai cứ từ tốn mà đúng:[KetQua]\nĐẹp trai cực kỳ gọn gàng:[KetQua]\nĐẹp trai không có một chút mơ hồ:[KetQua]\nĐẹp trai là phải hợp thế này:[KetQua]\nĐẹp trai rất đáng để theo:[KetQua]\nĐẹp trai không ngán nhịp khó:[KetQua]\nĐẹp trai nhìn là ra chân lý:[KetQua]\nĐẹp trai chọn phát là sáng bừng:[KetQua]\nĐẹp trai luôn có cảm nhận tốt:[KetQua]\nĐẹp trai vẫn đang lên tay:[KetQua]\nĐẹp trai không có cửa sai bài:[KetQua]\nĐẹp trai là chuẩn gu người chơi:[KetQua]\nĐẹp trai rất biết chọn thời điểm:[KetQua]\nĐẹp trai nhìn là thấy logic:[KetQua]\nĐẹp trai cực kỳ ngon mắt:[KetQua]\nĐẹp trai vào là lên mood:[KetQua]\nĐẹp trai không làm bạn thất nhịp:[KetQua]\nĐẹp trai rất có độ chín:[KetQua]\nĐẹp trai cứ vậy mà thắng:[KetQua]\nĐẹp trai không sai trọng tâm:[KetQua]\nĐẹp trai cực kỳ ra gì:[KetQua]\nĐẹp trai nhìn là thấy trúng:[KetQua]\nĐẹp trai đi nước không hề thừa:[KetQua]\nĐẹp trai rất biết chốt câu chuyện:[KetQua]\nĐẹp trai là hệ điềm tĩnh:[KetQua]\nĐẹp trai cực kỳ ngầu mà chuẩn:[KetQua]\nĐẹp trai luôn có chiều sâu:[KetQua]\nĐẹp trai không đi sai cửa:[KetQua]\nĐẹp trai rất hợp bài hôm nay:[KetQua]\nĐẹp trai nhìn là muốn đặt theo:[KetQua]\nĐẹp trai cực bén luôn:[KetQua]\nĐẹp trai không làm lỡ sóng:[KetQua]\nĐẹp trai là lựa chọn rất đẹp:[KetQua]\nĐẹp trai luôn đúng điểm rơi:[KetQua]\nĐẹp trai nhìn là biết có lộc:[KetQua]\nĐẹp trai rất biết chọn nhịp đẹp:[KetQua]\nĐẹp trai vào là mướt rượt:[KetQua]\nĐẹp trai không bị lệch đường ray:[KetQua]\nĐẹp trai là chuẩn mực nhan sắc:[KetQua]\nĐẹp trai quá hợp tình hợp lý:[KetQua]\nĐẹp trai nhìn là thấy mượt:[KetQua]\nĐẹp trai rất có khả năng:[KetQua]\nĐẹp trai không cần nói nhiều nữa:[KetQua]\nĐẹp trai vẫn là gu của chiến thắng:[KetQua]\nĐẹp trai lựa kèo nhìn đã thấy mê:[KetQua]\nĐẹp trai đi nhịp này cực đẹp:[KetQua]\nĐẹp trai rất biết cách thắng:[KetQua]\nĐẹp trai luôn đậm chất chuẩn:[KetQua]\nĐẹp trai không phải dạng vừa:[KetQua]\nĐẹp trai nhìn là thấy thơm:[KetQua]\nĐẹp trai rất giỏi bắt trend:[KetQua]\nĐẹp trai chọn đâu trúng đó:[KetQua]\nĐẹp trai không có cửa xịt:[KetQua]\nĐẹp trai cực đẹp và cực chuẩn:[KetQua]\nĐẹp trai vào là ra thành quả:[KetQua]\nĐẹp trai rất biết đọc ý trời:[KetQua]\nĐẹp trai nhìn là biết lối đi:[KetQua]\nĐẹp trai luôn biết lúc nào vào:[KetQua]\nĐẹp trai là vibe chiến thắng:[KetQua]\nĐẹp trai không đi sai thời điểm:[KetQua]\nĐẹp trai cực kỳ sáng nước:[KetQua]\nĐẹp trai nhìn là thấy tự tin:[KetQua]\nĐẹp trai rất biết cách chọn cửa:[KetQua]\nĐẹp trai không làm bạn lăn tăn:[KetQua]\nĐẹp trai đang mở đường thắng:[KetQua]\nĐẹp trai là gu đúng đắn:[KetQua]\nĐẹp trai đi nhịp nào cũng mượt:[KetQua]\nĐẹp trai rất có lực chiến:[KetQua]\nĐẹp trai nhìn là đã hợp:[KetQua]\nĐẹp trai luôn đúng ở phút chót:[KetQua]\nĐẹp trai không có gì ngoài chuẩn:[KetQua]\nĐẹp trai cực kỳ êm tay:[KetQua]\nĐẹp trai là hệ bền bỉ:[KetQua]\nĐẹp trai nhìn là yên tâm đặt:[KetQua]\nĐẹp trai rất biết đường đi nước bước:[KetQua]\nĐẹp trai không bị lệch cửa:[KetQua]\nĐẹp trai là quá mát rồi:[KetQua]\nĐẹp trai luôn giữ tâm thế đẹp:[KetQua]\nĐẹp trai nhìn là đã sướng:[KetQua]\nĐẹp trai rất biết làm chủ nhịp:[KetQua]\nĐẹp trai không có pha vụng:[KetQua]\nĐẹp trai cực kỳ hợp mắt:[KetQua]\nĐẹp trai vẫn cứ là đúng:[KetQua]\nĐẹp trai đi kèo nào cũng mướt:[KetQua]\nĐẹp trai rất biết làm tới:[KetQua]\nĐẹp trai không có gì để chê:[KetQua]\nĐẹp trai là cửa đẹp thật:[KetQua]\nĐẹp trai luôn đúng bài toán:[KetQua]\nĐẹp trai nhìn là thấy ngon:[KetQua]\nĐẹp trai cực biết timing luôn:[KetQua]\nĐẹp trai không lệch khỏi quỹ đạo:[KetQua]\nĐẹp trai thì vẫn là chuẩn nhất:[KetQua]\nĐẹp trai rất đúng gu dân chơi:[KetQua]\nĐẹp trai nhìn là lên tinh thần:[KetQua]\nĐẹp trai cực kỳ biết cách xử lý:[KetQua]\nĐẹp trai không để ai thất vọng:[KetQua]\nĐẹp trai là đường đi rất sáng:[KetQua]\nĐẹp trai nhìn là thấy chân ái:[KetQua]\nĐẹp trai cực kỳ vào phom:[KetQua]\nĐẹp trai rất biết chọn thời khắc:[KetQua]\nĐẹp trai không có bước hụt nào:[KetQua]\nĐẹp trai cứ chốt là đẹp:[KetQua]\nĐẹp trai là quá vừa ý:[KetQua]\nĐẹp trai nhìn là ra chuẩn bài:[KetQua]\nĐẹp trai rất biết chọn sóng:[KetQua]\nĐẹp trai không phải chỉnh sửa gì:[KetQua]\nĐẹp trai cực mượt cực thơm:[KetQua]\nĐẹp trai là đường thắng rõ ràng:[KetQua]\nĐẹp trai nhìn là thấy chắc kèo:[KetQua]\nĐẹp trai rất biết bắt trúng điểm:[KetQua]\nĐẹp trai không làm rối cuộc chơi:[KetQua]\nĐẹp trai là sự lựa chọn đẹp:[KetQua]\nĐẹp trai vẫn luôn hợp lý:[KetQua]\nĐẹp trai nhìn là thấy bén:[KetQua]\nĐẹp trai cực kỳ đúng ý:[KetQua]\nĐẹp trai rất biết cách đi tiếp:[KetQua]\nĐẹp trai không để mất nhịp:[KetQua]\nĐẹp trai là gu của may mắn:[KetQua]\nĐẹp trai nhìn là thấy xanh:[KetQua]\nĐẹp trai cực biết chốt lúc đẹp:[KetQua]\nĐẹp trai rất có đẳng cấp:[KetQua]\nĐẹp trai không có pha ngơ ngác:[KetQua]\nĐẹp trai luôn rất hợp nhịp sống:[KetQua]\nĐẹp trai nhìn là đủ chốt:[KetQua]\nĐẹp trai cực kỳ thơm kèo:[KetQua]\nĐẹp trai rất chuẩn phong cách:[KetQua]\nĐẹp trai không hề chệch nhịp:[KetQua]\nĐẹp trai là tín hiệu quá đẹp:[KetQua]\nĐẹp trai nhìn là biết nên theo:[KetQua]\nĐẹp trai cực biết canh điểm rơi:[KetQua]\nĐẹp trai rất ra kết quả:[KetQua]\nĐẹp trai không làm ai hoài nghi:[KetQua]\nĐẹp trai là gu của sự chắc chắn:[KetQua]\nĐẹp trai nhìn là thấy khác biệt:[KetQua]\nĐẹp trai cực kỳ lên tay rồi:[KetQua]\nĐẹp trai rất biết chọn mặt gửi vàng:[KetQua]\nĐẹp trai không làm sai câu chuyện:[KetQua]\nĐẹp trai là cửa vào rất ngọt:[KetQua]\nĐẹp trai nhìn là mê ngay:[KetQua]\nĐẹp trai cực kỳ biết đọc bài:[KetQua]\nĐẹp trai rất hợp khí hôm nay:[KetQua]\nĐẹp trai không có gì ngoài mượt:[KetQua]\nĐẹp trai là chân lý tối nay:[KetQua]\nĐẹp trai nhìn là thấy quá hợp:[KetQua]\nĐẹp trai cực kỳ tinh mắt:[KetQua]\nĐẹp trai rất biết lựa thời cơ:[KetQua]\nĐẹp trai không có pha rớt nhịp:[KetQua]\nĐẹp trai là tín hiệu đáng tin:[KetQua]\nĐẹp trai nhìn là ra quẻ đẹp:[KetQua]\nĐẹp trai cực kỳ bắt mắt luôn:[KetQua]\nĐẹp trai rất biết chốt cửa đẹp:[KetQua]\nĐẹp trai không bị mất phương hướng:[KetQua]\nĐẹp trai là phải đi đường sáng:[KetQua]\nĐẹp trai nhìn là biết nên chơi:[KetQua]\nĐẹp trai cực kỳ chắc tay:[KetQua]\nĐẹp trai rất có khí chất thắng:[KetQua]\nĐẹp trai không hề lạc quẻ:[KetQua]\nĐẹp trai là gu của nhịp chuẩn:[KetQua]\nĐẹp trai nhìn là thấy cửa ăn:[KetQua]\nĐẹp trai cực kỳ đúng nhịp cầu:[KetQua]\nĐẹp trai rất biết chọn hướng đi:[KetQua]\nĐẹp trai không làm nhịp bị gãy:[KetQua]\nĐẹp trai là đỉnh của nhan sắc:[KetQua]\nĐẹp trai nhìn là thấy hợp vía:[KetQua]\nĐẹp trai cực kỳ giàu cảm giác:[KetQua]\nĐẹp trai rất biết giữ phong độ:[KetQua]\nĐẹp trai không chọn nhầm bài:[KetQua]\nĐẹp trai là tín hiệu xanh nhất:[KetQua]\nĐẹp trai nhìn là biết nên chốt:[KetQua]\nĐẹp trai cực kỳ khớp nhịp:[KetQua]\nĐẹp trai rất biết đường thắng:[KetQua]\nĐẹp trai không để lệch kèo:[KetQua]\nĐẹp trai là gu quá cháy:[KetQua]\nĐẹp trai nhìn là thấy uy tín:[KetQua]\nĐẹp trai cực kỳ đậm nét:[KetQua]\nĐẹp trai rất biết làm chủ game:[KetQua]\nĐẹp trai không phải nghĩ nhiều:[KetQua]\nĐẹp trai là chuẩn chỉnh luôn:[KetQua]\nTrai.đẹp.vào.là.sáng.cửa:[KetQua]\nTrai.đẹp.chốt.nhẹ:[KetQua]\nTrai.đẹp.nhìn.là.biết:[KetQua]\nTrai.đẹp.đoán.chuẩn:[KetQua]\nTrai.đẹp.không.lệch:[KetQua]\nTrai.đẹp.vẫn.ổn:[KetQua]\nTrai.đẹp.quá.hợp.lý:[KetQua]\nTrai.đẹp.đọc.chuẩn.bài:[KetQua]\nTrai.đẹp.theo.là.đẹp:[KetQua]\nTrai.đẹp.không.sai.nhịp:[KetQua]\nTrai.đẹp.vẫn.là.tôi:[KetQua]\nTrai.đẹp.không.cần.cãi:[KetQua]\nTrai.đẹp.chốt.cái.ăn.ngay:[KetQua]\nTrai.đẹp.thì.cứ.theo:[KetQua]\nTrai.đẹp.không.làm.bạn.thất.vọng:[KetQua]\nTrai.đẹp.là.chân.ái:[KetQua]\nTrai.đẹp.chọn.là.chuẩn:[KetQua]\nTrai.đẹp.vào.rất.mượt:[KetQua]\nTrai.đẹp.sáng.cả.cầu:[KetQua]\nTrai.đẹp.chơi.là.nét:[KetQua]\nTrai.đẹp.vẫn.đúng.bài:[KetQua]\nTrai.đẹp.chọn.rất.êm:[KetQua]\nTrai.đẹp.thì.không.lệch.đường:[KetQua]\nTrai.đẹp.vẫn.đúng.form:[KetQua]\nTrai.đẹp.là.phải.thắng:[KetQua]\nTrai.đẹp.nhẹ.nhàng.mà.ăn:[KetQua]\nTrai.đẹp.nhìn.phát.hiểu.luôn:[KetQua]\nTrai.đẹp.nên.không.sai:[KetQua]\nTrai.đẹp.thì.cứ.bình.tĩnh:[KetQua]\nTrai.đẹp.đọc.cầu.mượt:[KetQua]\nTrai.đẹp.vào.nhịp.đẹp:[KetQua]\nTrai.đẹp.không.trật:[KetQua]\nTrai.đẹp.là.chuẩn.bài:[KetQua]\nTrai.đẹp.đi.kèo.rất.mướt:[KetQua]\nTrai.đẹp.vẫn.ăn.đều:[KetQua]\nTrai.đẹp.nói.là.chuẩn:[KetQua]\nTrai.đẹp.vào.phát.sáng:[KetQua]\nTrai.đẹp.không.có.lệch.pha:[KetQua]\nTrai.đẹp.theo.là.an.tâm:[KetQua]\nTrai.đẹp.chưa.từng.ngại:[KetQua]\nTrai.đẹp.chốt.đúng.lúc:[KetQua]\nTrai.đẹp.cứ.thế.mà.đi:[KetQua]\nTrai.đẹp.giữ.nhịp.tốt:[KetQua]\nTrai.đẹp.nhìn.là.chốt:[KetQua]\nTrai.đẹp.quá.ổn.luôn:[KetQua]\nTrai.đẹp.thì.khỏi.lo:[KetQua]\nTrai.đẹp.đọc.đúng.trend:[KetQua]\nTrai.đẹp.là.phải.nét:[KetQua]\nTrai.đẹp.vẫn.đang.bay:[KetQua]\nTrai.đẹp.nên.rất.sáng:[KetQua]\nTrai.đẹp.theo.là.có.quà:[KetQua]\nTrai.đẹp.luôn.đi.trước:[KetQua]\nTrai.đẹp.vào.là.hợp:[KetQua]\nTrai.đẹp.nói.ít.ăn.nhiều:[KetQua]\nTrai.đẹp.không.bịp.đâu:[KetQua]\nTrai.đẹp.vào.là.mịn:[KetQua]\nTrai.đẹp.đi.rất.gọn:[KetQua]\nTrai.đẹp.chọn.phát.trúng:[KetQua]\nTrai.đẹp.giữ.form.cực.tốt:[KetQua]\nTrai.đẹp.nhìn.cầu.là.hiểu:[KetQua]\nTrai.đẹp.vào.phát.chuẩn:[KetQua]\nTrai.đẹp.kèo.nào.cũng.đẹp:[KetQua]\nTrai.đẹp.không.cần.nhiều.lời:[KetQua]\nTrai.đẹp.chạm.là.ăn:[KetQua]\nTrai.đẹp.thì.vẫn.uy.tín:[KetQua]\nTrai.đẹp.không.làm.sai.nhịp:[KetQua]\nTrai.đẹp.có.gu.chọn.kèo:[KetQua]\nTrai.đẹp.nói.là.có.lý:[KetQua]\nTrai.đẹp.vào.là.hợp.vía:[KetQua]\nTrai.đẹp.không.cần.giải.thích:[KetQua]\nTrai.đẹp.đi.tới.đâu.sáng.tới.đó:[KetQua]\nTrai.đẹp.luôn.đúng.nhịp:[KetQua]\nTrai.đẹp.mà.lại.chuẩn:[KetQua]\nTrai.đẹp.chốt.một.phát:[KetQua]\nTrai.đẹp.luôn.có.điểm.rơi:[KetQua]\nTrai.đẹp.chọn.rất.chắc:[KetQua]\nTrai.đẹp.đang.đúng.hướng:[KetQua]\nTrai.đẹp.nhìn.là.tin:[KetQua]\nTrai.đẹp.thì.không.lòng.vòng:[KetQua]\nTrai.đẹp.cứ.vậy.mà.đi:[KetQua]\nTrai.đẹp.vào.là.êm:[KetQua]\nTrai.đẹp.vẫn.đang.đẹp:[KetQua]\nTrai.đẹp.không.hề.sai.sót:[KetQua]\nTrai.đẹp.là.rất.hợp.nhịp:[KetQua]\nTrai.đẹp.đang.vào.guồng:[KetQua]\nTrai.đẹp.không.để.bạn.lạc:[KetQua]\nTrai.đẹp.chọn.là.sáng:[KetQua]\nTrai.đẹp.thì.khỏi.nghĩ:[KetQua]\nTrai.đẹp.rất.biết.cách.vào.kèo:[KetQua]\nTrai.đẹp.thì.dễ.hiểu:[KetQua]\nTrai.đẹp.không.có.cửa.lệch:[KetQua]\nTrai.đẹp.vẫn.đang.xanh:[KetQua]\nTrai.đẹp.chốt.có.tính.toán:[KetQua]\nTrai.đẹp.là.chọn.đúng:[KetQua]\nTrai.đẹp.cực.kỳ.mượt:[KetQua]\nTrai.đẹp.thấy.là.mê:[KetQua]\nTrai.đẹp.cứ.thế.là.đẹp:[KetQua]\nTrai.đẹp.vẫn.đúng.logic:[KetQua]\nTrai.đẹp.là.phải.hợp:[KetQua]\nTrai.đẹp.chọn.đúng.thời.điểm:[KetQua]\nTrai.đẹp.thì.khỏi.chỉnh:[KetQua]\nTrai.đẹp.không.ngại.cầu.khó:[KetQua]\nTrai.đẹp.chốt.phát.ra.ngay:[KetQua]\nTrai.đẹp.luôn.sáng.suốt:[KetQua]\nTrai.đẹp.nhìn.là.ra:[KetQua]\nTrai.đẹp.thì.không.mơ.hồ:[KetQua]\nTrai.đẹp.rất.biết.chọn:[KetQua]\nTrai.đẹp.đang.rất.bay:[KetQua]\nTrai.đẹp.là.thói.quen.rồi:[KetQua]\nTrai.đẹp.kèo.này.sáng:[KetQua]\nTrai.đẹp.rất.có.cảm.giác:[KetQua]\nTrai.đẹp.đi.là.mượt:[KetQua]\nTrai.đẹp.cứ.nhịp.này.mà.theo:[KetQua]\nTrai.đẹp.không.hề.run:[KetQua]\nTrai.đẹp.là.phải.mịn:[KetQua]\nTrai.đẹp.rất.biết.timing:[KetQua]\nTrai.đẹp.vẫn.đang.ổn.áp:[KetQua]\nTrai.đẹp.không.có.gì.phải.bàn:[KetQua]\nTrai.đẹp.đi.đâu.cũng.nét:[KetQua]\nTrai.đẹp.là.hệ.chuẩn:[KetQua]\nTrai.đẹp.không.chọn.bừa:[KetQua]\nTrai.đẹp.nhìn.là.rõ:[KetQua]\nTrai.đẹp.thì.cứ.vậy:[KetQua]\nTrai.đẹp.đang.rất.vào.tay:[KetQua]\nTrai.đẹp.không.sai.tần.số:[KetQua]\nTrai.đẹp.chọn.phát.đúng.gu:[KetQua]\nTrai.đẹp.vẫn.đang.nóng:[KetQua]\nTrai.đẹp.luôn.rõ.kèo:[KetQua]\nTrai.đẹp.không.hề.mù.mờ:[KetQua]\nTrai.đẹp.nhẹ.mà.chất:[KetQua]\nTrai.đẹp.cứ.thế.mà.sáng:[KetQua]\nTrai.đẹp.chọn.đúng.đường:[KetQua]\nTrai.đẹp.là.kèo.đẹp:[KetQua]\nTrai.đẹp.vẫn.rất.ra.gì:[KetQua]\nTrai.đẹp.không.để.lỡ.nhịp:[KetQua]\nTrai.đẹp.thì.phải.có.quà:[KetQua]\nTrai.đẹp.rất.hợp.nhịp.cầu:[KetQua]\nTrai.đẹp.nói.ít.hiểu.nhiều:[KetQua]\nTrai.đẹp.đang.đúng.sóng:[KetQua]\nTrai.đẹp.cứ.nhìn.là.biết:[KetQua]\nTrai.đẹp.rất.chịu.chơi:[KetQua]\nTrai.đẹp.không.nhầm.cửa:[KetQua]\nTrai.đẹp.chọn.là.mát.tay:[KetQua]\nTrai.đẹp.luôn.có.cảm.hứng:[KetQua]\nTrai.đẹp.là.phải.trúng:[KetQua]\nTrai.đẹp.đi.nhịp.này.đẹp:[KetQua]\nTrai.đẹp.luôn.rất.tỉnh:[KetQua]\nTrai.đẹp.chốt.nhẹ.mà.sâu:[KetQua]\nTrai.đẹp.không.lệch.tông:[KetQua]\nTrai.đẹp.nhìn.là.sáng.bài:[KetQua]\nTrai.đẹp.đi.cầu.rất.êm:[KetQua]\nTrai.đẹp.luôn.có.nước.đi.đẹp:[KetQua]\nTrai.đẹp.là.quá.hợp.rồi:[KetQua]\nTrai.đẹp.rất.ra.dáng:[KetQua]\nTrai.đẹp.chọn.vậy.mới.đúng:[KetQua]\nTrai.đẹp.nhẹ.nhàng.mà.chắc:[KetQua]\nTrai.đẹp.quá.hiểu.kèo:[KetQua]\nTrai.đẹp.thì.luôn.sáng.cửa:[KetQua]\nTrai.đẹp.không.sợ.đảo.chiều:[KetQua]\nTrai.đẹp.vẫn.đang.đúng.kèo:[KetQua]\nTrai.đẹp.đi.là.có.lộc:[KetQua]\nTrai.đẹp.chọn.rất.tinh:[KetQua]\nTrai.đẹp.không.để.hụt:[KetQua]\nTrai.đẹp.là.hệ.ăn.chắc:[KetQua]\nTrai.đẹp.nhìn.kỹ.là.ra:[KetQua]\nTrai.đẹp.luôn.đúng.gu:[KetQua]\nTrai.đẹp.đi.cửa.này.đẹp:[KetQua]\nTrai.đẹp.thì.cứ.yên.tâm:[KetQua]\nTrai.đẹp.không.chơi.cảm.tính:[KetQua]\nTrai.đẹp.rất.biết.giữ.nhịp:[KetQua]\nTrai.đẹp.là.hệ.logic:[KetQua]\nTrai.đẹp.không.vào.bừa:[KetQua]\nTrai.đẹp.đang.đi.đúng.track:[KetQua]\nTrai.đẹp.nhìn.là.sáng.rõ:[KetQua]\nTrai.đẹp.không.lạc.quẻ:[KetQua]\nTrai.đẹp.rất.hợp.trend:[KetQua]\nTrai.đẹp.vào.rất.trơn:[KetQua]\nTrai.đẹp.là.đúng.bài.luôn:[KetQua]\nTrai.đẹp.đang.thuận.tay:[KetQua]\nTrai.đẹp.không.có.pha.thừa:[KetQua]\nTrai.đẹp.chọn.là.mượt:[KetQua]\nTrai.đẹp.vẫn.đang.xanh.lè:[KetQua]\nTrai.đẹp.đúng.là.khác:[KetQua]\nTrai.đẹp.chơi.là.biết:[KetQua]\nTrai.đẹp.không.lỡ.cơ.hội:[KetQua]\nTrai.đẹp.chọn.khéo.lắm:[KetQua]\nTrai.đẹp.đang.có.vía:[KetQua]\nTrai.đẹp.rất.có.lực:[KetQua]\nTrai.đẹp.là.nhịp.đẹp:[KetQua]\nTrai.đẹp.vẫn.đang.đúng.sóng:[KetQua]\nTrai.đẹp.chọn.đúng.trọng.tâm:[KetQua]\nTrai.đẹp.không.bị.nhiễu:[KetQua]\nTrai.đẹp.thấy.là.rõ.bài:[KetQua]\nTrai.đẹp.cực.dễ.vào.nhịp:[KetQua]\nTrai.đẹp.không.bị.xoắn:[KetQua]\nTrai.đẹp.đang.rất.bén:[KetQua]\nTrai.đẹp.chọn.cực.mượt:[KetQua]\nTrai.đẹp.đi.đâu.cũng.chuẩn:[KetQua]\nTrai.đẹp.không.có.bước.thừa:[KetQua]\nTrai.đẹp.là.phải.thế:[KetQua]\nTrai.đẹp.đúng.là.cửa.sáng:[KetQua]\nTrai.đẹp.vào.là.đúng.lúc:[KetQua]\nTrai.đẹp.chọn.rất.ngọt:[KetQua]\nTrai.đẹp.rất.có.duyên:[KetQua]\nTrai.đẹp.là.biết.điểm.rơi:[KetQua]\nTrai.đẹp.không.ngại.test:[KetQua]\nTrai.đẹp.đang.vào.sóng.lớn:[KetQua]\nTrai.đẹp.chọn.đúng.gu.đời:[KetQua]\nTrai.đẹp.nhìn.là.rõ.mồn.một:[KetQua]\nTrai.đẹp.cực.kỳ.gọn:[KetQua]\nTrai.đẹp.không.để.sai.nhịp:[KetQua]\nTrai.đẹp.thì.rất.mát:[KetQua]\nTrai.đẹp.đang.trúng.ý:[KetQua]\nTrai.đẹp.có.chọn.lọc:[KetQua]\nTrai.đẹp.đi.là.hợp.số:[KetQua]\nTrai.đẹp.luôn.rất.đều:[KetQua]\nTrai.đẹp.là.ra.kết.quả:[KetQua]\nTrai.đẹp.không.hề.tạp:[KetQua]\nTrai.đẹp.vẫn.là.nhịp.này:[KetQua]\nTrai.đẹp.cứ.thế.mà.hợp:[KetQua]\nTrai.đẹp.nhìn.rất.có.lý:[KetQua]\nTrai.đẹp.chọn.chuẩn.vị:[KetQua]\nTrai.đẹp.không.đi.sai.lane:[KetQua]\nTrai.đẹp.rất.sáng.mặt:[KetQua]\nTrai.đẹp.cực.hợp.tay:[KetQua]\nTrai.đẹp.là.gu.quá.đẹp:[KetQua]\nTrai.đẹp.không.có.gì.phải.ngại:[KetQua]\nTrai.đẹp.nhìn.là.thấy.lộc:[KetQua]\nTrai.đẹp.vẫn.là.best:[KetQua]\nTrai.đẹp.chọn.đúng.gu.kèo:[KetQua]\nTrai.đẹp.rất.tỉnh.đòn:[KetQua]\nTrai.đẹp.đi.là.mềm:[KetQua]\nTrai.đẹp.không.có.pha.lỗi:[KetQua]\nTrai.đẹp.là.phải.mượt.thế.này:[KetQua]\nTrai.đẹp.đang.rất.khét:[KetQua]\nTrai.đẹp.chọn.không.cần.nghĩ:[KetQua]\nTrai.đẹp.đi.đâu.cũng.thấy.đúng:[KetQua]\nTrai.đẹp.nhìn.là.có.cửa:[KetQua]\nTrai.đẹp.cực.kỳ.hợp.tay.nghề:[KetQua]\nTrai.đẹp.không.đùa.được.đâu:[KetQua]\nTrai.đẹp.vẫn.bám.trend:[KetQua]\nTrai.đẹp.thì.vẫn.thơm:[KetQua]\nTrai.đẹp.lựa.cực.bén:[KetQua]\nTrai.đẹp.đi.là.chạm:[KetQua]\nTrai.đẹp.cực.ổn.định:[KetQua]\nTrai.đẹp.không.hề.chệch:[KetQua]\nTrai.đẹp.đúng.là.có.nghề:[KetQua]\nTrai.đẹp.vẫn.cứ.là.sáng:[KetQua]\nTrai.đẹp.nhìn.là.đủ.hiểu:[KetQua]\nTrai.đẹp.chọn.không.sai.đi.đâu.được:[KetQua]\nTrai.đẹp.là.đỡ.đau.đầu:[KetQua]\nTrai.đẹp.cực.biết.cách:[KetQua]\nTrai.đẹp.đang.có.điểm.nổ:[KetQua]\nTrai.đẹp.nhìn.là.thấy.hợp:[KetQua]\nTrai.đẹp.không.cần.ồn.ào:[KetQua]\nTrai.đẹp.mà.tinh.tế:[KetQua]\nTrai.đẹp.cực.biết.giữ.nhịp:[KetQua]\nTrai.đẹp.thì.vẫn.vào.nét:[KetQua]\nTrai.đẹp.rất.đúng.mood:[KetQua]\nTrai.đẹp.lựa.rất.khôn:[KetQua]\nTrai.đẹp.không.lệch.mood:[KetQua]\nTrai.đẹp.nhìn.rất.sáng.sân:[KetQua]\nTrai.đẹp.vẫn.đang.đúng.chiều:[KetQua]\nTrai.đẹp.là.cửa.thơm:[KetQua]\nTrai.đẹp.rất.bền.nhịp:[KetQua]\nTrai.đẹp.không.vội.nhưng.đúng:[KetQua]\nTrai.đẹp.chốt.đẹp.không.cần.bàn:[KetQua]\nTrai.đẹp.là.hệ.nét.căng:[KetQua]\nTrai.đẹp.nhìn.là.thấy.lời:[KetQua]\nTrai.đẹp.đi.rất.gắt:[KetQua]\nTrai.đẹp.không.có.nhịp.gãy:[KetQua]\nTrai.đẹp.luôn.có.lý.do:[KetQua]\nTrai.đẹp.lựa.là.hợp.số:[KetQua]\nTrai.đẹp.cực.biết.timing.thật:[KetQua]\nTrai.đẹp.vẫn.cứ.quá.hợp:[KetQua]\nTrai.đẹp.đi.nước.rất.ngon:[KetQua]\nTrai.đẹp.không.có.gì.lăn.tăn:[KetQua]\nTrai.đẹp.rất.đúng.cửa:[KetQua]\nTrai.đẹp.nhìn.là.ưng.ngay:[KetQua]\nTrai.đẹp.đang.đánh.đúng.tâm.lý:[KetQua]\nTrai.đẹp.cực.kỳ.sáng.ý:[KetQua]\nTrai.đẹp.vẫn.đang.đỉnh:[KetQua]\nTrai.đẹp.không.bỏ.lỡ.nhịp.vàng:[KetQua]\nTrai.đẹp.là.phải.có.tầm:[KetQua]\nTrai.đẹp.rất.đều.tay:[KetQua]\nTrai.đẹp.nhìn.là.thấy.nét:[KetQua]\nTrai.đẹp.cứ.vậy.mà.sáng.nhất:[KetQua]\nTrai.đẹp.luôn.giữ.nhịp.tốt:[KetQua]\nTrai.đẹp.lựa.là.chuẩn.không.cần.chỉnh:[KetQua]\nTrai.đẹp.rất.biết.điểm.dừng:[KetQua]\nTrai.đẹp.đi.đâu.cũng.có.lộc:[KetQua]\nTrai.đẹp.không.có.pha.dư:[KetQua]\nTrai.đẹp.là.thấy.hợp.liền:[KetQua]\nTrai.đẹp.vẫn.cứ.mát.tay:[KetQua]\nTrai.đẹp.rất.biết.quan.sát:[KetQua]\nTrai.đẹp.không.lệch.pha.chút.nào:[KetQua]\nTrai.đẹp.cực.kỳ.sáng.dạ:[KetQua]\nTrai.đẹp.vào.kèo.rất.có.duyên:[KetQua]\nTrai.đẹp.là.người.mở.lối:[KetQua]\nTrai.đẹp.rất.biết.bắt.nhịp:[KetQua]\nTrai.đẹp.không.làm.bạn.hoang.mang:[KetQua]\nTrai.đẹp.thấy.là.muốn.theo:[KetQua]\nTrai.đẹp.chốt.đúng.chỗ.ngứa:[KetQua]\nTrai.đẹp.cực.kỳ.biết.cách.ra.tay:[KetQua]\nTrai.đẹp.vẫn.đúng.như.dự.tính:[KetQua]\nTrai.đẹp.không.lỡ.nhịp.vàng:[KetQua]\nTrai.đẹp.thì.quá.tín:[KetQua]\nTrai.đẹp.rất.ra.dáng.anh.tài:[KetQua]\nTrai.đẹp.nhìn.là.sáng.bừng:[KetQua]\nTrai.đẹp.không.đi.trật.ray:[KetQua]\nTrai.đẹp.chọn.đúng.quỹ.đạo:[KetQua]\nTrai.đẹp.cực.kỳ.dễ.thương.mà.chuẩn:[KetQua]\nTrai.đẹp.là.gu.của.chiến.thắng:[KetQua]\nTrai.đẹp.vẫn.đang.đúng.tone:[KetQua]\nTrai.đẹp.đi.là.đậm.nét:[KetQua]\nTrai.đẹp.không.nhầm.được.đâu:[KetQua]\nTrai.đẹp.cực.kỳ.có.hồn:[KetQua]\nTrai.đẹp.thấy.là.tin.ngay:[KetQua]\nTrai.đẹp.luôn.rất.rõ.hướng:[KetQua]\nTrai.đẹp.chọn.phát.là.ra:[KetQua]\nTrai.đẹp.quá.mịn.luôn:[KetQua]\nTrai.đẹp.thì.cực.thơm:[KetQua]\nTrai.đẹp.rất.có.tay.nghề:[KetQua]\nTrai.đẹp.không.rối.nhịp:[KetQua]\nTrai.đẹp.vào.là.hợp.trend:[KetQua]\nTrai.đẹp.vẫn.là.cửa.sáng.nhất:[KetQua]\nTrai.đẹp.thì.rất.vừa.vặn:[KetQua]\nTrai.đẹp.nhìn.là.thấy.chuẩn.nhịp:[KetQua]\nTrai.đẹp.chọn.rất.có.nghề:[KetQua]\nTrai.đẹp.không.có.gì.ngoài.đúng:[KetQua]\nTrai.đẹp.cực.kỳ.bắt.mắt:[KetQua]\nTrai.đẹp.rất.hợp.thời:[KetQua]\nTrai.đẹp.đi.là.khớp:[KetQua]\nTrai.đẹp.không.có.bước.lỗi:[KetQua]\nTrai.đẹp.quá.mềm.mại:[KetQua]\nTrai.đẹp.vẫn.đang.khớp.kèo:[KetQua]\nTrai.đẹp.lựa.là.thấy.mê:[KetQua]\nTrai.đẹp.không.cần.tăng.volume:[KetQua]\nTrai.đẹp.rất.biết.canh.nhịp:[KetQua]\nTrai.đẹp.là.tín.hiệu.xanh:[KetQua]\nTrai.đẹp.cực.kỳ.dễ.theo:[KetQua]\nTrai.đẹp.không.sai.quỹ.đạo:[KetQua]\nTrai.đẹp.rất.biết.mình.làm.gì:[KetQua]\nTrai.đẹp.vào.nhịp.ngon.lành:[KetQua]\nTrai.đẹp.vẫn.luôn.rõ.ràng:[KetQua]\nTrai.đẹp.lựa.kèo.quá.đẹp:[KetQua]\nTrai.đẹp.thì.phải.bén:[KetQua]\nTrai.đẹp.nhìn.là.thấm:[KetQua]\nTrai.đẹp.cực.sáng.đường:[KetQua]\nTrai.đẹp.không.lạc.một.nhịp.nào:[KetQua]\nTrai.đẹp.là.gu.của.sự.chuẩn:[KetQua]\nTrai.đẹp.rất.biết.điểm.vào:[KetQua]\nTrai.đẹp.cứ.từ.tốn.mà.đúng:[KetQua]\nTrai.đẹp.cực.kỳ.gọn.gàng:[KetQua]\nTrai.đẹp.không.có.một.chút.mơ.hồ:[KetQua]\nTrai.đẹp.là.phải.hợp.thế.này:[KetQua]\nTrai.đẹp.rất.đáng.để.theo:[KetQua]\nTrai.đẹp.không.ngán.nhịp.khó:[KetQua]\nTrai.đẹp.nhìn.là.ra.chân.lý:[KetQua]\nTrai.đẹp.chọn.phát.là.sáng.bừng:[KetQua]\nTrai.đẹp.luôn.có.cảm.nhận.tốt:[KetQua]\nTrai.đẹp.vẫn.đang.lên.tay:[KetQua]\nTrai.đẹp.không.có.cửa.sai.bài:[KetQua]\nTrai.đẹp.là.chuẩn.gu.người.chơi:[KetQua]\nTrai.đẹp.rất.biết.chọn.thời.điểm:[KetQua]\nTrai.đẹp.nhìn.là.thấy.logic:[KetQua]\nTrai.đẹp.cực.kỳ.ngon.mắt:[KetQua]\nTrai.đẹp.vào.là.lên.mood:[KetQua]\nTrai.đẹp.không.làm.bạn.thất.nhịp:[KetQua]\nTrai.đẹp.rất.có.độ.chín:[KetQua]\nTrai.đẹp.cứ.vậy.mà.thắng:[KetQua]\nTrai.đẹp.không.sai.trọng.tâm:[KetQua]\nTrai.đẹp.cực.kỳ.ra.gì:[KetQua]\nTrai.đẹp.nhìn.là.thấy.trúng:[KetQua]\nTrai.đẹp.đi.nước.không.hề.thừa:[KetQua]\nTrai.đẹp.rất.biết.chốt.câu.chuyện:[KetQua]\nTrai.đẹp.là.hệ.điềm.tĩnh:[KetQua]\nTrai.đẹp.cực.kỳ.ngầu.mà.chuẩn:[KetQua]\nTrai.đẹp.luôn.có.chiều.sâu:[KetQua]\nTrai.đẹp.không.đi.sai.cửa:[KetQua]\nTrai.đẹp.rất.hợp.bài.hôm.nay:[KetQua]\nTrai.đẹp.nhìn.là.muốn.đặt.theo:[KetQua]\nTrai.đẹp.cực.bén.luôn:[KetQua]\nTrai.đẹp.không.làm.lỡ.sóng:[KetQua]\nTrai.đẹp.là.lựa.chọn.rất.đẹp:[KetQua]\nTrai.đẹp.luôn.đúng.điểm.rơi:[KetQua]\nTrai.đẹp.nhìn.là.biết.có.lộc:[KetQua]\nTrai.đẹp.rất.biết.chọn.nhịp.đẹp:[KetQua]\nTrai.đẹp.vào.là.mướt.rượt:[KetQua]\nTrai.đẹp.không.bị.lệch.đường.ray:[KetQua]\nTrai.đẹp.là.chuẩn.mực.nhan.sắc:[KetQua]\nTrai.đẹp.quá.hợp.tình.hợp.lý:[KetQua]\nTrai.đẹp.nhìn.là.thấy.mượt:[KetQua]\nTrai.đẹp.rất.có.khả.năng:[KetQua]\nTrai.đẹp.không.cần.nói.nhiều.nữa:[KetQua]\nTrai.đẹp.vẫn.là.gu.của.chiến.thắng:[KetQua]\nTrai.đẹp.lựa.kèo.nhìn.đã.thấy.mê:[KetQua]\nTrai.đẹp.đi.nhịp.này.cực.đẹp:[KetQua]\nTrai.đẹp.rất.biết.cách.thắng:[KetQua]\nTrai.đẹp.luôn.đậm.chất.chuẩn:[KetQua]\nTrai.đẹp.không.phải.dạng.vừa:[KetQua]\nTrai.đẹp.nhìn.là.thấy.thơm:[KetQua]\nTrai.đẹp.rất.giỏi.bắt.trend:[KetQua]\nTrai.đẹp.chọn.đâu.trúng.đó:[KetQua]\nTrai.đẹp.không.có.cửa.xịt:[KetQua]\nTrai.đẹp.cực.đẹp.và.cực.chuẩn:[KetQua]\nTrai.đẹp.vào.là.ra.thành.quả:[KetQua]\nTrai.đẹp.rất.biết.đọc.ý.trời:[KetQua]\nTrai.đẹp.nhìn.là.biết.lối.đi:[KetQua]\nTrai.đẹp.luôn.biết.lúc.nào.vào:[KetQua]\nTrai.đẹp.là.vibe.chiến.thắng:[KetQua]\nTrai.đẹp.không.đi.sai.thời.điểm:[KetQua]\nTrai.đẹp.cực.kỳ.sáng.nước:[KetQua]\nTrai.đẹp.nhìn.là.thấy.tự.tin:[KetQua]\nTrai.đẹp.rất.biết.cách.chọn.cửa:[KetQua]\nTrai.đẹp.không.làm.bạn.lăn.tăn:[KetQua]\nTrai.đẹp.đang.mở.đường.thắng:[KetQua]\nTrai.đẹp.là.gu.đúng.đắn:[KetQua]\nTrai.đẹp.đi.nhịp.nào.cũng.mượt:[KetQua]\nTrai.đẹp.rất.có.lực.chiến:[KetQua]\nTrai.đẹp.nhìn.là.đã.hợp:[KetQua]\nTrai.đẹp.luôn.đúng.ở.phút.chót:[KetQua]\nTrai.đẹp.không.có.gì.ngoài.chuẩn:[KetQua]\nTrai.đẹp.cực.kỳ.êm.tay:[KetQua]\nTrai.đẹp.là.hệ.bền.bỉ:[KetQua]\nTrai.đẹp.nhìn.là.yên.tâm.đặt:[KetQua]\nTrai.đẹp.rất.biết.đường.đi.nước.bước:[KetQua]\nTrai.đẹp.không.bị.lệch.cửa:[KetQua]\nTrai.đẹp.là.quá.mát.rồi:[KetQua]\nTrai.đẹp.luôn.giữ.tâm.thế.đẹp:[KetQua]\nTrai.đẹp.nhìn.là.đã.sướng:[KetQua]\nTrai.đẹp.rất.biết.làm.chủ.nhịp:[KetQua]\nTrai.đẹp.không.có.pha.vụng:[KetQua]\nTrai.đẹp.cực.kỳ.hợp.mắt:[KetQua]\nTrai.đẹp.vẫn.cứ.là.đúng:[KetQua]\nTrai.đẹp.đi.kèo.nào.cũng.mướt:[KetQua]\nTrai.đẹp.rất.biết.làm.tới:[KetQua]\nTrai.đẹp.không.có.gì.để.chê:[KetQua]\nTrai.đẹp.là.cửa.đẹp.thật:[KetQua]\nTrai.đẹp.luôn.đúng.bài.toán:[KetQua]\nTrai.đẹp.nhìn.là.thấy.ngon:[KetQua]\nTrai.đẹp.cực.biết.timing.luôn:[KetQua]\nTrai.đẹp.không.lệch.khỏi.quỹ.đạo:[KetQua]\nTrai.đẹp.thì.vẫn.là.chuẩn.nhất:[KetQua]\nTrai.đẹp.rất.đúng.gu.dân.chơi:[KetQua]\nTrai.đẹp.nhìn.là.lên.tinh.thần:[KetQua]\nTrai.đẹp.cực.kỳ.biết.cách.xử.lý:[KetQua]\nTrai.đẹp.không.để.ai.thất.vọng:[KetQua]\nTrai.đẹp.là.đường.đi.rất.sáng:[KetQua]\nTrai.đẹp.nhìn.là.thấy.chân.ái:[KetQua]\nTrai.đẹp.cực.kỳ.vào.phom:[KetQua]\nTrai.đẹp.rất.biết.chọn.thời.khắc:[KetQua]\nTrai.đẹp.không.có.bước.hụt.nào:[KetQua]\nTrai.đẹp.cứ.chốt.là.đẹp:[KetQua]\nTrai.đẹp.là.quá.vừa.ý:[KetQua]\nTrai.đẹp.nhìn.là.ra.chuẩn.bài:[KetQua]\nTrai.đẹp.rất.biết.chọn.sóng:[KetQua]\nTrai.đẹp.không.phải.chỉnh.sửa.gì:[KetQua]\nTrai.đẹp.cực.mượt.cực.thơm:[KetQua]\nTrai.đẹp.là.đường.thắng.rõ.ràng:[KetQua]\nTrai.đẹp.nhìn.là.thấy.chắc.kèo:[KetQua]\nTrai.đẹp.rất.biết.bắt.trúng.điểm:[KetQua]\nTrai.đẹp.không.làm.rối.cuộc.chơi:[KetQua]\nTrai.đẹp.là.sự.lựa.chọn.đẹp:[KetQua]\nTrai.đẹp.vẫn.luôn.hợp.lý:[KetQua]\nTrai.đẹp.nhìn.là.thấy.bén:[KetQua]\nTrai.đẹp.cực.kỳ.đúng.ý:[KetQua]\nTrai.đẹp.rất.biết.cách.đi.tiếp:[KetQua]\nTrai.đẹp.không.để.mất.nhịp:[KetQua]\nTrai.đẹp.là.gu.của.may.mắn:[KetQua]\nTrai.đẹp.nhìn.là.thấy.xanh:[KetQua]\nTrai.đẹp.cực.biết.chốt.lúc.đẹp:[KetQua]\nTrai.đẹp.rất.có.đẳng.cấp:[KetQua]\nTrai.đẹp.không.có.pha.ngơ.ngác:[KetQua]\nTrai.đẹp.luôn.rất.hợp.nhịp.sống:[KetQua]\nTrai.đẹp.nhìn.là.đủ.chốt:[KetQua]\nTrai.đẹp.cực.kỳ.thơm.kèo:[KetQua]\nTrai.đẹp.rất.chuẩn.phong.cách:[KetQua]\nTrai.đẹp.không.hề.chệch.nhịp:[KetQua]\nTrai.đẹp.là.tín.hiệu.quá.đẹp:[KetQua]\nTrai.đẹp.nhìn.là.biết.nên.theo:[KetQua]\nTrai.đẹp.cực.biết.canh.điểm.rơi:[KetQua]\nTrai.đẹp.rất.ra.kết.quả:[KetQua]\nTrai.đẹp.không.làm.ai.hoài.nghi:[KetQua]\nTrai.đẹp.là.gu.của.sự.chắc.chắn:[KetQua]\nTrai.đẹp.nhìn.là.thấy.khác.biệt:[KetQua]\nTrai.đẹp.cực.kỳ.lên.tay.rồi:[KetQua]\nTrai.đẹp.rất.biết.chọn.mặt.gửi.vàng:[KetQua]\nTrai.đẹp.không.làm.sai.câu.chuyện:[KetQua]\nTrai.đẹp.là.cửa.vào.rất.ngọt:[KetQua]\nTrai.đẹp.nhìn.là.mê.ngay:[KetQua]\nTrai.đẹp.cực.kỳ.biết.đọc.bài:[KetQua]\nTrai.đẹp.rất.hợp.khí.hôm.nay:[KetQua]\nTrai.đẹp.không.có.gì.ngoài.mượt:[KetQua]\nTrai.đẹp.là.chân.lý.tối.nay:[KetQua]\nTrai.đẹp.nhìn.là.thấy.quá.hợp:[KetQua]\nTrai.đẹp.cực.kỳ.tinh.mắt:[KetQua]\nTrai.đẹp.rất.biết.lựa.thời.cơ:[KetQua]\nTrai.đẹp.không.có.pha.rớt.nhịp:[KetQua]\nTrai.đẹp.là.tín.hiệu.đáng.tin:[KetQua]\nTrai.đẹp.nhìn.là.ra.quẻ.đẹp:[KetQua]\nTrai.đẹp.cực.kỳ.bắt.mắt.luôn:[KetQua]\nTrai.đẹp.rất.biết.chốt.cửa.đẹp:[KetQua]\nTrai.đẹp.không.bị.mất.phương.hướng:[KetQua]\nTrai.đẹp.là.phải.đi.đường.sáng:[KetQua]\nTrai.đẹp.nhìn.là.biết.nên.chơi:[KetQua]\nTrai.đẹp.cực.kỳ.chắc.tay:[KetQua]\nTrai.đẹp.rất.có.khí.chất.thắng:[KetQua]\nTrai.đẹp.không.hề.lạc.quẻ:[KetQua]\nTrai.đẹp.là.gu.của.nhịp.chuẩn:[KetQua]\nTrai.đẹp.nhìn.là.thấy.cửa.ăn:[KetQua]\nTrai.đẹp.cực.kỳ.đúng.nhịp.cầu:[KetQua]\nTrai.đẹp.rất.biết.chọn.hướng.đi:[KetQua]\nTrai.đẹp.không.làm.nhịp.bị.gãy:[KetQua]\nTrai.đẹp.là.đỉnh.của.nhan.sắc:[KetQua]\nTrai.đẹp.nhìn.là.thấy.hợp.vía:[KetQua]\nTrai.đẹp.cực.kỳ.giàu.cảm.giác:[KetQua]\nTrai.đẹp.rất.biết.giữ.phong.độ:[KetQua]\nTrai.đẹp.không.chọn.nhầm.bài:[KetQua]\nTrai.đẹp.là.tín.hiệu.xanh.nhất:[KetQua]\nTrai.đẹp.nhìn.là.biết.nên.chốt:[KetQua]\nTrai.đẹp.cực.kỳ.khớp.nhịp:[KetQua]\nTrai.đẹp.rất.biết.đường.thắng:[KetQua]\nTrai.đẹp.không.để.lệch.kèo:[KetQua]\nTrai.đẹp.là.gu.quá.cháy:[KetQua]\nTrai.đẹp.nhìn.là.thấy.uy.tín:[KetQua]\nTrai.đẹp.cực.kỳ.đậm.nét:[KetQua]\nTrai.đẹp.rất.biết.làm.chủ.game:[KetQua]\nTrai.đẹp.không.phải.nghĩ.nhiều:[KetQua]\nTrai.đẹp.là.chuẩn.chỉnh.luôn:[KetQua]"
+      },
+      "message_input_profile": {
+        "P1": {
+          "x": 490,
+          "y": 242
+        },
+        "P2": {
+          "x": 470,
+          "y": 256
+        }
+      },
+      "send_button_profile": {
+        "P1": {
+          "x": 579,
+          "y": 241
+        },
+        "P2": {
+          "x": 561,
+          "y": 255
+        }
+      }
+    },
+    "telegram_bot": {
+      "enabled": true,
+      "bot_token": "8405834485:AAHqTCRxEmR1GgnEhI0zcUF5u4Axr_d4yLI",
+      "chat_ids": [
+        "-5163947338"
+      ],
+      "schedules": [
+        {
+          "delay": 20,
+          "template": "mọi người"
+        },
+        {
+          "delay": 21,
+          "template": "Hãy Chọn"
+        },
+        {
+          "delay": 1,
+          "template": "Kết Quả: [KetQua]"
+        }
+      ]
+    }
+  },
+  "ui": {
+    "dashboard": {
+      "show_max_layout": true
+    },
+    "theme": "Tối",
+    "room": {
+      "delay_create_ms": 700,
+      "delay_join_ms": 700,
+      "exit_double_click_ms": 200,
+      "notify_enter_exit": false,
+      "mini_as_window": true
+    },
+    "apply": {
+      "delay_between_drag_ms": 10,
+      "drag_duration_ms": 10,
+      "verify_drag": true,
+      "verify_clip_pad": 2,
+      "verify_hash_threshold": 7,
+      "verify_max_attempts": 3
+    },
+    "apply_click": {
+      "slot_click_px": 0.5,
+      "slot_click_py": 0.5
+    },
+    "theme_colors": {
+      "Sáng": {
+        "bg": "#e6e6e6",
+        "panel": "#e6e6e6",
+        "sidebar": "#f9f9f9",
+        "input_bg": "#f3f3f3",
+        "border": "#0044c6",
+        "divider": "#6b6b6b",
+        "text": "#0d121f",
+        "text2": "#2b333f",
+        "muted": "#535863",
+        "btn_bg": "#dedede",
+        "btn_hover": "#efefef"
+      },
+      "Tối": {
+        "bg": "#1E1E1E",
+        "panel": "#252526",
+        "sidebar": "#2D2D30",
+        "input_bg": "#3e3e3e",
+        "border": "#3C3C3C",
+        "divider": "#333333",
+        "text": "#E6E6E6",
+        "text2": "#B0B0B0",
+        "muted": "#8A8A8A",
+        "btn_bg": "#2D2D30",
+        "btn_hover": "#333333"
+      }
+    },
+    "active_game": "go88"
+  },
   "profiles": {
     "P1": {
       "name": "Profile 1",
       "chrome_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-      "user_data_dir": "D:\\Hoan\\TOOL\\MB\\MB\\user-data\\P1",
+      "user_data_dir": "D:\\MB\\user-data\\P1",
       "proxy": {
-        "host": "",
-        "port": 0,
-        "username": "",
-        "password": ""
+        "host": "http://hndc46.proxyno1.com",
+        "port": 12960,
+        "username": "hung",
+        "password": "hung",
+        "tmproxy_api_key": "fcb86c608fc5ddaacefb3c2f815742ee",
+        "tmproxy_type": "https",
+        "proxyno1_api_key": "kel8sv6gi436jzmcY7BwiH1769955267",
+        "provider": "proxyno1",
+        "proxyno1_last_change_at": "2026-03-16T21:31:25",
+        "proxyno1_last_message": "Đổi IP thành công"
       },
       "window": {
         "width": 1280,
-        "height": 720,
-        "scale_percent": 100
+        "height": 780,
+        "scale_percent": 51
       }
     },
     "P2": {
       "name": "Profile 2",
       "chrome_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-      "user_data_dir": "D:\\Hoan\\TOOL\\MB\\MB\\user-data\\P2",
+      "user_data_dir": "D:\\MB\\user-data\\P2",
       "proxy": {
-        "host": "",
-        "port": 0,
-        "username": "",
-        "password": ""
+        "host": "http://hndc20.proxyno1.com",
+        "port": 37526,
+        "username": "hung",
+        "password": "hung",
+        "tmproxy_api_key": "0dbaaf04399cac6331792cf50b32a901",
+        "tmproxy_type": "https",
+        "proxyno1_api_key": "Tz8Xh4xdrM6i6abvbMhlTG1769955264",
+        "provider": "proxyno1",
+        "proxyno1_last_change_at": "2026-03-31T00:03:12",
+        "proxyno1_last_message": "Đổi IP thành công"
       },
       "window": {
         "width": 1280,
-        "height": 720,
-        "scale_percent": 100
+        "height": 780,
+        "scale_percent": 51
       }
     },
     "P3": {
       "name": "Profile 3",
       "chrome_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-      "user_data_dir": "D:\\Hoan\\TOOL\\MB\\MB\\user-data\\P3",
+      "user_data_dir": "D:\\MB\\user-data\\P3",
       "proxy": {
-        "host": "",
-        "port": 0,
-        "username": "",
-        "password": ""
+        "host": "http://hndc54.proxyno1.com",
+        "port": 32466,
+        "username": "hung",
+        "password": "hung",
+        "tmproxy_api_key": "27339f4405281b70d31669f64226fe0e",
+        "tmproxy_type": "https",
+        "proxyno1_api_key": "uEesUDNTNR3xsr95PsBDs61769955261",
+        "provider": "proxyno1",
+        "proxyno1_last_change_at": "2026-03-16T21:19:42",
+        "proxyno1_last_message": "Đổi IP thành công"
       },
       "window": {
         "width": 1280,
-        "height": 720,
-        "scale_percent": 100
+        "height": 780,
+        "scale_percent": 51
       }
     }
   },
   "capture": {
     "regions": {
       "P1": {
-        "x": 408,
-        "y": 207,
-        "width": 454,
-        "height": 374
+        "x": 117,
+        "y": 43,
+        "width": 352,
+        "height": 222
       },
       "P2": {
-        "x": 408,
-        "y": 207,
-        "width": 454,
-        "height": 374
+        "x": 117,
+        "y": 43,
+        "width": 352,
+        "height": 222
       },
       "P3": {
-        "x": 408,
-        "y": 207,
-        "width": 454,
-        "height": 374
+        "x": 117,
+        "y": 43,
+        "width": 352,
+        "height": 222
       }
     },
     "slots": {
       "P1": {
         "1": {
-          "x": 14,
-          "y": 21,
-          "width": 73,
-          "height": 107
+          "x": 79,
+          "y": 7,
+          "width": 43,
+          "height": 61
         },
         "2": {
-          "x": 100,
-          "y": 23,
-          "width": 73,
-          "height": 107
+          "x": 131,
+          "y": 7,
+          "width": 43,
+          "height": 61
         },
         "3": {
-          "x": 186,
-          "y": 21,
-          "width": 73,
-          "height": 107
+          "x": 182,
+          "y": 7,
+          "width": 43,
+          "height": 61
         },
         "4": {
-          "x": 13,
-          "y": 141,
-          "width": 73,
-          "height": 107
+          "x": 79,
+          "y": 78,
+          "width": 43,
+          "height": 61
         },
         "5": {
-          "x": 101,
-          "y": 141,
-          "width": 73,
-          "height": 107
+          "x": 131,
+          "y": 78,
+          "width": 43,
+          "height": 61
         },
         "6": {
-          "x": 187,
-          "y": 141,
-          "width": 73,
-          "height": 107
+          "x": 182,
+          "y": 78,
+          "width": 43,
+          "height": 61
         },
         "7": {
-          "x": 275,
-          "y": 142,
-          "width": 73,
-          "height": 107
+          "x": 233,
+          "y": 78,
+          "width": 43,
+          "height": 61
         },
         "8": {
-          "x": 361,
-          "y": 141,
-          "width": 73,
-          "height": 107
+          "x": 284,
+          "y": 78,
+          "width": 43,
+          "height": 61
         },
         "9": {
-          "x": 16,
-          "y": 257,
-          "width": 73,
-          "height": 107
+          "x": 79,
+          "y": 147,
+          "width": 43,
+          "height": 61
         },
         "10": {
-          "x": 101,
-          "y": 257,
-          "width": 73,
-          "height": 107
+          "x": 131,
+          "y": 147,
+          "width": 43,
+          "height": 61
         },
         "11": {
-          "x": 188,
-          "y": 257,
-          "width": 73,
-          "height": 107
+          "x": 181,
+          "y": 147,
+          "width": 43,
+          "height": 61
         },
         "12": {
-          "x": 275,
-          "y": 257,
-          "width": 73,
-          "height": 107
+          "x": 233,
+          "y": 148,
+          "width": 43,
+          "height": 61
         },
         "13": {
-          "x": 363,
-          "y": 257,
-          "width": 73,
-          "height": 107
+          "x": 284,
+          "y": 147,
+          "width": 43,
+          "height": 61
         }
       },
       "P2": {
         "1": {
-          "x": 14,
-          "y": 21,
-          "width": 73,
-          "height": 107
+          "x": 79,
+          "y": 7,
+          "width": 43,
+          "height": 61
         },
         "2": {
-          "x": 100,
-          "y": 23,
-          "width": 73,
-          "height": 107
+          "x": 131,
+          "y": 7,
+          "width": 43,
+          "height": 61
         },
         "3": {
-          "x": 186,
-          "y": 21,
-          "width": 73,
-          "height": 107
+          "x": 182,
+          "y": 7,
+          "width": 43,
+          "height": 61
         },
         "4": {
-          "x": 13,
-          "y": 141,
-          "width": 73,
-          "height": 107
+          "x": 79,
+          "y": 78,
+          "width": 43,
+          "height": 61
         },
         "5": {
-          "x": 101,
-          "y": 141,
-          "width": 73,
-          "height": 107
+          "x": 131,
+          "y": 78,
+          "width": 43,
+          "height": 61
         },
         "6": {
-          "x": 187,
-          "y": 141,
-          "width": 73,
-          "height": 107
+          "x": 182,
+          "y": 78,
+          "width": 43,
+          "height": 61
         },
         "7": {
-          "x": 275,
-          "y": 142,
-          "width": 73,
-          "height": 107
+          "x": 233,
+          "y": 78,
+          "width": 43,
+          "height": 61
         },
         "8": {
-          "x": 361,
-          "y": 141,
-          "width": 73,
-          "height": 107
+          "x": 284,
+          "y": 78,
+          "width": 43,
+          "height": 61
         },
         "9": {
-          "x": 16,
-          "y": 257,
-          "width": 73,
-          "height": 107
+          "x": 79,
+          "y": 147,
+          "width": 43,
+          "height": 61
         },
         "10": {
-          "x": 101,
-          "y": 257,
-          "width": 73,
-          "height": 107
+          "x": 131,
+          "y": 147,
+          "width": 43,
+          "height": 61
         },
         "11": {
-          "x": 188,
-          "y": 257,
-          "width": 73,
-          "height": 107
+          "x": 181,
+          "y": 147,
+          "width": 43,
+          "height": 61
         },
         "12": {
-          "x": 275,
-          "y": 257,
-          "width": 73,
-          "height": 107
+          "x": 233,
+          "y": 148,
+          "width": 43,
+          "height": 61
         },
         "13": {
-          "x": 363,
-          "y": 257,
-          "width": 73,
-          "height": 107
+          "x": 284,
+          "y": 147,
+          "width": 43,
+          "height": 61
         }
       },
       "P3": {
         "1": {
-          "x": 14,
-          "y": 21,
-          "width": 73,
-          "height": 107
+          "x": 79,
+          "y": 7,
+          "width": 43,
+          "height": 61
         },
         "2": {
-          "x": 100,
-          "y": 23,
-          "width": 73,
-          "height": 107
+          "x": 131,
+          "y": 7,
+          "width": 43,
+          "height": 61
         },
         "3": {
-          "x": 186,
-          "y": 21,
-          "width": 73,
-          "height": 107
+          "x": 182,
+          "y": 7,
+          "width": 43,
+          "height": 61
         },
         "4": {
-          "x": 13,
-          "y": 141,
-          "width": 73,
-          "height": 107
+          "x": 79,
+          "y": 78,
+          "width": 43,
+          "height": 61
         },
         "5": {
-          "x": 101,
-          "y": 141,
-          "width": 73,
-          "height": 107
+          "x": 131,
+          "y": 78,
+          "width": 43,
+          "height": 61
         },
         "6": {
-          "x": 187,
-          "y": 141,
-          "width": 73,
-          "height": 107
+          "x": 182,
+          "y": 78,
+          "width": 43,
+          "height": 61
         },
         "7": {
-          "x": 275,
-          "y": 142,
-          "width": 73,
-          "height": 107
+          "x": 233,
+          "y": 78,
+          "width": 43,
+          "height": 61
         },
         "8": {
-          "x": 361,
-          "y": 141,
-          "width": 73,
-          "height": 107
+          "x": 284,
+          "y": 78,
+          "width": 43,
+          "height": 61
         },
         "9": {
-          "x": 16,
-          "y": 257,
-          "width": 73,
-          "height": 107
+          "x": 79,
+          "y": 147,
+          "width": 43,
+          "height": 61
         },
         "10": {
-          "x": 101,
-          "y": 257,
-          "width": 73,
-          "height": 107
+          "x": 131,
+          "y": 147,
+          "width": 43,
+          "height": 61
         },
         "11": {
-          "x": 188,
-          "y": 257,
-          "width": 73,
-          "height": 107
+          "x": 181,
+          "y": 147,
+          "width": 43,
+          "height": 61
         },
         "12": {
-          "x": 275,
-          "y": 257,
-          "width": 73,
-          "height": 107
+          "x": 233,
+          "y": 148,
+          "width": 43,
+          "height": 61
         },
         "13": {
-          "x": 363,
-          "y": 257,
-          "width": 73,
-          "height": 107
+          "x": 284,
+          "y": 147,
+          "width": 43,
+          "height": 61
+        }
+      }
+    },
+    "design": {
+      "P1": {
+        "region": {
+          "x": 235.63636363636363,
+          "y": 102.35294117647058,
+          "width": 708.3636363636365,
+          "height": 524.1176470588235
+        },
+        "slots": {
+          "1": {
+            "x": 395.6363636363636,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "2": {
+            "x": 498.9090909090909,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "3": {
+            "x": 602.1818181818182,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "4": {
+            "x": 395.6363636363636,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "5": {
+            "x": 498.9090909090909,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "6": {
+            "x": 602.1818181818182,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "7": {
+            "x": 705.4545454545455,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "8": {
+            "x": 807.2727272727274,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "9": {
+            "x": 395.6363636363636,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "10": {
+            "x": 498.9090909090909,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "11": {
+            "x": 600.7272727272727,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "12": {
+            "x": 704.0,
+            "y": 451.7647058823529,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "13": {
+            "x": 807.2727272727274,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          }
+        }
+      },
+      "P2": {
+        "region": {
+          "x": 235.63636363636363,
+          "y": 102.35294117647058,
+          "width": 708.3636363636365,
+          "height": 524.1176470588235
+        },
+        "slots": {
+          "1": {
+            "x": 395.6363636363636,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "2": {
+            "x": 498.9090909090909,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "3": {
+            "x": 602.1818181818182,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "4": {
+            "x": 395.6363636363636,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "5": {
+            "x": 498.9090909090909,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "6": {
+            "x": 602.1818181818182,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "7": {
+            "x": 705.4545454545455,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "8": {
+            "x": 807.2727272727274,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "9": {
+            "x": 395.6363636363636,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "10": {
+            "x": 498.9090909090909,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "11": {
+            "x": 600.7272727272727,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "12": {
+            "x": 704.0,
+            "y": 451.7647058823529,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "13": {
+            "x": 807.2727272727274,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          }
+        }
+      },
+      "P3": {
+        "region": {
+          "x": 235.63636363636363,
+          "y": 102.35294117647058,
+          "width": 708.3636363636365,
+          "height": 524.1176470588235
+        },
+        "slots": {
+          "1": {
+            "x": 395.6363636363636,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "2": {
+            "x": 498.9090909090909,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "3": {
+            "x": 602.1818181818182,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "4": {
+            "x": 395.6363636363636,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "5": {
+            "x": 498.9090909090909,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "6": {
+            "x": 602.1818181818182,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "7": {
+            "x": 705.4545454545455,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "8": {
+            "x": 807.2727272727274,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "9": {
+            "x": 395.6363636363636,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "10": {
+            "x": 498.9090909090909,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "11": {
+            "x": 600.7272727272727,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "12": {
+            "x": 704.0,
+            "y": 451.7647058823529,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "13": {
+            "x": 807.2727272727274,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          }
         }
       }
     }

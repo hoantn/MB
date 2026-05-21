@@ -46,3 +46,37 @@ def init_db() -> None:
 
     conn.commit()
     log.info("Database initialized")
+    # ===== LƯU PHIÊN PHÒNG =====
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS room_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_id TEXT NOT NULL,
+            room_id INTEGER,
+            bet INTEGER,
+            my_uid TEXT,
+            started_at TEXT NOT NULL,
+            ended_at TEXT
+        );
+        """
+    )
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS room_players_seen (
+            session_id INTEGER NOT NULL,
+            seen_uid TEXT NOT NULL,
+            seen_name TEXT,
+            first_seen_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL,
+            PRIMARY KEY (session_id, seen_uid)
+        );
+        """
+    )
+    # --- MIGRATION: add seen_gold if missing ---
+    cur.execute("PRAGMA table_info(room_players_seen)")
+    cols = {row[1] for row in cur.fetchall()}  # row[1] = column name
+    if "seen_gold" not in cols:
+        cur.execute("ALTER TABLE room_players_seen ADD COLUMN seen_gold INTEGER")
+        log.info("DB migration: added column room_players_seen.seen_gold")
+    conn.commit()

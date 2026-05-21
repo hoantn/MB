@@ -1,0 +1,33 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+
+# Build folders
+build/
+dist/
+dist-MB/
+dist-phom/
+
+# User data
+user-data/
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.*
+
+# VS Code
+.vscode/
+
+# SQLite temp files
+*.sqlite-shm
+*.sqlite-wal

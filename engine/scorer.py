@@ -159,3 +159,75 @@ def score_matchup(
         return raw * collapse_multiplier
 
     return raw
+from typing import List, Tuple, Dict  # nếu file chưa import Dict thì thêm
+
+# ... các hàm ở trên: score_three_chi, evaluate_3cards, compare_5cards, compare_3cards, score_matchup ...
+
+
+def score_matchup_detail(
+    my_chi1: List[Card],
+    my_chi2: List[Card],
+    my_chi3: List[Card],
+    opp_chi1: List[Card],
+    opp_chi2: List[Card],
+    opp_chi3: List[Card],
+    collapse_multiplier: int = 2,
+) -> Tuple[int, Dict[str, object]]:
+    """
+    Tính điểm đối đầu chi tiết giữa 3 chi của mình và 3 chi của đối thủ.
+
+    Quy ước từng chi:
+        >0  → mình thắng → +1
+         0  → hoà        →  0
+        <0  → mình thua  → -1
+
+    Tổng:
+        raw  = sum(chi_scores)  (nằm trong [-3, 3])
+        Nếu raw == 3 hoặc raw == -3 → sập 3 chi → total = raw * collapse_multiplier
+        Ngược lại total = raw
+
+    Trả về:
+        total: điểm tổng sau khi áp dụng sập 3 chi
+        detail: dict
+            {
+                "chi_scores": [c1, c2, c3],   # mỗi phần tử: -1 / 0 / +1
+                "raw": raw,                   # tổng trước khi nhân sập 3 chi
+                "total": total,               # tổng sau khi nhân
+                "collapsed": bool,            # có sập 3 chi hay không
+            }
+    """
+    # chi dưới
+    s1 = compare_5cards(my_chi1, opp_chi1)
+    # chi giữa
+    s2 = compare_5cards(my_chi2, opp_chi2)
+    # chi trên
+    s3 = compare_3cards(my_chi3, opp_chi3)
+
+    def sign(v: int) -> int:
+        if v > 0:
+            return 1
+        if v < 0:
+            return -1
+        return 0
+
+    c1 = sign(s1)
+    c2 = sign(s2)
+    c3 = sign(s3)
+
+    chi_scores = [c1, c2, c3]
+    raw = c1 + c2 + c3
+
+    if raw == 3 or raw == -3:
+        total = raw * collapse_multiplier
+        collapsed = True
+    else:
+        total = raw
+        collapsed = False
+
+    detail: Dict[str, object] = {
+        "chi_scores": chi_scores,
+        "raw": raw,
+        "total": total,
+        "collapsed": collapsed,
+    }
+    return total, detail

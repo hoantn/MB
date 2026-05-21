@@ -1,0 +1,514 @@
+# ui2/tabs/config_tab.py
+from __future__ import annotations
+
+from typing import Any, Dict
+from PySide6.QtGui import QColor
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QGroupBox,
+    QFormLayout,
+    QSpinBox,
+    QCheckBox,
+    QPushButton,
+    QDialog,
+    QComboBox,
+    QLineEdit,
+    QLabel,
+    QFrame,
+    QColorDialog, 
+    QMessageBox,
+)
+
+from PySide6.QtGui import QColor
+
+from core.config import (
+    load_config,
+    save_config,
+    apply_game_to_config,
+    copy_config_coords_to_game,
+)
+
+from core.logger import log
+from ui2.theme import (
+    get_available_themes,
+    get_current_theme_name,
+    get_theme_default_colors,
+    get_theme_effective_colors,
+)
+
+
+class ConfigTab(QWidget):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+
+        self._build_ui()
+        self._load_from_config()
+
+    # ------------------------------------------------------------ UI BUILD
+    def _show_success(self, text: str) -> None:
+        QMessageBox.information(self, "Thành công", text)
+
+    def _show_error(self, text: str) -> None:
+        QMessageBox.critical(self, "Lỗi", text)
+
+    def _build_ui(self) -> None:
+        root = QVBoxLayout(self)
+        root.setContentsMargins(8, 8, 8, 8)
+        root.setSpacing(10)
+
+        # ---- Group: Game / Tọa độ ----
+        grp_game = QGroupBox("Game / Tọa độ")
+        lay_game = QHBoxLayout(grp_game)
+
+        self.cmb_game = QComboBox()
+        # hardcode theo yêu cầu bạn (sau này có thể scan folder)
+        self.cmb_game.addItems(["go88", "rikvip", "b52", "789", "iwin"])
+
+        self.btn_apply_game = QPushButton("Chuyển game")
+        self.btn_copy_coords = QPushButton("Copy tọa độ gốc")
+
+        # gợi ý: phân biệt vai trò bằng property để ăn QSS nếu có
+        self.btn_apply_game.setProperty("role", "primary")
+        self.btn_copy_coords.setProperty("role", "info")
+
+        lay_game.addWidget(QLabel("Chọn game:"))
+        lay_game.addWidget(self.cmb_game, 1)
+        lay_game.addWidget(self.btn_apply_game)
+        lay_game.addWidget(self.btn_copy_coords)
+
+        # ---- Group: Quản lý phòng game ----
+        grp_room = QGroupBox("Quản lý phòng game")
+        lay_room = QFormLayout(grp_room)
+
+        self.spin_delay_join = QSpinBox()
+        self.spin_delay_join.setRange(0, 30000)
+        self.spin_delay_join.setSingleStep(100)
+        self.spin_delay_join.setSuffix(" ms")
+
+        self.spin_delay_create = QSpinBox()
+        self.spin_delay_create.setRange(0, 30000)
+        self.spin_delay_create.setSingleStep(100)
+        self.spin_delay_create.setSuffix(" ms")
+
+        self.spin_exit_double_click = QSpinBox()
+        self.spin_exit_double_click.setRange(0, 3000)
+        self.spin_exit_double_click.setSingleStep(10)
+        self.spin_exit_double_click.setSuffix(" ms")
+
+        lay_room.addRow("Thời gian vào phòng:", self.spin_delay_join)
+        lay_room.addRow("Thời gian tạo phòng:", self.spin_delay_create)
+        lay_room.addRow("Thời gian giữa 2 lần click thoát phòng:", self.spin_exit_double_click)
+
+        # ---- Group: Thông báo vào/ra phòng ----
+        grp_notify = QGroupBox("Thông báo vào phòng / ra phòng")
+        lay_notify = QVBoxLayout(grp_notify)
+
+        self.chk_notify_enter_exit = QCheckBox("Hiển thị thông báo khi người chơi vào/ra phòng")
+        lay_notify.addWidget(self.chk_notify_enter_exit)
+
+        # NEW: đưa checkbox mini xuống dưới notify (theo yêu cầu)
+        self.chk_room_mini = QCheckBox("Dùng 'Phòng Game' dạng cửa sổ mini tách biệt")
+        lay_notify.addWidget(self.chk_room_mini)
+
+        lay_notify.addStretch(1)
+
+        # ---- Group: Quản lý xếp bài ----
+        grp_apply = QGroupBox("Quản lý xếp bài (kéo bài)")
+        lay_apply = QFormLayout(grp_apply)
+
+        self.spin_delay_between_drag = QSpinBox()
+        self.spin_delay_between_drag.setRange(0, 1000)
+        self.spin_delay_between_drag.setSingleStep(5)
+        self.spin_delay_between_drag.setSuffix(" ms")
+
+        self.spin_drag_duration = QSpinBox()
+        self.spin_drag_duration.setRange(0, 2000)
+        self.spin_drag_duration.setSingleStep(10)
+        self.spin_drag_duration.setSuffix(" ms")
+
+        lay_apply.addRow("Thời gian nghỉ giữa 2 lần kéo:", self.spin_delay_between_drag)
+        lay_apply.addRow("Thời gian chờ sau mỗi lần kéo:", self.spin_drag_duration)
+
+        # ---- Group: Giao diện / Màu sắc ----
+        grp_theme = QGroupBox("Giao diện / Màu sắc")
+        lay_theme = QHBoxLayout(grp_theme)
+
+        self.btn_theme_colors = QPushButton("Config màu giao diện...")
+        # dùng role="info" để ăn QSS semantic info button (viền xanh)
+        self.btn_theme_colors.setProperty("role", "info")
+
+        lay_theme.addWidget(self.btn_theme_colors)
+        lay_theme.addStretch(1)
+
+        # ---- Buttons ----
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+
+        self.btn_save = QPushButton("Lưu cấu hình")
+        self.btn_reload = QPushButton("Tải lại")
+
+        btn_row.addWidget(self.btn_reload)
+        btn_row.addWidget(self.btn_save)
+
+        # ---- Assemble ----
+        root.addWidget(grp_game)
+
+        # ---- Row: Room (left) + Apply (right) ----
+        row_room_apply = QHBoxLayout()
+        row_room_apply.setSpacing(10)
+        row_room_apply.addWidget(grp_room, 1)
+        row_room_apply.addWidget(grp_apply, 1)
+        root.addLayout(row_room_apply)
+
+        root.addWidget(grp_notify)
+        root.addWidget(grp_theme)
+
+        root.addLayout(btn_row)
+        root.addStretch(1)
+
+        self.btn_apply_game.clicked.connect(self._on_apply_game_clicked)
+        self.btn_copy_coords.clicked.connect(self._on_copy_coords_clicked)
+
+        self.btn_save.clicked.connect(self._on_save_clicked)
+        self.btn_reload.clicked.connect(self._load_from_config)
+        self.btn_theme_colors.clicked.connect(self._open_theme_color_dialog)
+
+    # ------------------------------------------------------------ LOAD/SAVE
+
+    def _load_from_config(self) -> None:
+        """Đọc config.json và đổ vào UI."""
+        try:
+            cfg: Dict[str, Any] = load_config()
+        except Exception as e:
+            log.error("ConfigTab._load_from_config: %s", e)
+            return
+
+        ui = cfg.get("ui") or {}
+        active_game = (ui.get("active_game") or "").strip().lower()
+        if active_game:
+            idx = self.cmb_game.findText(active_game)
+            if idx >= 0:
+                self.cmb_game.setCurrentIndex(idx)
+        ui_room = ui.get("room") or {}
+        ui_apply = ui.get("apply") or {}
+
+        delay_join_ms = int(ui_room.get("delay_join_ms", 500) or 0)
+        delay_create_ms = int(ui_room.get("delay_create_ms", 800) or 0)
+        exit_double_click_ms = int(ui_room.get("exit_double_click_ms", 130) or 0)
+        notify_enter_exit = bool(ui_room.get("notify_enter_exit", True))
+        mini_as_window = bool(ui_room.get("mini_as_window", False))
+
+        delay_between_drag_ms = int(ui_apply.get("delay_between_drag_ms", 10) or 0)
+        drag_duration_ms = int(ui_apply.get("drag_duration_ms", 120) or 0)
+
+        self.spin_delay_join.setValue(delay_join_ms)
+        self.spin_delay_create.setValue(delay_create_ms)
+        self.spin_exit_double_click.setValue(exit_double_click_ms)
+        self.chk_notify_enter_exit.setChecked(notify_enter_exit)
+        self.chk_room_mini.setChecked(mini_as_window)
+        
+        self.spin_delay_between_drag.setValue(delay_between_drag_ms)
+        self.spin_drag_duration.setValue(drag_duration_ms)
+
+    def _on_save_clicked(self) -> None:
+        """Lưu config từ UI về config.json."""
+        try:
+            cfg: Dict[str, Any] = load_config()
+            self._show_success("Đã lưu cấu hình thành công.")
+        except Exception as e:
+            log.error("ConfigTab._on_save_clicked load: %s", e)
+            self._show_error(f"Lưu cấu hình thất bại:\n{e}")
+            return
+
+        ui = cfg.setdefault("ui", {})
+        ui_room = ui.setdefault("room", {})
+        ui_apply = ui.setdefault("apply", {})
+
+        ui_room["delay_join_ms"] = int(self.spin_delay_join.value())
+        ui_room["delay_create_ms"] = int(self.spin_delay_create.value())
+        ui_room["exit_double_click_ms"] = int(self.spin_exit_double_click.value())
+        ui_room["notify_enter_exit"] = bool(self.chk_notify_enter_exit.isChecked())
+        ui_room["mini_as_window"] = bool(self.chk_room_mini.isChecked())
+
+        ui_apply["delay_between_drag_ms"] = int(self.spin_delay_between_drag.value())
+        ui_apply["drag_duration_ms"] = int(self.spin_drag_duration.value())
+
+        try:
+            save_config(cfg)
+        except Exception as e:
+            log.error("ConfigTab._on_save_clicked save: %s", e)
+            return
+
+        # Không popup ồn ào, chỉ log – nếu muốn bạn có thể thêm toast/messagebox
+        log.info("ConfigTab: config saved.")
+        
+    def _on_apply_game_clicked(self) -> None:
+        game = (self.cmb_game.currentText() or "").strip().lower()
+        ok, msg = apply_game_to_config(game)
+        if ok:
+            log.info("ConfigTab: %s", msg)
+            # Load lại để UI khác đọc config mới nếu cần
+            self._show_success(msg)
+            self._load_from_config()
+        else:
+            log.error("ConfigTab: %s", msg)
+            self._show_error(msg) 
+
+    def _on_copy_coords_clicked(self) -> None:
+        game = (self.cmb_game.currentText() or "").strip().lower()
+        ok, msg = copy_config_coords_to_game(game)
+        if ok:
+            log.info("ConfigTab: %s", msg)
+            self._show_success(msg)
+        else:
+            log.error("ConfigTab: %s", msg)
+            self._show_error(msg)
+
+    # ------------------------------------------------------------ Theme color dialog
+
+    def _open_theme_color_dialog(self) -> None:
+        dlg = ThemeColorConfigDialog(self)
+        dlg.exec()
+
+
+class ThemeColorConfigDialog(QDialog):
+    """
+    Popup cấu hình màu giao diện cho từng theme (Tối / Sáng).
+    """
+
+    COLOR_KEYS = [
+        ("bg", "Nền chính"),
+        ("panel", "Panel / Khung"),
+        ("sidebar", "Sidebar / Header / Danh sách"),
+        ("input_bg", "Nền ô nhập"),
+        ("border", "Viền"),
+        ("divider", "Đường kẻ (divider)"),
+        ("text", "Chữ chính"),
+        ("text2", "Chữ phụ"),
+        ("muted", "Chữ mờ / gợi ý"),
+        ("btn_bg", "Nền nút"),
+        ("btn_hover", "Nền nút (hover)"),
+    ]
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Config màu giao diện")
+        self.setModal(True)
+        self.resize(520, 520)
+
+        self._current_theme: str = get_current_theme_name()
+        self._rows: Dict[str, Dict[str, Any]] = {}
+
+        self._build_ui()
+        self._load_for_theme(self._current_theme)
+
+    def _build_ui(self) -> None:
+        from PySide6.QtWidgets import QVBoxLayout, QFormLayout, QHBoxLayout
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(10, 10, 10, 10)
+        root.setSpacing(8)
+
+        # Theme selector
+        top_row = QHBoxLayout()
+        lbl_theme = QLabel("Theme:")
+        self.cmb_theme = QComboBox()
+        self.cmb_theme.addItems(get_available_themes())
+        idx = self.cmb_theme.findText(self._current_theme)
+        if idx >= 0:
+            self.cmb_theme.setCurrentIndex(idx)
+        self.cmb_theme.currentTextChanged.connect(self._on_theme_changed)
+
+        top_row.addWidget(lbl_theme)
+        top_row.addWidget(self.cmb_theme)
+        top_row.addStretch(1)
+
+        root.addLayout(top_row)
+
+        # Color table
+        grp_colors = QGroupBox("Bảng màu")
+        lay_colors = QFormLayout(grp_colors)
+        lay_colors.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        for key, label in self.COLOR_KEYS:
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(6)
+
+            preview = QFrame()
+            preview.setFixedSize(32, 18)
+            preview.setFrameShape(QFrame.StyledPanel)
+            preview.setFrameShadow(QFrame.Sunken)
+
+            edit = QLineEdit()
+            edit.setMaxLength(7)
+            edit.setPlaceholderText("#RRGGBB")
+
+            btn_pick = QPushButton("...")
+            btn_pick.setFixedWidth(30)
+
+            row_layout.addWidget(preview)
+            row_layout.addWidget(edit, 1)
+            row_layout.addWidget(btn_pick)
+
+            lay_colors.addRow(label + ":", row_widget)
+
+            self._rows[key] = {
+                "preview": preview,
+                "edit": edit,
+                "button": btn_pick,
+            }
+
+            btn_pick.clicked.connect(lambda _=False, k=key: self._on_pick_color(k))
+
+        root.addWidget(grp_colors)
+
+        # Buttons
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+
+        self.btn_reset_theme = QPushButton("Reset theme này")
+        self.btn_cancel = QPushButton("Đóng")
+        self.btn_save_apply = QPushButton("Lưu & Áp dụng")
+
+        btn_row.addWidget(self.btn_reset_theme)
+        btn_row.addWidget(self.btn_cancel)
+        btn_row.addWidget(self.btn_save_apply)
+
+        root.addLayout(btn_row)
+
+        self.btn_reset_theme.clicked.connect(self._on_reset_clicked)
+        self.btn_cancel.clicked.connect(self.reject)
+        self.btn_save_apply.clicked.connect(self._on_save_and_apply)
+
+    # ---------------------- helpers ----------------------
+
+    def _set_row_color(self, key: str, hex_color: str) -> None:
+        row = self._rows.get(key)
+        if not row:
+            return
+        if not hex_color:
+            return
+
+        if not hex_color.startswith("#"):
+            hex_color = "#" + hex_color
+        if len(hex_color) != 7:
+            # bỏ qua màu không hợp lệ, tránh crash
+            return
+
+        edit: QLineEdit = row["edit"]
+        preview: QFrame = row["preview"]
+
+        edit.setText(hex_color)
+        preview.setStyleSheet(f"background-color: {hex_color}; border: 1px solid #444;")
+
+    def _collect_colors_from_ui(self) -> Dict[str, str]:
+        result: Dict[str, str] = {}
+        for key, _ in self.COLOR_KEYS:
+            row = self._rows.get(key)
+            if not row:
+                continue
+            edit: QLineEdit = row["edit"]
+            text = edit.text().strip()
+            if not text:
+                continue
+            if not text.startswith("#"):
+                text = "#" + text
+            if len(text) != 7:
+                # bỏ qua nếu không đúng #RRGGBB
+                continue
+            result[key] = text
+        return result
+
+    # ---------------------- load/save ----------------------
+
+    def _load_for_theme(self, theme_name: str) -> None:
+        self._current_theme = theme_name
+        try:
+            # Lấy hiệu lực hiện tại: config nếu có, fallback default
+            colors = get_theme_effective_colors(theme_name)
+        except Exception:
+            colors = get_theme_default_colors(theme_name)
+
+        for key, _label in self.COLOR_KEYS:
+            hex_color = colors.get(key)
+            if hex_color:
+                self._set_row_color(key, hex_color)
+
+    def _save_current_theme(self) -> None:
+        try:
+            cfg: Dict[str, Any] = load_config()
+        except Exception as e:
+            log.error("ThemeColorConfigDialog._save_current_theme load: %s", e)
+            return
+
+        ui = cfg.setdefault("ui", {})
+        theme_colors = ui.setdefault("theme_colors", {})
+
+        # merge với default để tránh thiếu key
+        default_colors = get_theme_default_colors(self._current_theme)
+        user_colors = self._collect_colors_from_ui()
+        merged = default_colors.copy()
+        merged.update(user_colors)
+
+        theme_colors[self._current_theme] = merged
+
+        try:
+            save_config(cfg)
+        except Exception as e:
+            log.error("ThemeColorConfigDialog._save_current_theme save: %s", e)
+
+    # ---------------------- slots ----------------------
+
+    def _on_theme_changed(self, name: str) -> None:
+        # đổi theme đang cấu hình, load lại bảng màu
+        self._load_for_theme(name)
+
+    def _on_pick_color(self, key: str) -> None:
+        from PySide6.QtWidgets import QColorDialog
+
+        row = self._rows.get(key)
+        if not row:
+            return
+
+        edit: QLineEdit = row["edit"]
+        current = edit.text().strip() or "#000000"
+        if not current.startswith("#") or len(current) != 7:
+            current = "#000000"
+
+        initial = QColor(current)
+        color = QColorDialog.getColor(initial, self, "Chọn màu")
+        if not color.isValid():
+            return
+
+        hex_color = color.name()  # dạng #RRGGBB
+        self._set_row_color(key, hex_color)
+
+    def _on_reset_clicked(self) -> None:
+        # Reset theme hiện tại về mặc định
+        default_colors = get_theme_default_colors(self._current_theme)
+        for key, _label in self.COLOR_KEYS:
+            hex_color = default_colors.get(key)
+            if hex_color:
+                self._set_row_color(key, hex_color)
+
+    def _on_save_and_apply(self) -> None:
+        from PySide6.QtWidgets import QApplication
+        from ui2.theme import apply_theme_by_name
+
+        self._save_current_theme()
+
+        # Áp dụng lại theme đang sử dụng (không tự đổi theme của user)
+        app = QApplication.instance()
+        if app is not None:
+            try:
+                current_theme = get_current_theme_name()
+                apply_theme_by_name(app, current_theme)
+            except Exception as e:
+                log.error("ThemeColorConfigDialog._on_save_and_apply apply theme: %s", e)
+
+        self.accept()

@@ -66,12 +66,52 @@ class DevToolsClient:
     def _open_ws(self) -> websocket.WebSocket:
         """
         Mỗi lần thao tác, mở một kết nối WebSocket mới cho đơn giản.
+
+        Nếu ws_url đã hết hiệu lực (No such target id / 500) thì tự động
+        lấy lại JSON / ws_url mới rồi thử lại 1 lần.
         """
+        # Lần thử thứ nhất
         self._ensure_ws_url()
         if not self._ws_url:
             raise RuntimeError("Chưa có WebSocket URL cho DevTools")
-        ws = websocket.create_connection(self._ws_url, timeout=5)
-        return ws
+
+        try:
+            return websocket.create_connection(self._ws_url, timeout=5)
+
+        except websocket.WebSocketBadStatusException as e:
+            # Trường hợp server trả HTTP 500 (thường kèm No such target id)
+            msg = str(e)
+            if e.status_code == 500 or "No such target id" in msg:
+                log.warning(
+                    "DevTools[%s] ws_url cũ không còn hợp lệ (%s) -> lấy lại JSON / ws_url mới",
+                    self.profile_id,
+                    msg,
+                )
+                # Refresh ws_url rồi thử lại 1 lần
+                self._ws_url = None
+                self._ensure_ws_url()
+                if not self._ws_url:
+                    raise
+                return websocket.create_connection(self._ws_url, timeout=5)
+            # Lỗi khác: ném lại
+            raise
+
+        except Exception as e:
+            # Một số version library ném Exception thường với message 'No such target id'
+            msg = str(e)
+            if "No such target id" in msg:
+                log.warning(
+                    "DevTools[%s] ws_url stale (%s) -> reconnect lấy ws_url mới",
+                    self.profile_id,
+                    msg,
+                )
+                self._ws_url = None
+                self._ensure_ws_url()
+                if not self._ws_url:
+                    raise
+                return websocket.create_connection(self._ws_url, timeout=5)
+            raise
+
 
     # ================== SCREENSHOT ==========================
 
@@ -191,21 +231,31 @@ class DevToolsClient:
         ]
         self._dispatch_mouse_events(events)
 
-    def mouse_drag(self, x1: float, y1: float, x2: float, y2: float):
+    def mouse_drag(self, x1: float, y1: float, x2: float, y2: float, *, steps: int = 18):
         """
-        Kéo chuột từ (x1,y1) → (x2,y2) bằng nút trái.
+        Kéo chuột từ (x1, y1) → (x2, y2) bằng nút trái.
+        Làm đơn giản:
+        - Move tới điểm bắt đầu.
+        - Nhấn giữ chuột trái.
+        - Di chuyển tuyến tính 'steps' bước.
+        - Nhả chuột tại điểm đích.
+        Tốc độ kéo giữa các drag được điều khiển bởi delay ở tầng apply_arrangement,
+        không thêm delay “bí mật” ở đây ngoài 0.01s trong _dispatch_mouse_events.
         """
-        steps = 5
+        # đảm bảo tối thiểu 2 bước nội suy
+        steps = max(2, int(steps))
+
         events = []
 
-        # move to start
+        # 1) Di chuyển chuột tới điểm bắt đầu (không nhấn)
         events.append({
             "type": "mouseMoved",
             "x": float(x1),
             "y": float(y1),
             "button": "none",
         })
-        # press
+
+        # 2) Nhấn giữ nút trái tại điểm bắt đầu
         events.append({
             "type": "mousePressed",
             "x": float(x1),
@@ -214,9 +264,10 @@ class DevToolsClient:
             "clickCount": 1,
         })
 
-        # intermediate moves với buttons=1
+        # 3) Di chuyển trung gian từ (x1, y1) -> (x2, y2)
+        #    steps-1 bước nội suy + 1 bước cuối ở đích
         for i in range(1, steps):
-            t = i / steps
+            t = i / float(steps)
             xi = x1 + (x2 - x1) * t
             yi = y1 + (y2 - y1) * t
             events.append({
@@ -224,10 +275,10 @@ class DevToolsClient:
                 "x": float(xi),
                 "y": float(yi),
                 "button": "left",
-                "buttons": 1,
+                "buttons": 1,   # đang giữ chuột trái
             })
 
-        # move cuối
+        # Bước move cuối cùng chính xác tại điểm đích
         events.append({
             "type": "mouseMoved",
             "x": float(x2),
@@ -236,7 +287,7 @@ class DevToolsClient:
             "buttons": 1,
         })
 
-        # release
+        # 4) Nhả chuột tại điểm đích
         events.append({
             "type": "mouseReleased",
             "x": float(x2),
@@ -246,3 +297,268 @@ class DevToolsClient:
         })
 
         self._dispatch_mouse_events(events)
+    def insert_text(self, text: str) -> None:
+        """
+        Gõ text vào phần tử đang focus sau khi đã click.
+        Dùng CDP Input.insertText để text đi thẳng vào ô nhập hiện tại.
+        """
+        value = str(text or "")
+        if not value:
+            return
+
+        ws = self._open_ws()
+        try:
+            msg_id = 1
+
+            # Enable tối thiểu
+            ws.send(json.dumps({"id": msg_id, "method": "Page.enable"}))
+            msg_id += 1
+
+            ws.send(json.dumps({"id": msg_id, "method": "Runtime.enable"}))
+            msg_id += 1
+
+            ws.send(json.dumps({"id": msg_id, "method": "Page.bringToFront"}))
+            msg_id += 1
+
+            # Bảo đảm phần tử đang active/focus
+            focus_expr = """
+            (function () {
+                try {
+                    const el = document.activeElement;
+                    if (el && typeof el.focus === 'function') {
+                        el.focus();
+                    }
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            })()
+            """
+            ws.send(json.dumps({
+                "id": msg_id,
+                "method": "Runtime.evaluate",
+                "params": {
+                    "expression": focus_expr,
+                    "returnByValue": True,
+                },
+            }))
+            msg_id += 1
+
+            # Nghỉ rất nhẹ để game/DOM nhận focus
+            time.sleep(0.05)
+
+            insert_id = msg_id
+            ws.send(json.dumps({
+                "id": insert_id,
+                "method": "Input.insertText",
+                "params": {
+                    "text": value
+                },
+            }))
+
+            # Chờ response đúng id để biết command đã chạy
+            while True:
+                raw = ws.recv()
+                if not raw:
+                    break
+                resp = json.loads(raw)
+                if resp.get("id") == insert_id:
+                    if "error" in resp:
+                        raise RuntimeError(f"Input.insertText lỗi: {resp['error']}")
+                    break
+
+        finally:
+            try:
+                ws.close()
+            except Exception:
+                pass
+
+    def type_text(self, text: str) -> None:
+        self.insert_text(text)
+
+    def send_text(self, text: str) -> None:
+        self.insert_text(text)
+
+    def paste_text(self, text: str) -> None:
+        self.insert_text(text)
+        
+    def get_cocos_canvas_info(self) -> dict:
+        """
+        Lấy thông tin canvas Cocos:
+        { left, top, width, height } từ cc.game.canvas.getBoundingClientRect().
+        """
+        ws = self._open_ws()
+        try:
+            msg_id = 1
+
+            # Enable Runtime
+            ws.send(json.dumps({
+                "id": msg_id,
+                "method": "Runtime.enable",
+            }))
+            msg_id += 1
+
+            expr = """
+            (function () {
+                try {
+                    if (typeof cc !== 'undefined' && cc.game && cc.game.canvas) {
+                        var c = cc.game.canvas.getBoundingClientRect();
+                        return {
+                            left: c.left,
+                            top: c.top,
+                            width: c.width,
+                            height: c.height
+                        };
+                    }
+                } catch (e) {}
+                return null;
+            })()
+            """
+
+            ws.send(json.dumps({
+                "id": msg_id,
+                "method": "Runtime.evaluate",
+                "params": {
+                    "expression": expr,
+                    "returnByValue": True,
+                },
+            }))
+            target_id = msg_id
+
+            canvas = None
+            while True:
+                resp_raw = ws.recv()
+                if not resp_raw:
+                    break
+                resp = json.loads(resp_raw)
+                if resp.get("id") == target_id:
+                    val = resp.get("result", {}).get("result", {}).get("value")
+                    if isinstance(val, dict):
+                        canvas = val
+                    break
+
+            if not canvas:
+                raise RuntimeError("Không lấy được thông tin canvas Cocos (cc.game.canvas).")
+
+            return canvas
+
+        finally:
+            try:
+                ws.close()
+            except Exception:
+                pass
+        
+    def get_cocos_view_info(self) -> dict:
+        """
+        Lấy thông tin view của Cocos Creator qua Runtime.evaluate.
+
+        Trả về dict dạng:
+        {
+            "design": {"width": number, "height": number} | null,
+            "canvas": {"left": number, "top": number, "width": number, "height": number} | null,
+            "frame":  {"width": number, "height": number} | null,
+        }
+
+        - design: kích thước gốc cc.view.getDesignResolutionSize() (ví dụ 1560x720).
+        - canvas: vị trí + kích thước thật của cc.game.canvas trên màn hình (CSS pixel).
+        - frame:  window.innerWidth / innerHeight (viewport hiện tại).
+        """
+        ws = self._open_ws()
+        try:
+            msg_id = 1
+
+            # Enable Runtime
+            ws.send(json.dumps({
+                "id": msg_id,
+                "method": "Runtime.enable",
+            }))
+            msg_id += 1
+
+            expr = """
+            (function () {
+                var info = {
+                    design: null,
+                    canvas: null,
+                    frame: null,
+                };
+                try {
+                    if (typeof cc !== 'undefined' && cc.view && cc.game && cc.game.canvas) {
+                        try {
+                            var d = cc.view.getDesignResolutionSize();
+                            info.design = { width: d.width, height: d.height };
+                        } catch (e) {}
+
+                        try {
+                            var c = cc.game.canvas.getBoundingClientRect();
+                            info.canvas = {
+                                left: c.left,
+                                top: c.top,
+                                width: c.width,
+                                height: c.height,
+                            };
+                        } catch (e) {}
+
+                        try {
+                            info.frame = {
+                                width: window.innerWidth,
+                                height: window.innerHeight,
+                            };
+                        } catch (e) {}
+                    }
+                } catch (e) {}
+                return info;
+            })()
+            """
+
+            ws.send(json.dumps({
+                "id": msg_id,
+                "method": "Runtime.evaluate",
+                "params": {
+                    "expression": expr,
+                    "returnByValue": True,
+                },
+            }))
+            eval_id = msg_id
+
+            result = None
+            while True:
+                raw = ws.recv()
+                resp = json.loads(raw)
+                if resp.get("id") == eval_id:
+                    result = resp
+                    break
+
+            if not result or "result" not in result:
+                raise RuntimeError("DevTools: không nhận được kết quả Cocos view info")
+
+            value = result["result"]["result"]["value"]
+            if not isinstance(value, dict):
+                return {}
+            return value
+
+        finally:
+            try:
+                ws.close()
+            except Exception:
+                pass
+def read_layout_codes(self):
+    """
+    Trả về mảng 13 code lá bài từ DOM / Cocos trong trình duyệt.
+    """
+    expr = """
+    (() => {
+        // TODO: thay bằng script thật của game anh đang đọc card
+        // tạm thời assume global window.MB_CURRENT_LAYOUT đã tồn tại
+        return window.MB_CURRENT_LAYOUT || [];
+    })()
+    """
+
+    result = self.send(
+        "Runtime.evaluate",
+        {"expression": expr, "returnByValue": True}
+    )
+
+    try:
+        return result["result"]["value"]
+    except Exception:
+        return None
