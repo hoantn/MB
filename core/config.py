@@ -38,6 +38,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         },
     },
     "ui": {
+        "tool_index": 1,
         "theme": "Tối",
         "theme_colors": {
             "Tối": {

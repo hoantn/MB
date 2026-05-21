@@ -31,6 +31,7 @@ from PySide6.QtGui import QIcon, QPixmap
 
 from core.logger import log
 from core.constants import LOG_DIR
+from core.tool_instance import get_bridge_port, get_tool_index, get_tool_name
 from db.database import init_db
 
 # License
@@ -196,6 +197,16 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # =========================
         status = QStatusBar(self)
 
+        self.tool_label = QLabel("")
+        self.tool_label.setAlignment(Qt.AlignCenter)
+        self.tool_label.setMinimumWidth(150)
+        self.tool_label.setStyleSheet(
+            "font-size:18px; font-weight:900; padding:2px 14px;"
+            "background:#111827; color:#FACC15; border:1px solid #F59E0B;"
+            "border-radius:6px;"
+        )
+        self._refresh_tool_footer_label()
+
         self.lic_label = QLabel("Bản quyền: Chưa kích hoạt")
         self.lic_label.setStyleSheet("padding-left:10px;")
 
@@ -220,6 +231,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self.copy_key_btn.setVisible(False)
         self.copy_key_btn.clicked.connect(self._copy_license_key)
 
+        status.addPermanentWidget(self.tool_label)
         status.addPermanentWidget(self.lic_label)
         status.addPermanentWidget(self.lic_id_label)
         status.addPermanentWidget(self.lic_btn)
@@ -252,6 +264,17 @@ class MainWindow(QMainWindow, WebSocketGateway):
             QTimer.singleShot(0, self._open_activate_dialog)
 
         log.info("MainWindow initialized (minimal boot)")
+
+    def _refresh_tool_footer_label(self) -> None:
+        try:
+            idx = get_tool_index()
+            bridge = get_bridge_port(idx)
+            self.tool_label.setText(get_tool_name(idx).upper())
+            self.tool_label.setToolTip(
+                f"{get_tool_name(idx)} dang duoc su dung - Bridge port {bridge}"
+            )
+        except Exception:
+            self.tool_label.setText("TOOL ?")
 
     # ==========================================================
     # Boot-gate core
@@ -391,8 +414,13 @@ class MainWindow(QMainWindow, WebSocketGateway):
         if self.auto_spam_tab is not None:
             self.auto_spam_tab.request_send_test.connect(self._on_request_send_auto_spam_test)
         # WS bridge + poll timer
-        self._ws_server = start_ws_http_bridge(port=9527)
-        log.info("WS HTTP bridge listening on 127.0.0.1:9527")
+        bridge_port = get_bridge_port()
+        self._ws_server = start_ws_http_bridge(port=bridge_port)
+        log.info(
+            "WS HTTP bridge listening on 127.0.0.1:%s (%s)",
+            bridge_port,
+            get_tool_name(),
+        )
 
         self._ws_timer = QTimer(self)
         self._ws_timer.setInterval(100)
@@ -1562,4 +1590,3 @@ if __name__ == "__main__":
                 input("\nỨng dụng gặp lỗi. Nhấn Enter để thoát...")
             except Exception:
                 pass
-

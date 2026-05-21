@@ -14,7 +14,7 @@ from PIL import ImageDraw
 # Debug flags cho arrange:
 # - DEBUG_ARRANGE_VISUAL: lưu ảnh debug slots + đường kéo
 # - DEBUG_ARRANGE_DRY_RUN: chỉ vẽ/log, không gửi chuột thật
-DEBUG_ARRANGE_VISUAL = True
+DEBUG_ARRANGE_VISUAL = False
 DEBUG_ARRANGE_DRY_RUN = False
 
 

@@ -32,6 +32,7 @@ from core.config import (
 )
 
 from core.logger import log
+from core.tool_instance import TOOL_MAX, TOOL_MIN, get_bridge_port, get_profile_ports
 from ui2.theme import (
     get_available_themes,
     get_current_theme_name,
@@ -58,6 +59,20 @@ class ConfigTab(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(10)
+
+        # ---- Group: Tool instance / ports ----
+        grp_tool = QGroupBox("Tool / Cong ket noi")
+        lay_tool = QFormLayout(grp_tool)
+
+        self.cmb_tool = QComboBox()
+        self.cmb_tool.addItems([f"Tool {i}" for i in range(TOOL_MIN, TOOL_MAX + 1)])
+        self.lbl_tool_ports = QLabel("")
+        self.lbl_tool_ports.setWordWrap(True)
+        self.lbl_tool_ports.setStyleSheet("color:#666;")
+        self.cmb_tool.currentIndexChanged.connect(self._refresh_tool_ports_label)
+
+        lay_tool.addRow("Tool dang chay:", self.cmb_tool)
+        lay_tool.addRow("Bo port:", self.lbl_tool_ports)
 
         # ---- Group: Game / Tọa độ ----
         grp_game = QGroupBox("Game / Tọa độ")
@@ -154,6 +169,7 @@ class ConfigTab(QWidget):
         btn_row.addWidget(self.btn_save)
 
         # ---- Assemble ----
+        root.addWidget(grp_tool)
         root.addWidget(grp_game)
 
         # ---- Row: Room (left) + Apply (right) ----
@@ -187,6 +203,11 @@ class ConfigTab(QWidget):
             return
 
         ui = cfg.get("ui") or {}
+        tool_index = int(ui.get("tool_index", 1) or 1)
+        tool_index = max(TOOL_MIN, min(TOOL_MAX, tool_index))
+        self.cmb_tool.setCurrentIndex(tool_index - 1)
+        self._refresh_tool_ports_label()
+
         active_game = (ui.get("active_game") or "").strip().lower()
         if active_game:
             idx = self.cmb_game.findText(active_game)
@@ -226,6 +247,9 @@ class ConfigTab(QWidget):
         ui = cfg.setdefault("ui", {})
         ui_room = ui.setdefault("room", {})
         ui_apply = ui.setdefault("apply", {})
+        old_tool_index = int(ui.get("tool_index", 1) or 1)
+        new_tool_index = int(self.cmb_tool.currentIndex()) + 1
+        ui["tool_index"] = new_tool_index
 
         ui_room["delay_join_ms"] = int(self.spin_delay_join.value())
         ui_room["delay_create_ms"] = int(self.spin_delay_create.value())
@@ -244,6 +268,20 @@ class ConfigTab(QWidget):
 
         # Không popup ồn ào, chỉ log – nếu muốn bạn có thể thêm toast/messagebox
         log.info("ConfigTab: config saved.")
+        if new_tool_index != old_tool_index:
+            QMessageBox.information(
+                self,
+                "Can khoi dong lai",
+                "Da doi Tool. Hay tat/mo lai app va trinh duyet de bridge/socket dung dung port.",
+            )
+
+    def _refresh_tool_ports_label(self) -> None:
+        tool_index = int(self.cmb_tool.currentIndex()) + 1
+        ports = get_profile_ports(tool_index)
+        self.lbl_tool_ports.setText(
+            f"Bridge: {get_bridge_port(tool_index)} | "
+            f"P1: {ports.get('P1')} | P2: {ports.get('P2')} | P3: {ports.get('P3')}"
+        )
         
     def _on_apply_game_clicked(self) -> None:
         game = (self.cmb_game.currentText() or "").strip().lower()

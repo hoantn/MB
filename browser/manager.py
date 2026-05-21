@@ -4,20 +4,24 @@ import os
 import subprocess
 import shutil
 from typing import Dict, Optional
-from .local_proxy import AuthHttpForwardProxy, LOCAL_PROXY_PORTS
+from .local_proxy import AuthHttpForwardProxy
 
 from core.config import load_config, save_config
+from core.constants import BASE_DIR
 from core.logger import log
+from core.tool_instance import (
+    get_profile_port,
+    get_local_proxy_port,
+    get_tool_extension_dir,
+    get_tool_index,
+    get_tool_name,
+)
 from .profile import ProfileConfig
 from .devtools import DevToolsClient
 from .tab import BrowserTab
 
 
-PROFILE_PORTS = {
-    "P1": 9222,
-    "P2": 9223,
-    "P3": 9224,
-}
+PROFILE_PORTS = {}
 
 
 def get_default_chrome_path() -> str:
@@ -33,10 +37,9 @@ def get_default_chrome_path() -> str:
 
 
 def get_default_user_data_dir(profile_id: str) -> str:
-    base = os.getenv("LOCALAPPDATA") or os.getcwd()
-    root = os.path.join(base, "MauBinhTool")
+    root = os.path.join(BASE_DIR, "user-data")
     os.makedirs(root, exist_ok=True)
-    return os.path.join(root, f"Profile_{profile_id}")
+    return os.path.join(root, str(profile_id or "P1"))
 
 
 class BrowserManager:
@@ -94,7 +97,7 @@ class BrowserManager:
         log.info("Updated profile config for %s", profile_id)
 
     def _get_port(self, profile_id: str) -> int:
-        return PROFILE_PORTS.get(profile_id, 9222)
+        return get_profile_port(profile_id)
 
     def ensure_tab(self, profile_id: str) -> Optional[BrowserTab]:
         """
@@ -153,9 +156,7 @@ class BrowserManager:
             log.error("Proxy[%s]: port upstream không hợp lệ", profile_id)
             return None
 
-        local_port = LOCAL_PROXY_PORTS.get(profile_id, 0)
-        if local_port <= 0:
-            local_port = 19080
+        local_port = get_local_proxy_port(profile_id)
 
         lp = AuthHttpForwardProxy(
             listen_host="127.0.0.1",
@@ -289,10 +290,13 @@ chrome.webRequest.onAuthRequired.addListener(
         sau đó bảo đảm (nếu có) DevTools được attach lại."""
         cfg = self.get_profile_config(profile_id)
         port = self._get_port(profile_id)
+        tool_index = get_tool_index()
+        tool_name = get_tool_name(tool_index)
 
         chrome_path = cfg.chrome_path or get_default_chrome_path()
         user_data_dir = cfg.user_data_dir or get_default_user_data_dir(profile_id)
         os.makedirs(user_data_dir, exist_ok=True)
+        ws_ext_dir = get_tool_extension_dir(profile_id, tool_index)
 
         # width/height/scale từ cấu hình window
         width = cfg.window.width
@@ -321,6 +325,17 @@ chrome.webRequest.onAuthRequired.addListener(
                 f"--window-size={win_w},{win_h}",
                 "--remote-allow-origins=*",
             ]
+            if os.path.isdir(ws_ext_dir):
+                args.append(f"--disable-extensions-except={ws_ext_dir}")
+                args.append(f"--load-extension={ws_ext_dir}")
+                log.info("Browser[%s] load WS extension for %s: %s", profile_id, tool_name, ws_ext_dir)
+            else:
+                log.warning(
+                    "Browser[%s] khÃ´ng tháº¥y WS extension cho %s: %s",
+                    profile_id,
+                    tool_name,
+                    ws_ext_dir,
+                )
             proxy = cfg.proxy
             scheme: Optional[str] = None
             host_part: Optional[str] = None
@@ -371,8 +386,9 @@ chrome.webRequest.onAuthRequired.addListener(
                 )
                 self.processes[profile_id] = proc
                 log.info(
-                    "Launched Chrome for %s on port %s, window=%sx%s, scale=%.2f",
+                    "Launched Chrome for %s (%s) on port %s, window=%sx%s, scale=%.2f",
                     profile_id,
+                    tool_name,
                     port,
                     win_w,
                     win_h,
