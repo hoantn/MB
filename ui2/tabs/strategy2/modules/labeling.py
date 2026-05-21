@@ -281,6 +281,38 @@ class Labeling:
 
         return f"{seg1} {seg2} {seg3}{suffix}"
 
+    def _has_playable_split(self, s: Optional[dict]) -> bool:
+        if not s:
+            return False
+        return (
+            len(list(s.get("chi1_codes") or [])) == 5
+            and len(list(s.get("chi2_codes") or [])) == 5
+            and len(list(s.get("chi3_codes") or [])) == 3
+        )
+
+    def _pick_selected_playable_suggestion(self, pid: str, ctx: LabelingContext) -> Optional[dict]:
+        render_list = list(ctx.suggestions_render.get(pid) or [])
+        base_list = list(ctx.suggestions.get(pid) or [])
+        candidates = render_list or base_list
+
+        if candidates:
+            try:
+                idx = int(ctx.selected_index.get(pid, 0) or 0)
+            except Exception:
+                idx = 0
+            if 0 <= idx < len(candidates):
+                selected = candidates[idx]
+                if self._has_playable_split(selected):
+                    return selected
+
+        for item in render_list:
+            if self._has_playable_split(item):
+                return item
+        for item in base_list:
+            if self._has_playable_split(item):
+                return item
+        return None
+
     def build_label_html_ngu_vs_3p(self, ngu_s: dict, ctx: LabelingContext, is_special_row_fn) -> str:
         """
         NGU label format (GIỮ NGUYÊN):
@@ -304,15 +336,15 @@ class Labeling:
         pair_sweeps: List[Tuple[int, int, int, int]] = []  # (wins, losses, ties, base_total)
 
         for pid in ctx.profiles:
-            # ---- chọn suggestion của P (GIỮ NGUYÊN LOGIC của anh) ----
-            my_s = None
+            # ---- chọn đúng suggestion của P đang được chọn trên UI ----
+            my_s = self._pick_selected_playable_suggestion(pid, ctx)
 
             # 1) ưu tiên list đang render cho mọi pid
             my_list = ctx.suggestions_render.get(pid) or []
             if not my_list:
                 my_list = ctx.suggestions.get(pid) or []
 
-            if my_list:
+            if my_s is None and my_list:
                 idx = int(ctx.selected_index.get(pid, 0))
                 if idx < 0 or idx >= len(my_list):
                     idx = 0

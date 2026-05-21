@@ -1061,15 +1061,54 @@ class StrategyTab(QWidget):
     def refresh_slot_order_by_scan(self, profile_id: str) -> None:
         return self._apply_controller.refresh_slot_order_by_scan(self, profile_id)
      
+    def _has_playable_split(self, sug: dict) -> bool:
+        if not sug:
+            return False
+        return (
+            len(list(sug.get("chi1_codes") or [])) == 5
+            and len(list(sug.get("chi2_codes") or [])) == 5
+            and len(list(sug.get("chi3_codes") or [])) == 3
+        )
+
     def _pick_current_suggestion_for_pid(self, pid: str):
-        # giống logic anh đang dùng cho NGU aggregate: ưu tiên MONEY, fallback first
-        lst = self._suggestions.get(pid) or []
-        if not lst:
+        # Dùng đúng gợi ý đang được chọn trên UI, fallback sang dòng chơi được đầu tiên.
+        render_list = list(self._suggestions_render.get(pid) or [])
+        base_list = list(self._suggestions.get(pid) or [])
+        candidates = render_list or base_list
+
+        if candidates:
+            try:
+                idx = int(self._selected_index.get(pid, 0) or 0)
+            except Exception:
+                idx = 0
+            if 0 <= idx < len(candidates):
+                selected = candidates[idx]
+                if self._has_playable_split(selected) and not self._is_special_row(selected):
+                    return selected
+
+        for item in render_list:
+            if self._has_playable_split(item) and not self._is_special_row(item):
+                return item
+        for item in base_list:
+            if self._has_playable_split(item) and not self._is_special_row(item):
+                return item
+        return None
+
+    def _pick_current_ngu_suggestion(self):
+        if not self._ngu_suggestions:
             return None
-        for s in lst:
-            if str(s.get("mode", "")).lower() == "money":
-                return s
-        return lst[0]
+        try:
+            idx = int(self._ngu_selected_index or 0)
+        except Exception:
+            idx = 0
+        if 0 <= idx < len(self._ngu_suggestions):
+            selected = self._ngu_suggestions[idx]
+            if self._has_playable_split(selected) and not self._is_special_row(selected):
+                return selected
+        for item in self._ngu_suggestions:
+            if self._has_playable_split(item) and not self._is_special_row(item):
+                return item
+        return None
 
     def _compute_sap_lang_flags_for_active_suggestion(self, pid: str, sug: dict):
         # trả (lang_win, lang_lose)
@@ -1077,15 +1116,9 @@ class StrategyTab(QWidget):
         opp_list = []
 
         # NGU: dùng selection hiện tại (skip special)
-        if self._ngu_suggestions:
-            j = self._ngu_selected_index
-            if j < 0 or j >= len(self._ngu_suggestions):
-                j = 0
-            if self._ngu_suggestions and self._is_special_row(self._ngu_suggestions[0]) and j <= 0 and len(self._ngu_suggestions) > 1:
-                j = 1
-            opp = self._ngu_suggestions[j]
-            if opp and (not self._is_special_row(opp)):
-                opp_list.append(opp)
+        opp = self._pick_current_ngu_suggestion()
+        if opp:
+            opp_list.append(opp)
 
         # 2 profile còn lại
         for other in self.profiles:
