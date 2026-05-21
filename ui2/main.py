@@ -54,7 +54,7 @@ from core.config import load_config
 from ui2.tabs.players_tab import PlayersTab
 from ui2.tabs.poker_tab import PokerTab
 
-ENABLE_TAIXIU = True
+ENABLE_TAIXIU = False
 if ENABLE_TAIXIU:
     from ui2.tabs.taixiu_tab import TaiXiuTab
     from ui2.tabs.taixiu_control_tab import TaiXiuControlTab
@@ -1562,5 +1562,4 @@ if __name__ == "__main__":
                 input("\nỨng dụng gặp lỗi. Nhấn Enter để thoát...")
             except Exception:
                 pass
-
 
