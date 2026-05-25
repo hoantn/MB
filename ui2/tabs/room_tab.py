@@ -16,7 +16,6 @@ from PySide6.QtGui import QPixmap, QMouseEvent, QGuiApplication
 
 from browser.manager import BrowserManager
 from core.config import load_config, save_config
-from db.player_queries import get_meet_counts_for_uids
 
 # ---------------- DATA MODELS ----------------
 
@@ -574,21 +573,16 @@ class PanelPhongProfile(QWidget):
                     it2.setText(uid)
 
             # 4) Update "Gặp" (meet_times) bằng batch query (nhẹ)
-            try:
-                meet_map = get_meet_counts_for_uids(desired_uids)
-                for uid in desired_uids:
-                    row = self._uid_to_row.get(uid)
-                    if row is None:
-                        continue
-                    meet = str(meet_map.get(uid, 0))
-                    it3 = self.bang_nguoi_choi.item(row, 3)
-                    if it3 is None:
-                        it3 = QTableWidgetItem("")
-                        self.bang_nguoi_choi.setItem(row, 3, it3)
-                    if it3.text() != meet:
-                        it3.setText(meet)
-            except Exception as e:
-                log.exception("RoomTab meet_count update failed: %s", e)
+            for uid in desired_uids:
+                row = self._uid_to_row.get(uid)
+                if row is None:
+                    continue
+                it3 = self.bang_nguoi_choi.item(row, 3)
+                if it3 is None:
+                    it3 = QTableWidgetItem("")
+                    self.bang_nguoi_choi.setItem(row, 3, it3)
+                if it3.text():
+                    it3.setText("")
 
         except Exception as e:
             log.exception(

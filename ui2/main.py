@@ -47,7 +47,6 @@ from ui2.widgets.toast import DesktopToastManager
 from ui2.tabs.dashboard_tab import DashboardTab
 from ui2.tabs.strategy2 import StrategyTab as StrategyTabV2
 from ui2.tabs.profile_tab import ProfileTab
-from ui2.tabs.capture_tab import CaptureTab
 from ui2.tabs.room_tab import RoomControlTab, TrangThaiPhong, NguoiChoiPhong
 from ui2.tabs.profiles_tab_v2 import ProfilesTabV2
 from ui2.tabs.config_tab import ConfigTab
@@ -166,6 +165,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self.browser_manager = None
         self.game_controller = None
         self.capture_manager = None
+        self.capture_tab = None
         self.taixiu_tab = None
         self.taixiu_control_tab = None
         self.auto_spam_tab = None
@@ -345,7 +345,6 @@ class MainWindow(QMainWindow, WebSocketGateway):
             )
             self.telegram_tab = TelegramTab(self)
         # self.profile_tab = ProfileTab(self.browser_manager, self)
-        self.capture_tab = CaptureTab(self.browser_manager, self.capture_manager, self)
         # self.phom_store = PhomVisibilityStore()
         # self.phom_tab = PhomMainView(store=self.phom_store)
         self.strategy_tab = StrategyTabV2(self.browser_manager, self)
@@ -373,7 +372,6 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
         # tabs.addTab(self.profile_tab, "Hồ sơ & Trình duyệt")
         tabs.addTab(self.profiles_tab_v2, "Trình duyệt v2")
-        tabs.addTab(self.capture_tab, "Fix tọa độ")
         # tabs.addTab(self.dashboard_tab, "Dashboard")
         tabs.addTab(self.config_tab, "Cấu hình")
         tabs.addTab(self.players_tab, "Người chơi")
@@ -1249,7 +1247,12 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # --- SNAPSHOT PHÒNG: cmd 202 (lấy Seat# + danh sách người chơi) ---
         if cmd == 202 and isinstance(payload, dict) and isinstance(payload.get("ps"), list):
             try:
-                if hasattr(self, "poker_tab") and self.poker_tab is not None:
+                room_task_active = (
+                    self.room_engine is not None
+                    and hasattr(self.room_engine, "is_room_task_active")
+                    and self.room_engine.is_room_task_active(profile_id)
+                )
+                if not room_task_active and hasattr(self, "poker_tab") and self.poker_tab is not None:
                     self.poker_tab.on_room_snapshot(profile_id, payload)
             except Exception:
                 log.exception("poker on_room_snapshot failed: pid=%s payload=%s", profile_id, payload)
@@ -1290,7 +1293,12 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
             # 2) NEW: PokerTab cũng phải nhận cmd=200 để trigger refresh snapshot
             try:
-                if hasattr(self, "poker_tab") and self.poker_tab is not None:
+                room_task_active = (
+                    self.room_engine is not None
+                    and hasattr(self.room_engine, "is_room_task_active")
+                    and self.room_engine.is_room_task_active(profile_id)
+                )
+                if not room_task_active and hasattr(self, "poker_tab") and self.poker_tab is not None:
                     self.poker_tab.on_room_event_200(profile_id, payload)
             except Exception:
                 log.exception("poker on_room_event_200 failed: pid=%s payload=%s", profile_id, payload)

@@ -9,12 +9,6 @@ from ui2.tabs.room_tab import TrangThaiPhong, RoomControlTab, NguoiChoiPhong
 from core.logger import log
 from core.config import load_config
 
-from db.models import (
-    start_room_session,
-    end_room_session,
-    upsert_room_player_seen,
-    delete_room_player_seen_by_uid,
-)
 # ---------------------------------------------------------------------------
 # Mô hình dữ liệu: danh sách phòng ở lobby (cmd=300)
 # ---------------------------------------------------------------------------
@@ -182,11 +176,6 @@ class RoomEngine(QObject):
             # NEW: nếu trước đó UID này từng bị ghi nhầm là "khách" (do 3P vào lần lượt),
             # thì purge lại để DB/UI nhất quán.
             try:
-                delete_room_player_seen_by_uid(uid)
-            except Exception:
-                log.exception("purge self uid in DB failed: uid=%s", uid)
-
-            try:
                 self._purge_uid_from_snapshots(uid)
             except Exception:
                 log.exception("purge self uid in snapshots failed: uid=%s", uid)
@@ -270,18 +259,8 @@ class RoomEngine(QObject):
         if hasattr(self.room_tab, "dat_trang_thai_find"):
             self.room_tab.dat_trang_thai_find(profile_id, "Đã dừng.", dang_chay=False)
 
-        # DB session chỉ có ở P1
-        if profile_id == "P1":
-            old_session = self._active_room_session.pop("P1", None)
-            self._last_room_key["P1"] = None
-            if old_session:
-                try:
-                    end_room_session(old_session)
-                except Exception:
-                    log.exception("end_room_session failed on stop: session_id=%s", old_session)
-        else:
-            self._active_room_session.pop(profile_id, None)
-            self._last_room_key[profile_id] = None
+        self._active_room_session.pop(profile_id, None)
+        self._last_room_key[profile_id] = None
 
     def _ui_refresh_room(self, profile_id: str) -> None:
         """UI yêu cầu làm mới trạng thái phòng (kéo 1 snapshot cmd=202 mới)."""
@@ -424,6 +403,11 @@ class RoomEngine(QObject):
             getattr(st, "bet", None),
             getattr(st, "my_uid", None),
         )
+
+    def is_room_task_active(self, profile_id: str) -> bool:
+        tv = self.tac_vu.get(str(profile_id or ""))
+        return bool(tv and tv.che_do in ("create", "join", "find_guest"))
+
     def _purge_uid_from_snapshots(self, uid: str) -> None:
         uid = str(uid or "").strip()
         if not uid:
@@ -503,145 +487,110 @@ class RoomEngine(QObject):
     # Snapshot: cmd=202 -> update UI + baseline + ARM toast realtime
     # ======================================================================
 
-    def on_trang_thai_phong(self, profile_id: str, trang_thai: TrangThaiPhong) -> None:
+    def _accept_room_task_snapshot(self, profile_id: str, trang_thai: TrangThaiPhong) -> None:
+        self._last_room_key[profile_id] = self._make_room_key(trang_thai)
+        self._last_snapshot[profile_id] = trang_thai
+        self._schedule_room_ui(profile_id)
 
-        room_key = self._make_room_key(trang_thai)
+    def _handle_room_task_snapshot(self, profile_id: str, trang_thai: TrangThaiPhong) -> None:
+        tv = self.tac_vu[profile_id]
+        if tv.che_do is None:
+            return
 
-        last_key = self._last_room_key.get(profile_id)
+        if not tv.dang_cho_ket_qua:
+            return
 
-        # ===== DB session chỉ dành cho P1 =====
-        if profile_id == "P1":
-            if room_key != last_key:
-                # 1) đóng session cũ (nếu có)
-                old_session = self._active_room_session.get(profile_id)
-                if old_session:
-                    try:
-                        end_room_session(old_session)
-                    except Exception:
-                        log.exception("end_room_session failed: session_id=%s", old_session)
+        tv.dang_cho_ket_qua = False
 
-                # 2) mở session mới
-                session_id = start_room_session(
-                    profile_id=profile_id,
-                    room_id=trang_thai.room_id,
-                    bet=trang_thai.bet,
-                    my_uid=trang_thai.my_uid,
+        if tv.che_do == "create":
+            if trang_thai.so_nguoi_hien_tai == 1 and trang_thai.my_uid:
+                self._accept_room_task_snapshot(profile_id, trang_thai)
+                self.room_tab.dat_trang_thai_tao(
+                    profile_id,
+                    f"ĐÃ TẠO PHÒNG SOLO (Room {trang_thai.room_id}, Bet {trang_thai.bet}).",
+                    dang_chay=False,
                 )
-                self._active_room_session[profile_id] = session_id
-                self._last_room_key[profile_id] = room_key
-        else:
-            # P2/P3 không có session DB
-            self._active_room_session.pop(profile_id, None)
-            self._last_room_key[profile_id] = room_key
+                tv.che_do = None
+                return
 
+            self.room_tab.dat_trang_thai_tao(
+                profile_id,
+                "Phòng không còn solo. Đang thoát và tìm bàn khác...",
+                dang_chay=True,
+            )
+            self._double_click_exit(profile_id)
+            total_delay = int(getattr(self, "_exit_double_click_ms", 130) or 0) + max(tv.delay_ms, 100)
+            QTimer.singleShot(total_delay, lambda pid=profile_id: self._click_bet_tao(pid))
+            return
+
+        if tv.che_do == "join":
+            target_uid = tv.target_uid
+            if target_uid and any(p.uid == target_uid for p in (trang_thai.nguoi_choi or [])):
+                self._accept_room_task_snapshot(profile_id, trang_thai)
+                self.room_tab.dat_trang_thai_join(
+                    profile_id,
+                    f"ĐÃ VÀO ĐÚNG PHÒNG có UID {target_uid} (Room {trang_thai.room_id}, Bet {trang_thai.bet}).",
+                    dang_chay=False,
+                )
+                tv.che_do = None
+                return
+
+            self.room_tab.dat_trang_thai_join(
+                profile_id,
+                f"Phòng hiện tại không có UID {target_uid}. Đang thoát và tìm lại...",
+                dang_chay=True,
+            )
+            self._double_click_exit(profile_id)
+            total_delay = int(getattr(self, "_exit_double_click_ms", 130) or 0) + max(tv.delay_ms, 100)
+            QTimer.singleShot(total_delay, lambda pid=profile_id: self._click_bet_join(pid))
+            return
+
+        if tv.che_do == "find_guest":
+            my_uid = str(trang_thai.my_uid or "").strip()
+            self_uids = getattr(self, "_self_uid_all", set()) or set()
+
+            other_uid = None
+            for p in (trang_thai.nguoi_choi or []):
+                uid = str(getattr(p, "uid", "") or "").strip()
+                if uid and uid != my_uid and uid not in self_uids:
+                    other_uid = uid
+                    break
+
+            if trang_thai.so_nguoi_hien_tai == 2 and my_uid and other_uid:
+                self._accept_room_task_snapshot(profile_id, trang_thai)
+                if hasattr(self.room_tab, "dat_trang_thai_find"):
+                    self.room_tab.dat_trang_thai_find(
+                        profile_id,
+                        f"ĐÃ TÌM ĐƯỢC KHÁCH (Room {trang_thai.room_id}, Bet {trang_thai.bet}).",
+                        dang_chay=False,
+                    )
+                tv.che_do = None
+                return
+
+            if hasattr(self.room_tab, "dat_trang_thai_find"):
+                self.room_tab.dat_trang_thai_find(
+                    profile_id,
+                    "Đang thoát và tìm bàn khác...",
+                    dang_chay=True,
+                )
+            self._double_click_exit(profile_id)
+            total_delay = int(getattr(self, "_exit_double_click_ms", 130) or 0) + max(tv.delay_ms, 100)
+            QTimer.singleShot(total_delay, lambda pid=profile_id: self._click_bet_find_guest(pid))
+
+    def on_trang_thai_phong(self, profile_id: str, trang_thai: TrangThaiPhong) -> None:
         try:
+            tv = self.tac_vu[profile_id]
+            if tv.che_do is not None:
+                self._handle_room_task_snapshot(profile_id, trang_thai)
+                return
+
+            room_key = self._make_room_key(trang_thai)
+            self._last_room_key[profile_id] = room_key
             self._last_snapshot[profile_id] = trang_thai
             self._schedule_room_ui(profile_id)
 
             if self._refresh_waiting.get(profile_id):
                 self._refresh_waiting[profile_id] = False
-
-            # ===== Baseline + ARM (neo P1) =====
-            if profile_id == "P1":
-                if self._p1_room_key is None or room_key != self._p1_room_key:
-                    self._p1_room_key = room_key
-                    self._p1_seen_uids.clear()
-                    self._p1_armed = False
-
-                for p in (trang_thai.nguoi_choi or []):
-                    uid = getattr(p, "uid", None)
-                    if uid:
-                        self._p1_seen_uids.add(str(uid))
-                self._p1_armed = True
-
-            # ===== giữ nguyên logic create/join =====
-            tv = self.tac_vu[profile_id]
-            if tv.che_do is None:
-                return
-
-            if tv.che_do == "create":
-                tv.dang_cho_ket_qua = False
-                if trang_thai.so_nguoi_hien_tai == 1 and trang_thai.my_uid:
-                    self.room_tab.dat_trang_thai_tao(
-                        profile_id,
-                        f"ĐÃ TẠO PHÒNG SOLO (Room {trang_thai.room_id}, Bet {trang_thai.bet}).",
-                        dang_chay=False,
-                    )
-                    tv.che_do = None
-                    return
-
-                self.room_tab.dat_trang_thai_tao(
-                    profile_id,
-                    "Phòng không còn solo (đã có người khác). Đang thoát và tìm bàn khác...",
-                    dang_chay=True,
-                )
-                self._double_click_exit(profile_id)
-                total_delay = int(getattr(self, "_exit_double_click_ms", 130) or 0) + max(tv.delay_ms, 100)
-                QTimer.singleShot(total_delay, lambda pid=profile_id: self._click_bet_tao(pid))
-
-            elif tv.che_do == "join":
-                tv.dang_cho_ket_qua = False
-                target_uid = tv.target_uid
-                if target_uid and any(p.uid == target_uid for p in (trang_thai.nguoi_choi or [])):
-                    self.room_tab.dat_trang_thai_join(
-                        profile_id,
-                        f"ĐÃ VÀO ĐÚNG PHÒNG có UID {target_uid} (Room {trang_thai.room_id}, Bet {trang_thai.bet}).",
-                        dang_chay=False,
-                    )
-                    tv.che_do = None
-                    return
-
-                self.room_tab.dat_trang_thai_join(
-                    profile_id,
-                    f"Phòng hiện tại không có UID {target_uid}. Đang thoát và tìm lại...",
-                    dang_chay=True,
-                )
-                self._double_click_exit(profile_id)
-                total_delay = int(getattr(self, "_exit_double_click_ms", 130) or 0) + max(tv.delay_ms, 100)
-                QTimer.singleShot(total_delay, lambda pid=profile_id: self._click_bet_join(pid))
-
-            elif tv.che_do == "find_guest":
-                tv.dang_cho_ket_qua = False
-
-                # Thành công: phòng có đúng 2 người và có 1 người khác mình (khách)
-                my_uid = str(trang_thai.my_uid or "").strip()
-                self_uids = getattr(self, "_self_uid_all", set()) or set()
-
-                other_uid = None
-                for p in (trang_thai.nguoi_choi or []):
-                    uid = str(getattr(p, "uid", "") or "").strip()
-                    if not uid:
-                        continue
-                    if uid == my_uid:
-                        continue
-                    # tránh trường hợp "khách" lại là UID của P khác (P1/P2/P3)
-                    if uid in self_uids:
-                        continue
-                    other_uid = uid
-                    break
-
-                if trang_thai.so_nguoi_hien_tai == 2 and my_uid and other_uid:
-                    if hasattr(self.room_tab, "dat_trang_thai_find"):
-                        self.room_tab.dat_trang_thai_find(
-                            profile_id,
-                            f"ĐÃ TÌM ĐƯỢC KHÁCH (Room {trang_thai.room_id}, Bet {trang_thai.bet}).",
-                            dang_chay=False,
-                        )
-                    tv.che_do = None
-                    return
-
-                # Fail: không đúng dạng bàn -> thoát và tìm lại
-                if hasattr(self.room_tab, "dat_trang_thai_find"):
-                    self.room_tab.dat_trang_thai_find(
-                        profile_id,
-                        "Đang thoát và tìm bàn khác...",
-                        dang_chay=True,
-                    )
-                self._double_click_exit(profile_id)
-
-                # Delay: dùng y hệt create (max(tv.delay_ms, 500))
-                total_delay = int(getattr(self, "_exit_double_click_ms", 130) or 0) + max(tv.delay_ms, 100)
-                QTimer.singleShot(total_delay, lambda pid=profile_id: self._click_bet_find_guest(pid))
 
         except Exception as e:
             log.exception(
@@ -768,6 +717,9 @@ class RoomEngine(QObject):
             if payload.get("cmd") != 200:
                 return
 
+            if self.is_room_task_active(profile_id):
+                return
+
             t = payload.get("t")
 
             player = self._parse_player_from_200(payload)
@@ -786,25 +738,6 @@ class RoomEngine(QObject):
                 # update snapshot nếu có
                 if st is not None:
                     changed = self._upsert_player_to_snapshot(st, player)
-
-                # --- DB: P1-only, cmd=200 là update phòng => ghi realtime join/update ---
-                session_id = self._active_room_session.get("P1") if profile_id == "P1" else None
-                if session_id:
-                    self_uids = getattr(self, "_self_uid_all", set()) or set()
-                    uid_s = str(getattr(player, "uid", "") or "").strip()
-                    if uid_s and uid_s not in self_uids:
-                        vang = getattr(player, "vang", None)
-                        try:
-                            vang_i = int(vang) if vang is not None else None
-                        except Exception:
-                            vang_i = None
-
-                        upsert_room_player_seen(
-                            session_id=session_id,
-                            uid=uid_s,
-                            name=getattr(player, "ten", None),
-                            gold=vang_i,
-                        )
 
             elif t in (2, 0, -1):
                 if st is None:
