@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>5 mau nut P phong game</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #111;
+      color: #f2f5f7;
+      font: 13px "Segoe UI", Arial, sans-serif;
+    }
+    .page { max-width: 1220px; margin: 0 auto; padding: 18px; }
+    h1 { margin: 0 0 14px; font-size: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; align-items: start; }
+    .sample {
+      background: #202020;
+      border: 1px solid #3b3b3b;
+      border-radius: 6px;
+      padding: 8px;
+      min-height: 360px;
+    }
+    .title { color: #b8c0ca; font-weight: 700; margin-bottom: 8px; }
+    .nav {
+      border: 1px solid #343941;
+      background: #242424;
+      border-radius: 5px;
+      min-height: 300px;
+      padding: 6px;
+    }
+    .item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 28px;
+      padding: 6px 8px;
+      color: #f5f7fa;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #616b76;
+      flex: 0 0 auto;
+    }
+    .active { background: #2ba043; color: #fff; }
+    .sample-1 .item { border-radius: 2px; margin-bottom: 4px; }
+    .sample-2 .item {
+      border: 1px solid #343b45;
+      border-radius: 5px;
+      background: #191c20;
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+    .sample-2 .active {
+      border-color: #35b85a;
+      background: #1f6f35;
+    }
+    .sample-3 .item {
+      border-left: 4px solid transparent;
+      background: #1c1f23;
+      margin-bottom: 5px;
+      border-radius: 3px;
+    }
+    .sample-3 .active {
+      border-left-color: #37c15b;
+      background: #2a2f35;
+    }
+    .sample-4 .nav { display: grid; grid-template-columns: 1fr; gap: 8px; align-content: start; }
+    .sample-4 .item {
+      justify-content: center;
+      min-height: 46px;
+      border-radius: 6px;
+      background: #181b1f;
+      border: 1px solid #3a414a;
+      font-size: 16px;
+      font-weight: 800;
+    }
+    .sample-4 .active {
+      background: #2ba043;
+      border-color: #53d66f;
+    }
+    .sample-5 .item {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 8px;
+      border: 1px solid #333941;
+      border-radius: 5px;
+      background: #181b1f;
+      margin-bottom: 6px;
+      padding: 7px;
+    }
+    .badge {
+      width: 34px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 4px;
+      background: #2b3037;
+      font-weight: 900;
+    }
+    .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .meta b { font-size: 13px; }
+    .meta span { color: #9aa4af; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sample-5 .active {
+      background: #173f25;
+      border-color: #2ba043;
+    }
+    .sample-5 .active .badge { background: #2ba043; color: #fff; }
+    @media (max-width: 1100px) {
+      .grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <h1>5 mau tham khao nut P1/P2/P3 phong game</h1>
+    <section class="grid">
+      <div class="sample sample-1">
+        <div class="title">1. Giu style hien tai, rong hon</div>
+        <div class="nav">
+          <div class="item active">P1</div>
+          <div class="item">P2</div>
+          <div class="item">P3</div>
+        </div>
+      </div>
+
+      <div class="sample sample-2">
+        <div class="title">2. Button card ro vien</div>
+        <div class="nav">
+          <div class="item active"><span class="dot"></span>P1</div>
+          <div class="item"><span class="dot"></span>P2</div>
+          <div class="item"><span class="dot"></span>P3</div>
+        </div>
+      </div>
+
+      <div class="sample sample-3">
+        <div class="title">3. Active bang vach trai</div>
+        <div class="nav">
+          <div class="item active">P1 <span style="margin-left:auto;color:#9fe3ac">ACTIVE</span></div>
+          <div class="item">P2</div>
+          <div class="item">P3</div>
+        </div>
+      </div>
+
+      <div class="sample sample-4">
+        <div class="title">4. Nut lon thao tac nhanh</div>
+        <div class="nav">
+          <div class="item active">P1</div>
+          <div class="item">P2</div>
+          <div class="item">P3</div>
+        </div>
+      </div>
+
+      <div class="sample sample-5">
+        <div class="title">5. Co trang thai nho</div>
+        <div class="nav">
+          <div class="item active"><div class="badge">P1</div><div class="meta"><b>Profile 1</b><span>Dang chon</span></div></div>
+          <div class="item"><div class="badge">P2</div><div class="meta"><b>Profile 2</b><span>San sang</span></div></div>
+          <div class="item"><div class="badge">P3</div><div class="meta"><b>Profile 3</b><span>San sang</span></div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

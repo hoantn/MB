@@ -25,8 +25,9 @@ from PySide6.QtWidgets import (
     QPushButton,
     QDialog,
     QVBoxLayout,
+    QSplitter,
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QSize
 from PySide6.QtGui import QIcon, QPixmap
 
 from core.logger import log
@@ -148,7 +149,6 @@ class MainWindow(QMainWindow, WebSocketGateway):
         super().__init__(parent)
         self.setWindowTitle("Tập trung vào làm! Tài xỉu ít thôi.")
 
-        from PySide6.QtCore import QSize
         self.setMinimumSize(QSize(820, 530))
         self.resize(1280, 630)
 
@@ -276,6 +276,47 @@ class MainWindow(QMainWindow, WebSocketGateway):
         except Exception:
             self.tool_label.setText("TOOL ?")
 
+    def apply_startup_layout(self) -> None:
+        self._apply_startup_window_geometry()
+        self._apply_strategy_room_splitter_layout()
+
+    def _apply_startup_window_geometry(self) -> None:
+        try:
+            screen = QApplication.screenAt(self.frameGeometry().center()) or QApplication.primaryScreen()
+            if screen is None:
+                return
+
+            area = screen.availableGeometry()
+            height = min(617, max(self.minimumHeight(), area.height()))
+            width = area.width()
+            x = area.left()
+            y = area.bottom() - height + 1
+            self.setGeometry(x, max(area.top(), y), width, height)
+        except Exception:
+            pass
+
+    def _apply_strategy_room_splitter_layout(self) -> None:
+        splitter = getattr(self, "strategy_room_splitter", None)
+        if splitter is None:
+            return
+
+        try:
+            total_width = max(820, self.width())
+            room_min = 610 if total_width >= 1280 else 560
+            strategy_min = 560 if total_width >= 1280 else 420
+
+            self.room_tab.setMinimumWidth(room_min)
+            self.strategy_tab.setMinimumWidth(strategy_min)
+            splitter.setHandleWidth(7)
+            splitter.setStretchFactor(0, 0)
+            splitter.setStretchFactor(1, 1)
+
+            room_width = min(830, max(room_min, int(total_width * 0.43)))
+            strategy_width = max(strategy_min, total_width - room_width)
+            splitter.setSizes([room_width, strategy_width])
+        except Exception:
+            pass
+
     # ==========================================================
     # Boot-gate core
     # ==========================================================
@@ -324,6 +365,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         tabs = QTabWidget(self)
         tabs.setTabPosition(QTabWidget.North)
         tabs.setMovable(False)
+        tabs.setStyleSheet("QTabWidget::tab-bar { alignment: center; }")
 
         
         # self.dashboard_tab = DashboardTab(self.browser_manager, self.capture_manager, self)
@@ -356,10 +398,27 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # self.poker_tab.yeu_cau_lam_moi_snapshot.connect(self._on_poker_request_refresh_snapshot)
         # self.ws_sim_tab = WSSimulatorTab(self)
 
-        tabs.addTab(self.strategy_tab, "Chiến Thuật")
+        self.strategy_room_splitter = QSplitter(Qt.Horizontal, self)
+        self.strategy_room_splitter.setObjectName("strategy_room_splitter")
+        self.strategy_room_splitter.addWidget(self.room_tab)
+        self.strategy_room_splitter.addWidget(self.strategy_tab)
+        self.strategy_room_splitter.setStyleSheet(
+            """
+            QSplitter#strategy_room_splitter::handle {
+                background: #2f3339;
+                border-left: 1px solid #454a52;
+                border-right: 1px solid #151719;
+            }
+            QSplitter#strategy_room_splitter::handle:hover {
+                background: #3f4650;
+            }
+            """
+        )
+        self._apply_strategy_room_splitter_layout()
+
+        tabs.addTab(self.strategy_room_splitter, "Chiến Thuật")
         # tabs.addTab(self.poker_tab, "Poker")
         # tabs.addTab(self.phom_tab, "Phỏm")
-        tabs.addTab(self.room_tab, "Phòng Game")
 
         # Tách 2 tab riêng để:
         # - tab Phân Tích chỉ tập trung đọc dữ liệu
@@ -380,18 +439,6 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self.tab_widget = tabs
         self.setCentralWidget(tabs)
 
-        # Tự động đưa Phòng Game ra mini window nếu config bật
-        try:
-            from core.config import load_config
-
-            cfg = load_config()
-            ui = cfg.get("ui") or {}
-            ui_room = ui.get("room") or {}
-            if ui_room.get("mini_as_window"):
-                # Dùng singleShot để đợi UI khởi tạo xong
-                QTimer.singleShot(0, lambda: self._set_room_tab_floating(True))
-        except Exception as e:
-            log.error("MainWindow: load ui.room.mini_as_window failed: %s", e)
 
         # Toast
         self.toast = DesktopToastManager(timeout_ms=5000)
@@ -1582,7 +1629,9 @@ def run_app() -> None:
 
     window = MainWindow()
     window.setWindowIcon(QIcon(icon_path))
+    window.apply_startup_layout()
     window.show()
+    QTimer.singleShot(0, window.apply_startup_layout)
 
     app.exec()
 

@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>10 mau reskin Phong Game + Chien Thuat</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #101113;
+      color: #eef1f4;
+      font: 13px/1.35 "Segoe UI", Arial, sans-serif;
+    }
+    .page { max-width: 1540px; margin: 0 auto; padding: 18px; }
+    .top {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 16px;
+    }
+    h1 { margin: 0 0 6px; font-size: 22px; font-weight: 800; }
+    .top p { margin: 0; color: #a8b0ba; max-width: 860px; }
+    .hint { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .chip {
+      border: 1px solid #38404a;
+      background: #181b20;
+      color: #b9c0c9;
+      border-radius: 6px;
+      padding: 5px 8px;
+      white-space: nowrap;
+    }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .sample {
+      --bg: #151719;
+      --panel: #202225;
+      --panel2: #272a2f;
+      --line: #3a3e45;
+      --soft: #aab2bd;
+      --accent: #2ea043;
+      --accent2: #2f81f7;
+      --warn: #f2b84b;
+      min-height: 455px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--bg);
+      box-shadow: 0 14px 28px rgba(0,0,0,.25);
+    }
+    .sample-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 12px;
+      background: #171a1f;
+      border-bottom: 1px solid var(--line);
+    }
+    .sample-title b { font-size: 14px; }
+    .sample-title span { color: var(--soft); font-size: 12px; text-align: right; }
+    .tabs { display: flex; justify-content: center; gap: 3px; padding: 5px 8px 0; border-bottom: 1px solid var(--line); }
+    .tab { padding: 6px 13px; border: 1px solid var(--line); border-bottom: 0; background: #20242a; color: #dce2ea; border-radius: 5px 5px 0 0; }
+    .tab.on { background: var(--accent); color: #fff; font-weight: 800; }
+    .canvas { padding: 10px; height: 405px; }
+    .split { display: grid; grid-template-columns: 43% 1fr; gap: 10px; height: 100%; }
+    .split.reverse { grid-template-columns: 1fr 43%; }
+    .split.thin-room { grid-template-columns: 36% 1fr; }
+    .split.big-room { grid-template-columns: 50% 1fr; }
+    .panel {
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 9px;
+      overflow: hidden;
+    }
+    .section-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-weight: 800; }
+    .muted { color: var(--soft); font-weight: 500; }
+    .row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; min-height: 28px; }
+    .row.spread { justify-content: space-between; }
+    .btn {
+      background: var(--accent);
+      color: #fff;
+      border: 0;
+      border-radius: 5px;
+      padding: 7px 10px;
+      font-weight: 800;
+      min-width: 74px;
+      text-align: center;
+    }
+    .btn.blue { background: var(--accent2); }
+    .btn.red { background: #d83a3a; }
+    .input, .select {
+      background: #16191d;
+      border: 1px solid #383e47;
+      color: #eef1f4;
+      border-radius: 5px;
+      padding: 7px 9px;
+      min-width: 58px;
+    }
+    .input.grow { flex: 1; min-width: 0; }
+    .status { background: #17191d; color: #d7dde5; padding: 6px 8px; border-radius: 3px; margin: 5px 0 8px; }
+    .table { width: 100%; border-collapse: collapse; table-layout: fixed; border: 1px solid var(--line); }
+    .table th, .table td { border-bottom: 1px solid #303641; padding: 7px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .table th { background: #2a2d33; color: #dbe1ea; font-weight: 700; }
+    .nav { display: grid; grid-template-columns: 1fr; gap: 5px; min-width: 118px; }
+    .nav.horizontal { grid-template-columns: repeat(3, 1fr); }
+    .pitem { background: #15191d; border: 1px solid #343b45; border-radius: 5px; padding: 8px 9px; }
+    .pitem.on { background: var(--accent); color: #fff; font-weight: 800; }
+    .room-layout { display: grid; grid-template-columns: 128px 1fr; gap: 10px; height: 100%; }
+    .room-layout.top-nav { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .card-area { display: grid; grid-template-columns: repeat(6, minmax(40px, 1fr)); gap: 6px; align-items: end; height: 104px; }
+    .card { height: 78px; border: 1px solid #3c444e; border-radius: 6px; background: #1b1e23; }
+    .card.tall { height: 112px; }
+    .lane { display: grid; grid-template-columns: 54px 1fr; gap: 7px; align-items: center; margin-bottom: 7px; }
+    .tag { background: #15191d; color: #f0f3f6; padding: 7px 8px; border-radius: 4px; font-weight: 800; text-align: center; }
+    .suggest { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
+    .list { display: grid; gap: 6px; margin-top: 8px; }
+    .list div { border: 1px solid #343b45; background: #181c21; border-radius: 5px; padding: 7px 8px; }
+    .footerline { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; color: var(--soft); }
+    .sample.s2 { --bg: #11161a; --panel: #1b2525; --panel2: #22302d; --line: #31423d; --accent: #0f9f6e; --accent2: #2573c2; }
+    .sample.s3 { --bg: #161619; --panel: #232222; --panel2: #2c2b2a; --line: #45413a; --accent: #b78b2d; --accent2: #3f87d6; }
+    .sample.s4 { --bg: #101316; --panel: #1c2228; --panel2: #222a32; --line: #39424c; --accent: #3b82f6; --accent2: #16a34a; }
+    .sample.s5 { --bg: #171717; --panel: #242424; --panel2: #2d2d2d; --line: #414141; --accent: #d04f37; --accent2: #2f81f7; }
+    .sample.s6 { --bg: #111418; --panel: #1b2027; --panel2: #232936; --line: #343d4e; --accent: #22a06b; --accent2: #6f7ddf; }
+    .sample.s7 { --bg: #141619; --panel: #1f2329; --panel2: #252b33; --line: #333a44; --accent: #7aa23a; --accent2: #3f8cc9; }
+    .sample.s8 { --bg: #121518; --panel: #1b1f23; --panel2: #242930; --line: #38404a; --accent: #2da44e; --accent2: #db6d28; }
+    .sample.s9 { --bg: #111315; --panel: #202326; --panel2: #292c31; --line: #3d4248; --accent: #00a3a3; --accent2: #466fd6; }
+    .sample.s10 { --bg: #171514; --panel: #24211f; --panel2: #2f2b27; --line: #49423a; --accent: #4d9f55; --accent2: #b56f32; }
+    .compact .row { margin-bottom: 4px; min-height: 25px; }
+    .compact .btn, .compact .input, .compact .select { padding: 5px 8px; }
+    .metricbar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 8px; }
+    .metric { background: #161a1f; border: 1px solid #343b45; border-radius: 5px; padding: 7px 8px; }
+    .metric b { display: block; font-size: 15px; }
+    .stack { display: grid; grid-template-rows: auto 1fr auto; gap: 8px; height: 100%; }
+    @media (max-width: 1100px) {
+      .grid { grid-template-columns: 1fr; }
+      .split, .split.reverse, .split.thin-room, .split.big-room { grid-template-columns: 1fr; height: auto; }
+      .canvas { height: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="top">
+      <div>
+        <h1>10 mau reskin Phong Game + Chien Thuat</h1>
+        <p>Mockup tinh de tham khao bo cuc. Cac mau uu tien de nhin khi dung lien tuc: thao tac phong o trai, chien thuat o phai, tab top can giua.</p>
+      </div>
+      <div class="hint">
+        <span class="chip">Room + Strategy</span>
+        <span class="chip">Khong doi logic</span>
+        <span class="chip">Desktop dense UI</span>
+      </div>
+    </div>
+
+    <section class="grid">
+      <article class="sample s1">
+        <div class="sample-title"><b>01. Dark Pro Balanced</b><span>Phong Game 43%, chien thuat rong</span></div>
+        <div class="tabs"><div class="tab on">Chien Thuat</div><div class="tab">Trinh duyet v2</div><div class="tab">Cau hinh</div><div class="tab">Nguoi choi</div></div>
+        <div class="canvas split">
+          <div class="panel room-layout">
+            <div class="nav"><div class="pitem on">P1</div><div class="pitem">P2</div><div class="pitem">P3</div></div>
+            <div class="stack">
+              <div><div class="section-title">Chi tiet phong <span class="muted">P1</span></div><div class="row"><span>Phong:</span><b>-</b><span>Cuoc:</span><b>-</b><span>Nguoi:</span><b>-</b></div></div>
+              <table class="table"><thead><tr><th>Ten</th><th>Vang</th><th>UID</th></tr></thead><tbody><tr><td>--</td><td>--</td><td>--</td></tr></tbody></table>
+              <div><div class="row"><span>Tao phong:</span><div class="select">100</div><div class="btn">Tao phong</div><div class="btn blue">Goi team</div></div><div class="status">Dang dung.</div><div class="row"><span>UID muc tieu:</span><div class="btn blue">P2</div><div class="btn blue">P3</div><div class="input grow"></div><span>Cuoc:</span><div class="select">100</div><div class="btn">Vao phong</div></div></div>
+            </div>
+          </div>
+          <div class="panel stack"><div><div class="section-title">P1 ACTIVE <span class="muted">Cho bai...</span></div><div class="metricbar"><div class="metric"><span>Mode</span><b>Auto</b></div><div class="metric"><span>Score</span><b>+12</b></div><div class="metric"><span>Status</span><b>Ready</b></div></div></div><div><div class="lane"><div class="tag">Chi 3</div><div class="card-area"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div><div class="card"></div></div></div><div class="lane"><div class="tag">Chi 2</div><div class="card-area"><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div></div></div><div class="lane"><div class="tag">Chi 1</div><div class="card-area"><div class="card"></div><div class="card"></div><div class="card"></div></div></div></div><div class="suggest"><div class="list"><div>Goi y 1 - uu tien an toan</div><div>Goi y 2 - can bang</div></div><div class="btn">XEP BAI</div></div></div>
+        </div>
+      </article>
+
+      <article class="sample s2 compact">
+        <div class="sample-title"><b>02. Operator Compact</b><span>Gon, it khoang trong, thao tac nhanh</span></div>
+        <div class="tabs"><div class="tab on">Chien Thuat</div><div class="tab">Trinh duyet v2</div><div class="tab">Cau hinh</div><div class="tab">Nguoi choi</div></div>
+        <div class="canvas split big-room">
+          <div class="panel room-layout top-nav">
+            <div class="nav horizontal"><div class="pitem on">P1 ACTIVE</div><div class="pitem">P2</div><div class="pitem">P3</div></div>
+            <div class="stack"><div class="metricbar"><div class="metric"><span>Phong</span><b>-</b></div><div class="metric"><span>Cuoc</span><b>100</b></div><div class="metric"><span>Nguoi</span><b>0/4</b></div></div><table class="table"><thead><tr><th>Ten</th><th>Vang</th><th>UID</th></tr></thead><tbody><tr><td>cuem525279</td><td>442458</td><td>43_819818</td></tr><tr><td>falang</td><td>17800</td><td>1_276568235</td></tr></tbody></table><div><div class="row"><div class="select">100</div><div class="btn">Tao</div><div class="btn blue">Goi P2-P3</div><div class="input grow"></div><div class="btn">Vao</div><div class="btn red">Dung</div></div><div class="status">Dang dung.</div></div></div>
+          </div>
+          <div class="panel"><div class="section-title">Doi thu / P active</div><div class="lane"><div class="tag">Chi 3</div><div class="card-area"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div></div></div><div class="lane"><div class="tag">Chi 2</div><div class="card-area"><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div></div></div><div class="footerline"><span>3P doi thu</span><b class="btn">XEP BAI</b></div></div>
+        </div>
+      </article>
+
+      <article class="sample s3">
+        <div class="sample-title"><b>03. Classic Desk</b><span>Phong cach bang dieu khien co dien</span></div>
+        <div class="tabs"><div class="tab on">Chien Thuat</div><div class="tab">Trinh duyet v2</div><div class="tab">Cau hinh</div><div class="tab">Nguoi choi</div></div>
+        <div class="canvas split thin-room">
+          <div class="panel stack"><div class="nav horizontal"><div class="pitem on">P1</div><div class="pitem">P2</div><div class="pitem">P3</div></div><table class="table"><thead><tr><th>Ten</th><th>Vang</th><th>UID</th></tr></thead><tbody><tr><td colspan="3">Danh sach nguoi choi</td></tr></tbody></table><div><div class="row spread"><span>Tao phong</span><div class="select">100</div><div class="btn">Tao</div></div><div class="row spread"><span>Vao phong</span><div class="input grow"></div><div class="btn">Vao</div></div><div class="row spread"><span>Tim khach</span><div class="btn">Tim</div><div class="btn red">Dung</div></div></div></div>
+          <div class="panel"><div class="section-title">Chien thuat <span class="muted">layout 2 cot</span></div><div class="split"><div><div class="section-title">Doi thu</div><div class="list"><div>Cho du 3P de suy doi thu...</div><div class="card-area"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div></div></div></div><div><div class="section-title">P1 ACTIVE</div><div class="list"><div>Cho bai...</div><div class="card-area"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div></div><div class="btn">XEP BAI</div></div></div></div></div>
+        </div>
+      </article>
+
+      <article class="sample s4">
+        <div class="sample-title"><b>04. Blue Tactical</b><span>Uu tien khu chien thuat</span></div>
+        <div class="tabs"><div class="tab on">Chien Thuat</div><div class="tab">Trinh duyet v2</div><div class="tab">Cau hinh</div><div class="tab">Nguoi choi</div></div>
+        <div class="canvas split reverse">
+          <div class="panel"><div class="section-title">Chien thuat</div><div class="metricbar"><div class="metric"><span>P</span><b>P1</b></div><div class="metric"><span>Hand</span><b>13</b></div><div class="metric"><span>Suggest</span><b>5</b></div></div><div class="lane"><div class="tag">Chi 3</div><div class="card-area"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div></div></div><div class="lane"><div class="tag">Chi 2</div><div class="card-area"><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div></div></div><div class="suggest"><div class="list"><div>Chon phuong an tot nhat</div><div>So sanh voi doi thu</div></div><div class="btn">XEP BAI</div></div></div>
+          <div class="panel room-layout"><div class="nav"><div class="pitem on">P1</div><div class="pitem">P2</div><div class="pitem">P3</div></div><div class="stack"><div class="section-title">Phong Game</div><table class="table"><thead><tr><th>Ten</th><th>Vang</th><th>UID</th></tr></thead><tbody><tr><td>-</td><td>-</td><td>-</td></tr></tbody></table><div><div class="row"><div class="select">100</div><div class="btn">Tao</div><div class="btn blue">Goi</div></div><div class="row"><div class="input grow"></div><div class="btn">Vao</div><div class="btn red">Dung</div></div></div></div></div>
+        </div>
+      </article>
+
+      <article class="sample s5 compact">
+        <div class="sample-title"><b>05. Red Action</b><span>Nut thao tac noi bat, canh bao ro</span></div>
+        <div class="tabs"><div class="tab on">Chien Thuat</div><div class="tab">Trinh duyet v2</div><div class="tab">Cau hinh</div><div class="tab">Nguoi choi</div></div>
+        <div class="canvas split">
+          <div class="panel"><div class="nav horizontal"><div class="pitem on">P1</div><div class="pitem">P2</div><div class="pitem">P3</div></div><div class="metricbar"><div class="metric"><span>Phong</span><b>-</b></div><div class="metric"><span>Cuoc</span><b>-</b></div><div class="metric"><span>UID</span><b>-</b></div></div><table class="table"><thead><tr><th>Ten</th><th>Vang</th><th>UID</th></tr></thead><tbody><tr><td>-</td><td>-</td><td>-</td></tr></tbody></table><div class="row"><div class="btn">Tao phong</div><div class="btn blue">Goi team</div><div class="btn">Tim khach</div><div class="btn red">Dung</div></div><div class="row"><div class="input grow"></div><div class="select">100</div><div class="btn">Vao phong</div></div></div>
+          <div class="panel stack"><div class="section-title">P1 ACTIVE</div><div class="list"><div>Cho bai...</div><div>Bo bai se hien thi tai day</div><div>Ket qua predict duoc xep theo diem</div></div><div class="card-area"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div><div class="card"></div><div class="card"></div></div><div class="btn">XEP BAI</div></div>
+        </div>
+      </article>
+
+      <article class="sample s6">
+        <div class="sample-title"><b>06. Focus Columns</b><span>Moi khoi co header va status rieng</span></div>
+        <div class="tabs"><div class="tab on">Chien Thuat</div><div class="tab">Trinh duyet v2</div><div class="tab">Cau hinh</div><div class="tab">Nguoi choi</div></div>
+        <div class="canvas split">
+          <div class="panel room-layout"><div class="nav"><div class="pitem on">P1<br><span class="muted">active</span></div><div class="pitem">P2</div><div class="pitem">P3</div></div><div><div class="section-title">Phong Game <button class="btn blue">Lam moi</button></div><table class="table"><thead><tr><th>Ten</th><th>Vang</th><th>UID</th></tr></thead><tbody><tr><td>-</td><td>-</td><td>-</td></tr></tbody></table><div class="list"><div>Tao phong: 100 <span class="btn">Tao</span></div><div>UID muc tieu <span class="btn blue">P2</span> <span class="btn blue">P3</span></div><div>Tim khach <span class="btn">Tim</span> <span class="btn red">Dung</span></div></div></div></div>
+          <div class="panel"><div class="section-title">Chien thuat <span class="muted">ready</span></div><div class="split"><div class="panel"><div class="section-title">Doi thu</div><div class="card-area"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div></div></div><div class="panel"><div class="section-title">P1</div><div class="card-area"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div></div><div class="btn">XEP BAI</div></div></div></div>
+        </div>
+      </article>
+
+      <article class="sample s7">
+        <div class="sample-title"><b>07. Sidebar Command</b><span>Thanh lenh doc, du lieu o giua</span></div>
+        <div class="tabs"><div class="tab on">Chien Thuat</div><div class="tab">Trinh duyet v2</div><div class="tab">Cau hinh</div><div class="tab">Nguoi choi</div></div>
+        <div class="canvas split big-room">
+          <div class="panel" style="display:grid;grid-template-columns:120px 1fr 92px;gap:9px;"><div class="nav"><div class="pitem on">P1</div><div class="pitem">P2</div><div class="pitem">P3</div></div><div class="stack"><div class="section-title">Danh sach nguoi choi</div><table class="table"><thead><tr><th>Ten</th><th>Vang</th><th>UID</th></tr></thead><tbody><tr><td>-</td><td>-</td><td>-</td></tr></tbody></table><div class="status">Dang dung.</div></div><div class="list"><div class="btn">Tao</div><div class="btn blue">Goi</div><div class="btn">Vao</div><div class="btn">Tim</div><div class="btn red">Dung</div></div></div>
+          <div class="panel"><div class="section-title">Chien thuat</div><div class="lane"><div class="tag">Chi 3</div><div class="card-area"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div></div></div><div class="lane"><div class="tag">Chi 2</div><div class="card-area"><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div></div></div><div class="footerline"><span>ALL / P1 / P2 / P3</span><b class="btn">XEP BAI</b></div></div>
+        </div>
+      </article>
+
+      <article class="sample s8 compact">
+        <div class="sample-title"><b>08. Dense Trading Style</b><span>Nhieu thong tin, it trang tri</span></div>
+        <div class="tabs"><div class="tab on">Chien Thuat</div><div class="tab">Trinh duyet v2</div><div class="tab">Cau hinh</div><div class="tab">Nguoi choi</div></div>
+        <div class="canvas split">
+          <div class="panel"><div class="metricbar"><div class="metric"><span>P</span><b>P1</b></div><div class="metric"><span>Room</span><b>-</b></div><div class="metric"><span>Bet</span><b>100</b></div></div><table class="table"><thead><tr><th>Ten</th><th>Vang</th><th>UID</th></tr></thead><tbody><tr><td>cuem525279</td><td>442458</td><td>43_819818</td></tr><tr><td>tondonhung</td><td>316403</td><td>1_285364925</td></tr><tr><td>falang</td><td>17800</td><td>1_276568235</td></tr></tbody></table><div class="row"><div class="nav horizontal" style="flex:1"><div class="pitem on">P1</div><div class="pitem">P2</div><div class="pitem">P3</div></div></div><div class="row"><div class="btn">Tao</div><div class="btn">Vao</div><div class="btn">Tim</div><div class="btn red">Dung</div></div></div>
+          <div class="panel"><div class="section-title">Strategy Matrix</div><table class="table"><thead><tr><th>Khu</th><th>Trang thai</th><th>Goi y</th></tr></thead><tbody><tr><td>Doi thu</td><td>Cho du 3P</td><td>-</td></tr><tr><td>P1</td><td>Cho bai</td><td>-</td></tr><tr><td>P2</td><td>Idle</td><td>-</td></tr><tr><td>P3</td><td>Idle</td><td>-</td></tr></tbody></table><div class="suggest"><div class="list"><div>Slot goi y se hien thi dang dong</div><div>Click xep bai khi co du lieu</div></div><div class="btn">XEP</div></div></div>
+        </div>
+      </article>
+
+      <article class="sample s9">
+        <div class="sample-title"><b>09. Split Board</b><span>Phong game nhu bang dieu phoi</span></div>
+        <div class="tabs"><div class="tab on">Chien Thuat</div><div class="tab">Trinh duyet v2</div><div class="tab">Cau hinh</div><div class="tab">Nguoi choi</div></div>
+        <div class="canvas split">
+          <div class="panel stack"><div class="nav horizontal"><div class="pitem on">P1</div><div class="pitem">P2</div><div class="pitem">P3</div></div><div class="split" style="grid-template-columns:1fr 1fr"><div class="panel"><div class="section-title">Phong</div><div class="list"><div>Room: -</div><div>Cuoc: -</div><div>Nguoi: -</div></div></div><div class="panel"><div class="section-title">Lenh</div><div class="list"><div class="btn">Tao phong</div><div class="btn">Vao phong</div><div class="btn">Tim khach</div></div></div></div><table class="table"><thead><tr><th>Ten</th><th>Vang</th><th>UID</th></tr></thead><tbody><tr><td>-</td><td>-</td><td>-</td></tr></tbody></table></div>
+          <div class="panel stack"><div class="section-title">Chien thuat</div><div class="card-area" style="height:155px"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div></div><div class="list"><div>Goi y tot nhat</div><div>Goi y thay the</div></div><div class="row"><div class="btn">P1</div><div class="btn blue">P2</div><div class="btn blue">P3</div><div class="btn">ALL</div><div class="btn">XEP BAI</div></div></div>
+        </div>
+      </article>
+
+      <article class="sample s10 compact">
+        <div class="sample-title"><b>10. Warm Minimal</b><span>Am hon, don gian hon, it vien thua</span></div>
+        <div class="tabs"><div class="tab on">Chien Thuat</div><div class="tab">Trinh duyet v2</div><div class="tab">Cau hinh</div><div class="tab">Nguoi choi</div></div>
+        <div class="canvas split">
+          <div class="panel"><div class="section-title">Phong Game <span class="muted">P1 active</span></div><div class="nav horizontal"><div class="pitem on">P1</div><div class="pitem">P2</div><div class="pitem">P3</div></div><div class="metricbar"><div class="metric"><span>Room</span><b>-</b></div><div class="metric"><span>Bet</span><b>-</b></div><div class="metric"><span>UID</span><b>-</b></div></div><table class="table"><thead><tr><th>Ten</th><th>Vang</th><th>UID</th></tr></thead><tbody><tr><td>-</td><td>-</td><td>-</td></tr></tbody></table><div class="row"><div class="select">100</div><div class="btn">Tao</div><div class="btn blue">Goi</div><div class="input grow"></div><div class="btn">Vao</div></div><div class="row"><div class="btn">Tim khach</div><div class="btn red">Dung</div></div></div>
+          <div class="panel"><div class="section-title">Chien Thuat <span class="muted">clear focus</span></div><div class="lane"><div class="tag">Chi 3</div><div class="card-area"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div></div></div><div class="lane"><div class="tag">Chi 2</div><div class="card-area"><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div></div></div><div class="lane"><div class="tag">Chi 1</div><div class="card-area"><div class="card"></div><div class="card"></div><div class="card"></div></div></div><div class="footerline"><span>Cho bai...</span><b class="btn">XEP BAI</b></div></div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

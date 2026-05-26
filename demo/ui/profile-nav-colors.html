@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>5 mau phan lop P1 P2 P3</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #101113;
+      color: #eef2f6;
+      font: 13px "Segoe UI", Arial, sans-serif;
+    }
+    .page { max-width: 1340px; margin: 0 auto; padding: 18px; }
+    h1 { margin: 0 0 6px; font-size: 20px; }
+    .desc { margin: 0 0 16px; color: #a7b0bb; }
+    .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; align-items: start; }
+    .sample {
+      --frame: #242424;
+      --frame-border: #343941;
+      --card: #181c20;
+      --card-border: #343b45;
+      --card-hover: #20262c;
+      --active: #123f22;
+      --active-border: #31c45a;
+      --active-glow: rgba(49, 196, 90, .18);
+      --badge: #2b3037;
+      --badge-text: #ffffff;
+      --badge-active: #2ba043;
+      --title: #f7fafc;
+      --muted: #aeb7c2;
+      --task: #d69b2d;
+      --task-bg: #3b2b12;
+      background: #1a1b1d;
+      border: 1px solid #343941;
+      border-radius: 6px;
+      padding: 10px;
+      min-height: 430px;
+    }
+    .sample-title { margin-bottom: 6px; font-weight: 900; color: #f2f5f7; }
+    .sample-note { min-height: 48px; color: #9ca6b2; font-size: 12px; line-height: 1.35; }
+    .nav {
+      min-height: 305px;
+      background: var(--frame);
+      border: 1px solid var(--frame-border);
+      border-radius: 6px;
+      padding: 7px;
+    }
+    .item {
+      display: grid;
+      grid-template-columns: 34px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 52px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 5px;
+      padding: 7px;
+      margin-bottom: 7px;
+    }
+    .item.active {
+      background: var(--active);
+      border-color: var(--active-border);
+      box-shadow: 0 0 0 1px var(--active-glow), 0 8px 18px var(--active-glow);
+    }
+    .item.task {
+      border-color: var(--task);
+      background: var(--task-bg);
+    }
+    .badge {
+      width: 34px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      background: var(--badge);
+      color: var(--badge-text);
+      border-radius: 4px;
+      font-weight: 900;
+    }
+    .active .badge { background: var(--badge-active); }
+    .task .badge { background: var(--task); color: #111; }
+    .text { min-width: 0; }
+    .text b {
+      display: block;
+      color: var(--title);
+      font-size: 13px;
+      margin-bottom: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .text span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .state {
+      width: 7px;
+      height: 32px;
+      border-radius: 4px;
+      background: #4a535f;
+      opacity: .9;
+    }
+    .active .state { background: var(--active-border); }
+    .task .state { background: var(--task); }
+    .layer-map {
+      margin-top: 10px;
+      display: grid;
+      gap: 5px;
+      color: #9fa9b5;
+      font-size: 11px;
+    }
+    .layer-map div {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      border-top: 1px solid rgba(255,255,255,.06);
+      padding-top: 5px;
+    }
+    .swatch {
+      width: 46px;
+      height: 12px;
+      border-radius: 2px;
+      border: 1px solid rgba(255,255,255,.16);
+      flex: 0 0 auto;
+    }
+    .palette-2 {
+      --frame: #1a2228;
+      --frame-border: #2d4350;
+      --card: #13191e;
+      --card-border: #2a3942;
+      --active: #0d3f35;
+      --active-border: #18b894;
+      --active-glow: rgba(24, 184, 148, .18);
+      --badge: #28343c;
+      --badge-active: #149772;
+      --muted: #a8c0c5;
+      --task: #e0a43a;
+      --task-bg: #372b16;
+    }
+    .palette-3 {
+      --frame: #22252a;
+      --frame-border: #3d4652;
+      --card: #15191f;
+      --card-border: #343c48;
+      --active: #18304e;
+      --active-border: #4aa3ff;
+      --active-glow: rgba(74, 163, 255, .18);
+      --badge: #2d3540;
+      --badge-active: #2f81d7;
+      --muted: #b6c0cc;
+      --task: #d69b2d;
+      --task-bg: #352914;
+    }
+    .palette-4 {
+      --frame: #25231f;
+      --frame-border: #494234;
+      --card: #191816;
+      --card-border: #3c382f;
+      --active: #4a3212;
+      --active-border: #d69b2d;
+      --active-glow: rgba(214, 155, 45, .18);
+      --badge: #302d27;
+      --badge-active: #b87916;
+      --muted: #c2b69e;
+      --task: #36c978;
+      --task-bg: #143923;
+    }
+    .palette-5 {
+      --frame: #211d22;
+      --frame-border: #473848;
+      --card: #171419;
+      --card-border: #3a3140;
+      --active: #452036;
+      --active-border: #d85c9f;
+      --active-glow: rgba(216, 92, 159, .17);
+      --badge: #2f2935;
+      --badge-active: #ba3f82;
+      --muted: #c5aebd;
+      --task: #f0b84a;
+      --task-bg: #3a2b12;
+    }
+    @media (max-width: 1160px) {
+      .grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <h1>5 demo phoi mau phan lop cho P1/P2/P3</h1>
+    <p class="desc">Moi mau tach ro cac lop: khung ngoai, card thuong, card active, badge, text chinh, text phu, trang thai task.</p>
+    <section class="grid">
+      <div class="sample palette-1">
+        <div class="sample-title">1. Green Hierarchy</div>
+        <div class="sample-note">Gan UI hien tai, active noi ro nhat, task vang rieng de khong lan voi dang chon.</div>
+        <div class="nav">
+          <div class="item active"><div class="badge">P1</div><div class="text"><b>Profile 1</b><span>Dang chon</span></div><div class="state"></div></div>
+          <div class="item task"><div class="badge">P2</div><div class="text"><b>Profile 2</b><span>Dang vao phong</span></div><div class="state"></div></div>
+          <div class="item"><div class="badge">P3</div><div class="text"><b>Profile 3</b><span>San sang</span></div><div class="state"></div></div>
+        </div>
+        <div class="layer-map">
+          <div>active <span class="swatch" style="background:#123f22"></span></div>
+          <div>badge <span class="swatch" style="background:#2ba043"></span></div>
+          <div>task <span class="swatch" style="background:#3b2b12"></span></div>
+        </div>
+      </div>
+
+      <div class="sample palette-2">
+        <div class="sample-title">2. Teal Workbench</div>
+        <div class="sample-note">Diu mat, hop dung lau. Active xanh teal, task vang am lam lop can chu y.</div>
+        <div class="nav">
+          <div class="item active"><div class="badge">P1</div><div class="text"><b>Profile 1</b><span>Dang chon</span></div><div class="state"></div></div>
+          <div class="item task"><div class="badge">P2</div><div class="text"><b>Profile 2</b><span>Dang tao phong</span></div><div class="state"></div></div>
+          <div class="item"><div class="badge">P3</div><div class="text"><b>Profile 3</b><span>San sang</span></div><div class="state"></div></div>
+        </div>
+        <div class="layer-map">
+          <div>active <span class="swatch" style="background:#0d3f35"></span></div>
+          <div>badge <span class="swatch" style="background:#149772"></span></div>
+          <div>task <span class="swatch" style="background:#372b16"></span></div>
+        </div>
+      </div>
+
+      <div class="sample palette-3">
+        <div class="sample-title">3. Blue Control</div>
+        <div class="sample-note">Cam giac ky thuat hon. Active xanh duong, card thuong rat tram.</div>
+        <div class="nav">
+          <div class="item active"><div class="badge">P1</div><div class="text"><b>Profile 1</b><span>Dang chon</span></div><div class="state"></div></div>
+          <div class="item task"><div class="badge">P2</div><div class="text"><b>Profile 2</b><span>Dang vao phong</span></div><div class="state"></div></div>
+          <div class="item"><div class="badge">P3</div><div class="text"><b>Profile 3</b><span>San sang</span></div><div class="state"></div></div>
+        </div>
+        <div class="layer-map">
+          <div>active <span class="swatch" style="background:#18304e"></span></div>
+          <div>badge <span class="swatch" style="background:#2f81d7"></span></div>
+          <div>task <span class="swatch" style="background:#352914"></span></div>
+        </div>
+      </div>
+
+      <div class="sample palette-4">
+        <div class="sample-title">4. Amber Active</div>
+        <div class="sample-note">Active rat de thay tren nen den. Task dung xanh de tach khoi active.</div>
+        <div class="nav">
+          <div class="item active"><div class="badge">P1</div><div class="text"><b>Profile 1</b><span>Dang chon</span></div><div class="state"></div></div>
+          <div class="item task"><div class="badge">P2</div><div class="text"><b>Profile 2</b><span>Dang tao phong</span></div><div class="state"></div></div>
+          <div class="item"><div class="badge">P3</div><div class="text"><b>Profile 3</b><span>San sang</span></div><div class="state"></div></div>
+        </div>
+        <div class="layer-map">
+          <div>active <span class="swatch" style="background:#4a3212"></span></div>
+          <div>badge <span class="swatch" style="background:#b87916"></span></div>
+          <div>task <span class="swatch" style="background:#143923"></span></div>
+        </div>
+      </div>
+
+      <div class="sample palette-5">
+        <div class="sample-title">5. Wine Signal</div>
+        <div class="sample-note">Khac biet nhat. Active noi bat manh, nen dung neu can P dang chon bat mat.</div>
+        <div class="nav">
+          <div class="item active"><div class="badge">P1</div><div class="text"><b>Profile 1</b><span>Dang chon</span></div><div class="state"></div></div>
+          <div class="item task"><div class="badge">P2</div><div class="text"><b>Profile 2</b><span>Dang vao phong</span></div><div class="state"></div></div>
+          <div class="item"><div class="badge">P3</div><div class="text"><b>Profile 3</b><span>San sang</span></div><div class="state"></div></div>
+        </div>
+        <div class="layer-map">
+          <div>active <span class="swatch" style="background:#452036"></span></div>
+          <div>badge <span class="swatch" style="background:#ba3f82"></span></div>
+          <div>task <span class="swatch" style="background:#3a2b12"></span></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

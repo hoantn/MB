@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Dict
 from io import BytesIO
 
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal, Qt, QSize
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
     QLineEdit, QComboBox, QSpinBox, QPushButton, QTableWidget, QTableWidgetItem,
@@ -73,8 +73,8 @@ class PanelPhongProfile(QWidget):
         self.nhan_so_nguoi = QLabel("-")
 
         # ----- DANH SÁCH NGƯỜI CHƠI: TÊN - VÀNG - UID -----
-        self.bang_nguoi_choi = QTableWidget(0, 4)
-        self.bang_nguoi_choi.setHorizontalHeaderLabels(["Tên", "Vàng", "UID", "Gặp"])
+        self.bang_nguoi_choi = QTableWidget(0, 3)
+        self.bang_nguoi_choi.setHorizontalHeaderLabels(["Tên", "Vàng", "UID"])
         self.bang_nguoi_choi.setEditTriggers(QTableWidget.NoEditTriggers)
         self.bang_nguoi_choi.setSelectionBehavior(QTableWidget.SelectRows)
         self.bang_nguoi_choi.horizontalHeader().setStretchLastSection(True)
@@ -529,7 +529,6 @@ class PanelPhongProfile(QWidget):
                     self.bang_nguoi_choi.setItem(row, 0, QTableWidgetItem(""))
                     self.bang_nguoi_choi.setItem(row, 1, QTableWidgetItem(""))
                     self.bang_nguoi_choi.setItem(row, 2, QTableWidgetItem(uid))
-                    self.bang_nguoi_choi.setItem(row, 3, QTableWidgetItem("0"))
 
             # reorder via swaps (O(n^2) worst-case but n<=4 nên rất nhẹ)
             for desired_row, uid in enumerate(desired_uids):
@@ -572,18 +571,6 @@ class PanelPhongProfile(QWidget):
                 if it2.text() != uid:
                     it2.setText(uid)
 
-            # 4) Update "Gặp" (meet_times) bằng batch query (nhẹ)
-            for uid in desired_uids:
-                row = self._uid_to_row.get(uid)
-                if row is None:
-                    continue
-                it3 = self.bang_nguoi_choi.item(row, 3)
-                if it3 is None:
-                    it3 = QTableWidgetItem("")
-                    self.bang_nguoi_choi.setItem(row, 3, it3)
-                if it3.text():
-                    it3.setText("")
-
         except Exception as e:
             log.exception(
                 "RoomTab cap_nhat_trang_thai_phong crashed (profile=%s, room_id=%s): %s",
@@ -607,6 +594,7 @@ class RoomControlTab(QWidget):
 
         # Panels theo profile
         self.panels: Dict[str, PanelPhongProfile] = {}
+        self._nav_widgets: Dict[str, Dict[str, QWidget]] = {}
 
         # Master–Detail state
         self._pid_to_index: Dict[str, int] = {}
@@ -630,10 +618,29 @@ class RoomControlTab(QWidget):
         self.profile_nav = QListWidget()
         self.profile_nav.setObjectName("room_profile_nav")
         # Cho phép kéo thay đổi width: dùng min/max thay vì fixedWidth
-        self.profile_nav.setMinimumWidth(40)
+        self.profile_nav.setMinimumWidth(120)
         self.profile_nav.setMaximumWidth(400)
-        self.profile_nav.setSpacing(4)
+        self.profile_nav.setSpacing(6)
         self.profile_nav.setSelectionMode(QListWidget.SingleSelection)
+        self.profile_nav.setStyleSheet(
+            """
+            QListWidget#room_profile_nav {
+                background: #242424;
+                border: 1px solid #343941;
+                border-radius: 5px;
+                padding: 6px;
+                outline: 0;
+            }
+            QListWidget#room_profile_nav::item {
+                border: 0;
+                padding: 0;
+                margin: 0;
+            }
+            QListWidget#room_profile_nav::item:selected {
+                background: transparent;
+            }
+            """
+        )
 
         # ----- Right: detail stack -----
         self.detail_stack = QStackedWidget()
@@ -649,7 +656,7 @@ class RoomControlTab(QWidget):
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         # kích thước khởi tạo, tương đương 240px cho nav
-        splitter.setSizes([90, 800])
+        splitter.setSizes([225, 800])
 
         root.addWidget(splitter)
 
@@ -669,7 +676,8 @@ class RoomControlTab(QWidget):
             p.yeu_cau_vao_cung_phong.connect(self._on_ui_vao_cung_phong)
             p.yeu_cau_goi_team.connect(self._on_ui_goi_team)
 
-            item = QListWidgetItem(self._format_nav_text(pid))
+            item = QListWidgetItem()
+            item.setSizeHint(QSize(190, 58))
             try:
                 # Icon nhẹ, không phụ thuộc file ảnh
                 if pid == "P1":
@@ -682,12 +690,101 @@ class RoomControlTab(QWidget):
                 pass
             item.setData(Qt.UserRole, pid)
             self.profile_nav.addItem(item)
+            self.profile_nav.setItemWidget(item, self._create_nav_widget(pid))
 
         self.profile_nav.currentRowChanged.connect(self._on_nav_changed)
 
         # Default select P1
         self.profile_nav.setCurrentRow(0)
         self._on_nav_changed(0)
+
+    def _create_nav_widget(self, pid: str) -> QWidget:
+        card = QWidget()
+        card.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+
+        row = QHBoxLayout(card)
+        row.setContentsMargins(7, 6, 7, 6)
+        row.setSpacing(8)
+
+        badge = QLabel(pid)
+        badge.setAlignment(Qt.AlignCenter)
+        badge.setFixedSize(34, 28)
+
+        text_box = QWidget()
+        text_box.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        text_layout = QVBoxLayout(text_box)
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(1)
+
+        title = QLabel(f"Profile {pid[-1]}")
+        title.setStyleSheet("font-weight: 900; color: #f5f7fa;")
+
+        status = QLabel("")
+        status.setStyleSheet("font-size: 11px; color: #aeb7c2;")
+
+        text_layout.addWidget(title)
+        text_layout.addWidget(status)
+        row.addWidget(badge, 0)
+        row.addWidget(text_box, 1)
+
+        self._nav_widgets[pid] = {
+            "card": card,
+            "badge": badge,
+            "title": title,
+            "status": status,
+        }
+        self._refresh_nav_item(pid)
+        return card
+
+    def _nav_status_text(self, pid: str) -> str:
+        tasks = self._task_state.get(pid) or {"create": False, "join": False}
+        if tasks.get("create"):
+            return "Đang tạo phòng"
+        if tasks.get("join"):
+            return "Đang vào phòng"
+
+        st = self._last_room_state.get(pid)
+        if st is not None and getattr(st, "room_id", None) is not None:
+            bet = "-" if st.bet is None else str(st.bet)
+            so = f"{st.so_nguoi_hien_tai}/{st.so_nguoi_toi_da}"
+            return f"Phòng {st.room_id} | Cược {bet} | {so}"
+
+        if self.profile_nav.currentItem() is not None:
+            cur_pid = self.profile_nav.currentItem().data(Qt.UserRole)
+            if cur_pid == pid:
+                return "Đang chọn"
+        return "Sẵn sàng"
+
+    def _apply_nav_widget_style(self, pid: str) -> None:
+        parts = self._nav_widgets.get(pid)
+        if not parts:
+            return
+
+        is_active = False
+        cur = self.profile_nav.currentItem()
+        if cur is not None:
+            is_active = cur.data(Qt.UserRole) == pid
+
+        card = parts["card"]
+        badge = parts["badge"]
+        if is_active:
+            card.setStyleSheet(
+                "background:#123f22; border:1px solid #2fb653; border-radius:5px;"
+            )
+            badge.setStyleSheet(
+                "background:#2ba043; color:#ffffff; border-radius:4px; font-weight:900;"
+            )
+        else:
+            card.setStyleSheet(
+                "background:#181c20; border:1px solid #343b45; border-radius:5px;"
+            )
+            badge.setStyleSheet(
+                "background:#2b3037; color:#ffffff; border-radius:4px; font-weight:900;"
+            )
+
+    def _refresh_all_nav_items(self) -> None:
+        for pid in ("P1", "P2", "P3"):
+            self._refresh_nav_item(pid)
 
     def _on_nav_changed(self, row: int) -> None:
         try:
@@ -703,6 +800,7 @@ class RoomControlTab(QWidget):
             if idx is None:
                 return
             self.detail_stack.setCurrentIndex(idx)
+            self._refresh_all_nav_items()
         except Exception as e:
             log.exception("RoomTab _on_nav_changed crashed: %s", e)
 
@@ -798,7 +896,14 @@ class RoomControlTab(QWidget):
                 if not it:
                     continue
                 if it.data(Qt.UserRole) == pid:
-                    it.setText(self._format_nav_text(pid))
+                    parts = self._nav_widgets.get(pid)
+                    if parts:
+                        status = parts.get("status")
+                        if isinstance(status, QLabel):
+                            status.setText(self._nav_status_text(pid))
+                        self._apply_nav_widget_style(pid)
+                    else:
+                        it.setText(self._format_nav_text(pid))
                     break
         except Exception as e:
             log.exception("RoomTab _refresh_nav_item(%s) crashed: %s", pid, e)
