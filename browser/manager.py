@@ -121,7 +121,7 @@ class BrowserManager:
         self.local_proxies: dict[str, AuthHttpForwardProxy] = {}
 
     def _find_browser_exe_in_dir(self, folder: str) -> Optional[str]:
-        """Find the executable inside a clean portable browser folder."""
+        """Find the runnable executable in a clean browser/runtime folder."""
         if not os.path.isdir(folder):
             return None
 
@@ -139,23 +139,25 @@ class BrowserManager:
             return None
         return None
 
-    def _resolve_browser_template(self, chrome_path: str) -> tuple[str, str]:
+    def _resolve_browser_source_dir(self, chrome_path: str) -> str:
         """
-        Resolve user input into (template_dir, exe_name).
+        Resolve user input into a clean browser/profile source folder.
 
-        The UI still stores the value in chrome_path for compatibility, but the
-        value can now be either a clean portable folder or the executable inside
-        that folder.
+        The browser tab now asks the user for a folder only. If old config still
+        points to an exe, keep compatibility by using the exe parent folder.
         """
-        raw = os.path.abspath(str(chrome_path or "").strip())
+        raw_input = str(chrome_path or "").strip()
+        if not raw_input:
+            raise FileNotFoundError("Chưa chọn thư mục Profile sạch/gốc.")
+        raw = os.path.abspath(raw_input)
         if os.path.isdir(raw):
             exe = self._find_browser_exe_in_dir(raw)
             if not exe:
                 raise FileNotFoundError(f"Không tìm thấy file exe trong thư mục trình duyệt: {raw}")
-            return raw, os.path.basename(exe)
+            return raw
 
         if os.path.isfile(raw) and raw.lower().endswith(".exe"):
-            return os.path.dirname(raw), os.path.basename(raw)
+            return os.path.dirname(raw)
 
         raise FileNotFoundError(f"Đường dẫn trình duyệt không hợp lệ: {chrome_path}")
 
@@ -273,21 +275,20 @@ class BrowserManager:
         except Exception as e:
             log.warning("Browser[%s] cannot install title prefix: %s", profile_id, e)
 
-    def _prepare_runtime_browser_dir(self, profile_id: str, chrome_path: str) -> str:
+    def _prepare_runtime_browser_dir(self, profile_id: str, chrome_path: str) -> tuple[str, str]:
         """
-        Copy the clean browser template folder into runtime/<profile> on first open.
+        Copy the clean browser source folder into runtime/<profile> on first open.
 
         The source folder is never launched directly. If runtime/<profile> already
-        contains the expected executable, it is reused as-is.
+        exists, it is reused as-is.
         """
-        template_dir, exe_name = self._resolve_browser_template(chrome_path)
+        template_dir = self._resolve_browser_source_dir(chrome_path)
         runtime_dir = self._get_runtime_profile_dir(profile_id)
-        runtime_exe = os.path.join(runtime_dir, exe_name)
 
-        if not os.path.isfile(runtime_exe):
+        if not os.path.isdir(runtime_dir):
             os.makedirs(os.path.dirname(runtime_dir), exist_ok=True)
             try:
-                shutil.copytree(template_dir, runtime_dir, dirs_exist_ok=True)
+                shutil.copytree(template_dir, runtime_dir)
                 log.info(
                     "Browser[%s] runtime browser copied: %s -> %s",
                     profile_id,
@@ -298,10 +299,11 @@ class BrowserManager:
                 log.error("Browser[%s] cannot copy runtime browser from %s: %s", profile_id, template_dir, e)
                 raise
 
-        if not os.path.isfile(runtime_exe):
-            raise FileNotFoundError(f"Không tìm thấy runtime browser exe: {runtime_exe}")
+        runtime_exe = self._find_browser_exe_in_dir(runtime_dir)
+        if not runtime_exe or not os.path.isfile(runtime_exe):
+            raise FileNotFoundError(f"Không tìm thấy file exe trong runtime browser: {runtime_dir}")
 
-        return runtime_exe
+        return runtime_dir, runtime_exe
 
     # luôn load lại config mới nhất trước khi xử lý
     def _load_config_fresh(self) -> dict:
@@ -313,17 +315,15 @@ class BrowserManager:
 
     def get_profile_config(self, profile_id: str) -> ProfileConfig:
         """
-        Đọc config mới nhất, bổ sung chrome_path + user_data_dir nếu trống,
-        sau đó lưu lại nhưng KHÔNG đụng tới các key khác (capture, v.v.).
+        Đọc config mới nhất. Không tự sinh user_data_dir nữa vì runtime
+        trình duyệt luôn nằm trong tool/runtime/P?.
         """
         cfg = self._load_config_fresh()
         profiles = cfg.get("profiles", {})
         d = profiles.get(profile_id, {})
 
-        if not d.get("chrome_path"):
-            d["chrome_path"] = get_default_chrome_path()
-        if not d.get("user_data_dir"):
-            d["user_data_dir"] = get_default_user_data_dir(profile_id)
+        # user_data_dir is legacy UI data. Runtime browsers are always managed
+        # under tool/runtime/P?, so do not auto-fill or depend on a user path.
 
         profiles[profile_id] = d
         cfg["profiles"] = profiles
@@ -550,10 +550,10 @@ chrome.webRequest.onAuthRequired.addListener(
             self._bring_existing_browser_to_front(profile_id, port)
             return
 
-        chrome_path = cfg.chrome_path or get_default_chrome_path()
-        launch_chrome_path = self._prepare_runtime_browser_dir(profile_id, chrome_path)
-        user_data_dir = os.path.join(self._get_runtime_profile_dir(profile_id), "user-data")
-        os.makedirs(user_data_dir, exist_ok=True)
+        chrome_path = cfg.chrome_path
+        runtime_dir, launch_chrome_path = self._prepare_runtime_browser_dir(profile_id, chrome_path)
+        exe_name = os.path.basename(launch_chrome_path).lower()
+        user_data_dir = os.path.join(runtime_dir, "user-data")
         ws_ext_dir = get_tool_extension_dir(profile_id, tool_index)
         has_ws_ext = os.path.isdir(ws_ext_dir)
         needs_manual_extension = (
@@ -596,7 +596,6 @@ chrome.webRequest.onAuthRequired.addListener(
             args = [
                 launch_chrome_path,
                 f"--remote-debugging-port={port}",
-                f"--user-data-dir={user_data_dir}",
 
                 # Giữ Chrome/tab game hoạt động mạnh hơn khi chạy nền
                 "--disable-background-timer-throttling",
@@ -609,6 +608,10 @@ chrome.webRequest.onAuthRequired.addListener(
                 f"--window-size={win_w},{win_h}",
                 "--remote-allow-origins=*",
             ]
+            if exe_name != "googlechromeportable.exe":
+                os.makedirs(user_data_dir, exist_ok=True)
+                args.insert(2, f"--user-data-dir={user_data_dir}")
+
             if has_ws_ext:
                 if not is_official_chromium_path(chrome_path):
                     args.append(f"--disable-extensions-except={ws_ext_dir}")
@@ -674,6 +677,7 @@ chrome.webRequest.onAuthRequired.addListener(
             try:
                 proc = subprocess.Popen(
                     args,
+                    cwd=runtime_dir,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )

@@ -385,7 +385,9 @@ class ProfileTab(QWidget):
         prof = cfg["profiles"][pid]
         prof["name"] = self.name_edit.text().strip()
         prof["chrome_path"] = self.chrome_path_edit.text().strip()
-        prof["user_data_dir"] = self.user_data_dir_edit.text().strip()
+        # Legacy field kept in config for compatibility only.
+        # Browser runtime/user-data is now managed automatically under tool/runtime/P?.
+        prof["user_data_dir"] = ""
 
         prof["window"] = {
             "width": int(self.win_width_spin.value()),

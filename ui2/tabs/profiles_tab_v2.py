@@ -196,7 +196,9 @@ class ProfilesTabV2(ProfileTab):
         browser_source_l.addWidget(self.chrome_path_edit, 1)
         browser_source_l.addWidget(self._btn_pick_browser_source, 0)
         prof_form.addRow("Thư mục Profile sạch/gốc:", browser_source_row)
-        prof_form.addRow("User data dir:", self.user_data_dir_edit)
+        # Runtime/user-data is now managed automatically under tool/runtime/P?.
+        # Keep the old widget alive for base-class compatibility, but do not show it.
+        self.user_data_dir_edit.setVisible(False)
 
         # --- Window group
         win_group = QGroupBox("Cửa sổ")
