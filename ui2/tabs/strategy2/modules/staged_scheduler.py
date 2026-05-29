@@ -336,6 +336,10 @@ class StagedScheduler:
             # Render OPP + P active với label mới
             tab._render_ngu()
             tab._render_p_active()
+            try:
+                tab._maybe_run_auto_play()
+            except Exception:
+                tab.log.exception("[AUTO-PLAY] trigger after suggestions failed")
 
         elif active_updated:
             # Nếu chỉ P active đổi (không ảnh hưởng OPP) -> chỉ render lại P active

@@ -5,6 +5,7 @@ import hashlib
 import threading
 import queue
 import re
+import random
 
 from PySide6.QtCore import QTimer, QThread, Signal, Slot
 from PySide6.QtWidgets import QWidget, QVBoxLayout
@@ -36,6 +37,7 @@ from .modules.special_row import (
 from .modules.render_controller import RenderController
 from .modules.staged_scheduler import StagedScheduler
 from .modules.apply_controller import ApplyController
+from .modules.auto_play_controller import build_auto_play_plan
 
 from engine.card import Card
 
@@ -162,6 +164,14 @@ class StrategyTab(QWidget):
         self._ngu_selected_index: int = 0
         self._ngu_key: Optional[str] = None
         self._sap_lang_combo: Optional[SapLangCombo] = None
+        self._auto_play_enabled: bool = False
+        self._auto_play_remaining: int = 0
+        self._auto_play_delay_min_ms: int = 2000
+        self._auto_play_delay_max_ms: int = 5000
+        self._auto_play_hand_key: Optional[str] = None
+        self._auto_play_pending_key: Optional[str] = None
+        self._auto_play_applied_profile_keys = set()
+        self._auto_play_log_sink = None
         # Đánh dấu đã từng click chọn 1 gợi ý OPP/NGU hay chưa
         self._ngu_clicked_once: bool = False
 
@@ -868,6 +878,199 @@ class StrategyTab(QWidget):
             self._apply_controller.on_apply_all(self)
         except Exception:
             log.exception("[ALL] on_apply_all failed")
+
+    def set_auto_play_log_sink(self, sink) -> None:
+        self._auto_play_log_sink = sink
+
+    def set_auto_play(self, enabled: bool, rounds: int = 0, delay_min_ms: int = 2000, delay_max_ms: int = 5000) -> None:
+        self._auto_play_enabled = bool(enabled)
+        self._auto_play_remaining = max(0, int(rounds or 0)) if enabled else 0
+        a = max(0, int(delay_min_ms or 0))
+        b = max(0, int(delay_max_ms or 0))
+        self._auto_play_delay_min_ms = min(a, b)
+        self._auto_play_delay_max_ms = max(a, b)
+        self._auto_play_hand_key = None
+        self._auto_play_pending_key = None
+        self._auto_play_applied_profile_keys = set()
+        self._auto_play_log(
+            f"Auto Play {'bật' if self._auto_play_enabled else 'tắt'} | còn {self._auto_play_remaining} ván | delay={self._auto_play_delay_min_ms}-{self._auto_play_delay_max_ms}ms"
+        )
+        self._sync_auto_play_sink_state()
+
+    def get_auto_play_state(self) -> tuple[bool, int]:
+        return bool(self._auto_play_enabled), int(self._auto_play_remaining)
+
+    def _auto_play_log(self, text: str) -> None:
+        log.info("[AUTO-PLAY] %s", text)
+        sink = getattr(self, "_auto_play_log_sink", None)
+        if sink is not None and hasattr(sink, "append_log"):
+            try:
+                sink.append_log(str(text))
+            except Exception:
+                pass
+
+    def _sync_auto_play_sink_state(self) -> None:
+        sink = getattr(self, "_auto_play_log_sink", None)
+        if sink is not None and hasattr(sink, "set_auto_state"):
+            try:
+                sink.set_auto_state(bool(self._auto_play_enabled), int(self._auto_play_remaining))
+            except Exception:
+                pass
+
+    def _current_auto_play_hand_key(self) -> Optional[str]:
+        if not self._ngu_suggestions:
+            return None
+        cards_ready = {
+            pid
+            for pid in self.profiles
+            if len(list(self._codes_slot_order.get(pid) or [])) == 13
+        }
+        if len(cards_ready) == len(self.profiles):
+            pending = [
+                pid
+                for pid in self.profiles
+                if self._auto_profile_apply_key(pid) not in self._auto_play_applied_profile_keys
+            ]
+            if not pending:
+                return None
+            if any(not (self._suggestions.get(pid) or []) for pid in pending):
+                return None
+
+        parts = []
+        ready_count = 0
+        for pid in self.profiles:
+            codes = list(self._codes_slot_order.get(pid) or [])
+            pkey = self._auto_profile_apply_key(pid)
+            if (
+                len(codes) == 13
+                and (self._suggestions.get(pid) or [])
+                and pkey not in self._auto_play_applied_profile_keys
+            ):
+                ready_count += 1
+                parts.append(f"{pid}:{','.join(map(str, codes))}")
+        if ready_count <= 0:
+            return None
+        return f"NGU:{self._ngu_key or '-'}|" + "|".join(parts)
+
+    def _auto_profile_apply_key(self, pid: str) -> str:
+        codes = list(self._codes_slot_order.get(pid) or [])
+        return f"NGU:{self._ngu_key or '-'}|{pid}:{','.join(map(str, codes))}"
+
+    def _auto_should_decrement_round(self) -> bool:
+        cards_pids = [
+            pid
+            for pid in self.profiles
+            if len(list(self._codes_slot_order.get(pid) or [])) == 13
+        ]
+        if not cards_pids:
+            return True
+        return all(
+            self._auto_profile_apply_key(pid) in self._auto_play_applied_profile_keys
+            for pid in cards_pids
+        )
+
+    def _maybe_run_auto_play(self) -> None:
+        if not self._auto_play_enabled or self._auto_play_remaining <= 0:
+            return
+
+        hand_key = self._current_auto_play_hand_key()
+        if not hand_key or hand_key == self._auto_play_hand_key:
+            return
+        if hand_key != getattr(self, "_auto_play_pending_key", None):
+            self._auto_play_pending_key = hand_key
+            dmin = max(0, int(getattr(self, "_auto_play_delay_min_ms", 0) or 0))
+            dmax = max(dmin, int(getattr(self, "_auto_play_delay_max_ms", dmin) or dmin))
+            delay_ms = random.randint(dmin, dmax) if dmax > dmin else dmin
+            self._auto_play_log(f"Đủ bài/gợi ý, random delay {delay_ms}ms trước khi xếp.")
+            QTimer.singleShot(delay_ms, self._maybe_run_auto_play)
+            return
+        if not self._ngu_suggestions:
+            return
+
+        try:
+            plan = build_auto_play_plan(self, max_opp=3)
+            if plan is None:
+                self._auto_play_log("Bỏ qua: chưa có P nào đủ bài/gợi ý hợp lệ để Auto Play.")
+                return
+
+            plan.suggestions = {
+                pid: dict(sug)
+                for pid, sug in (plan.suggestions or {}).items()
+                if self._auto_profile_apply_key(pid) not in self._auto_play_applied_profile_keys
+            }
+            plan.selected_index = {
+                pid: int(idx)
+                for pid, idx in (plan.selected_index or {}).items()
+                if pid in plan.suggestions
+            }
+            if not plan.suggestions:
+                return
+
+            self._auto_play_hand_key = hand_key
+            self._ngu_clicked_once = True
+            self._ngu_selected_index = int(plan.opp_index)
+
+            if plan.kind == "sap_lang" and plan.combo is not None:
+                self._auto_play_log(
+                    f"Chọn OPP #{plan.opp_index + 1} | dùng Bẻ Sập Làng | score={plan.score}"
+                )
+                self._auto_apply_suggestions_random(plan.suggestions)
+            else:
+                ready_pids = list((plan.suggestions or {}).keys())
+                self._auto_play_log(
+                    f"Chọn OPP #{plan.opp_index + 1} | {'xếp riêng ' + ','.join(ready_pids) if plan.partial else 'xếp thường tối ưu'} | score={plan.score}"
+                )
+                opp = self._ngu_suggestions[plan.opp_index]
+                for pid in ready_pids:
+                    rendered = list(self._build_render_suggestions(list(self._suggestions.get(pid) or []), opp) or [])
+                    self._suggestions_render[pid] = rendered[:self.MAX_UI_P_ITEMS]
+                    self._selected_index[pid] = int(plan.selected_index.get(pid, 0))
+                self._render_ngu()
+                self._render_p_active()
+                self._auto_apply_suggestions_random(plan.suggestions)
+
+            if self._auto_should_decrement_round():
+                self._auto_play_remaining -= 1
+                if self._auto_play_remaining <= 0:
+                    self._auto_play_enabled = False
+                    self._auto_play_log("Auto Play hoàn tất số ván, đã tắt.")
+            self._sync_auto_play_sink_state()
+        except Exception as e:
+            self._auto_play_log(f"Lỗi Auto Play: {e}")
+            log.exception("[AUTO-PLAY] failed")
+
+    def _auto_random_delay_ms(self) -> int:
+        dmin = max(0, int(getattr(self, "_auto_play_delay_min_ms", 0) or 0))
+        dmax = max(dmin, int(getattr(self, "_auto_play_delay_max_ms", dmin) or dmin))
+        return random.randint(dmin, dmax) if dmax > dmin else dmin
+
+    def _auto_apply_suggestions_random(self, suggestions_by_pid: Dict[str, dict]) -> None:
+        """Apply Auto Play profile-by-profile with an independent random delay per P."""
+        from ui2.tabs.strategy2.strategy_suggest import apply_suggestion_dashboard_style
+
+        for pid in self.profiles:
+            sug = dict((suggestions_by_pid or {}).get(pid) or {})
+            ws_codes = list(self._codes_slot_order.get(pid) or [])
+            if len(ws_codes) != 13 or not sug:
+                continue
+
+            delay_ms = self._auto_random_delay_ms()
+            self._auto_play_log(f"{pid}: chờ random {delay_ms}ms rồi xếp.")
+            self._auto_play_applied_profile_keys.add(self._auto_profile_apply_key(pid))
+
+            def _apply_one(profile_id=pid, cards=list(ws_codes), suggestion=dict(sug)) -> None:
+                try:
+                    apply_suggestion_dashboard_style(
+                        tab=self,
+                        profile_id=profile_id,
+                        ws_codes=list(cards),
+                        suggestion=dict(suggestion),
+                    )
+                except Exception as e:
+                    self._auto_play_log(f"{profile_id}: lỗi xếp auto: {e}")
+                    log.exception("[AUTO-PLAY] apply profile failed pid=%s", profile_id)
+
+            QTimer.singleShot(delay_ms, _apply_one)
 
     def _get_selected_opp_suggestion(self) -> Optional[dict]:
         lst = list(self._ngu_suggestions or [])

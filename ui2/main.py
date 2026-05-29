@@ -54,6 +54,7 @@ from ui2.tabs.profiles_tab_v2 import ProfilesTabV2
 from ui2.tabs.config_tab import ConfigTab
 from ui2.tabs.capture_tab import CaptureTab
 from ui2.tabs.xao_vang_tab import XaoVangTab
+from ui2.tabs.auto_play_tab import AutoPlayTab
 from core.config import load_config
 from ui2.tabs.players_tab import PlayersTab
 from ui2.tabs.poker_tab import PokerTab
@@ -180,6 +181,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self._room_tab_is_floating: bool = False
         self._room_tab_float_window: Optional[QDialog] = None
         self._ws_test_window: Optional[QDialog] = None
+        self._auto_play_window: Optional[QDialog] = None
 
         self.browser_manager = None
         self.game_controller = None
@@ -190,6 +192,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self.auto_spam_tab = None
         self.telegram_tab = None
         self.xao_vang_tab = None
+        self.auto_play_tab = None
         self.ws_test_tab = None
         
         self.tab_widget: Optional[QTabWidget] = None
@@ -420,6 +423,9 @@ class MainWindow(QMainWindow, WebSocketGateway):
         if ENABLE_CAPTURE_TAB and self.capture_manager is not None:
             self.capture_tab = CaptureTab(self.browser_manager, self.capture_manager, self)
         self.xao_vang_tab = XaoVangTab(self)
+        self.auto_play_tab = AutoPlayTab(self)
+        self.auto_play_tab.auto_changed.connect(self._on_auto_play_changed)
+        self.strategy_tab.set_auto_play_log_sink(self.auto_play_tab)
         self.config_tab = ConfigTab(self)
         self.players_tab = PlayersTab(self)
         self.ws_test_tab = WSTestTab(self) if ENABLE_WS_TEST_TAB else None
@@ -448,6 +454,9 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
         tabs.addTab(self.strategy_room_splitter, "Chiến Thuật")
         tabs.addTab(self.xao_vang_tab, "Xào Vàng")
+        auto_play_placeholder = QWidget(self)
+        tabs.addTab(auto_play_placeholder, "Auto Play")
+        tabs.currentChanged.connect(self._on_main_tab_changed)
         # tabs.addTab(self.poker_tab, "Poker")
         # tabs.addTab(self.phom_tab, "Phỏm")
 
@@ -547,6 +556,61 @@ class MainWindow(QMainWindow, WebSocketGateway):
         dlg.show()
         dlg.raise_()
         dlg.activateWindow()
+
+    def _show_auto_play_window(self) -> None:
+        """Show Auto Play controls as a floating window, like the WS test tool."""
+        if self.auto_play_tab is None:
+            return
+        if self._auto_play_window is not None:
+            try:
+                self._auto_play_window.show()
+                self._auto_play_window.raise_()
+                self._auto_play_window.activateWindow()
+            except Exception:
+                pass
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Auto Play Mậu Binh")
+        dlg.setAttribute(Qt.WA_DeleteOnClose)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        dlg.setLayout(layout)
+        layout.addWidget(self.auto_play_tab)
+
+        dlg.resize(520, 420)
+        self._auto_play_window = dlg
+
+        def _on_closed(_result: int = 0, self_ref=self) -> None:
+            self_ref._auto_play_window = None
+
+        dlg.finished.connect(_on_closed)
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
+
+    def _on_main_tab_changed(self, index: int) -> None:
+        try:
+            if self.tab_widget is None:
+                return
+            if self.tab_widget.tabText(index) == "Auto Play":
+                self._show_auto_play_window()
+                strategy_idx = self.tab_widget.indexOf(self.strategy_room_splitter)
+                if strategy_idx >= 0:
+                    QTimer.singleShot(0, lambda: self.tab_widget.setCurrentIndex(strategy_idx))
+        except Exception:
+            log.exception("Auto Play tab switch failed")
+
+    def _on_auto_play_changed(self, enabled: bool, rounds: int, delay_min_ms: int = 2000, delay_max_ms: int = 5000) -> None:
+        try:
+            if self.strategy_tab is not None:
+                self.strategy_tab.set_auto_play(enabled, rounds, delay_min_ms, delay_max_ms)
+                state_enabled, remaining = self.strategy_tab.get_auto_play_state()
+                if self.auto_play_tab is not None:
+                    self.auto_play_tab.set_auto_state(state_enabled, remaining)
+        except Exception:
+            log.exception("Auto Play toggle failed")
 
     def _set_room_tab_floating(self, floating: bool) -> None:
         """
