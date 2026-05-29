@@ -252,7 +252,7 @@ class XaoVangTab(QWidget):
         return valid
 
     def _pick_default_bet(self, bets: List[str]) -> str:
-        for preferred in ("100000", "20000", "10000"):
+        for preferred in ("2000", "100000", "20000", "10000"):
             if preferred in bets:
                 return preferred
         return bets[0] if bets else ""

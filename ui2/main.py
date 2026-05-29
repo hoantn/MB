@@ -59,21 +59,25 @@ from ui2.tabs.players_tab import PlayersTab
 from ui2.tabs.poker_tab import PokerTab
 
 ENABLE_WS_TEST_TAB = True
+ENABLE_CAPTURE_TAB = False
 ENABLE_TAIXIU = True
 
 # Hard flags for keeping the tool light.
+# ENABLE_TAIXIU must stay on because Xao Vang uses live Tai/Xiu cmd=1008 as its auto trigger.
+# Legacy Tai/Xiu tabs/features are kept behind a separate hard flag so Xao Vang can run alone.
+ENABLE_TAIXIU_LEGACY_TOOLS = False
 # - Analysis tab polls taixiu_history.sqlite3 every 1.5s, so keep it off unless needed.
 # - History DB writes are not required for Xao Vang auto; Xao Vang only needs live cmd=1008.
 ENABLE_TAIXIU_ANALYSIS = False
 ENABLE_TAIXIU_HISTORY_DB = False
 
-if ENABLE_TAIXIU and ENABLE_TAIXIU_ANALYSIS:
+if ENABLE_TAIXIU and ENABLE_TAIXIU_LEGACY_TOOLS and ENABLE_TAIXIU_ANALYSIS:
     from ui2.tabs.taixiu_tab import TaiXiuTab
-if ENABLE_TAIXIU:
+if ENABLE_TAIXIU and ENABLE_TAIXIU_LEGACY_TOOLS:
     from ui2.tabs.taixiu_control_tab import TaiXiuControlTab
 if ENABLE_TAIXIU and ENABLE_TAIXIU_HISTORY_DB:
     from ui2.bridge.taixiu_store import tx_store
-if ENABLE_TAIXIU:
+if ENABLE_TAIXIU and ENABLE_TAIXIU_LEGACY_TOOLS:
     from ui2.tabs.auto_spam_tab import AutoSpamTab
     from ui2.tabs.telegram_tab import TelegramTab
     
@@ -377,7 +381,12 @@ class MainWindow(QMainWindow, WebSocketGateway):
             config=self.browser_manager.config,
         )
 
-        self.capture_manager = CaptureManager(self.browser_manager)
+        # Fix tọa độ is disabled by default. Do not initialize its manager/tab when off,
+        # because the old capture UI can still leave side effects on the top tab bar.
+        needs_capture_manager = ENABLE_CAPTURE_TAB or (
+            ENABLE_TAIXIU and ENABLE_TAIXIU_LEGACY_TOOLS
+        )
+        self.capture_manager = CaptureManager(self.browser_manager) if needs_capture_manager else None
 
         tabs = QTabWidget(self)
         tabs.setTabPosition(QTabWidget.North)
@@ -387,7 +396,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         
         # self.dashboard_tab = DashboardTab(self.browser_manager, self.capture_manager, self)
         self.room_tab = RoomControlTab(self.browser_manager, self)
-        if ENABLE_TAIXIU:
+        if ENABLE_TAIXIU and ENABLE_TAIXIU_LEGACY_TOOLS:
             if ENABLE_TAIXIU_ANALYSIS:
                 # TAB PHÂN TÍCH TÀI XỈU
                 # Disabled by default to avoid the 1.5s DB polling cost.
@@ -408,7 +417,8 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # self.phom_tab = PhomMainView(store=self.phom_store)
         self.strategy_tab = StrategyTabV2(self.browser_manager, self)
         self.profiles_tab_v2 = ProfilesTabV2(self.browser_manager, self)
-        self.capture_tab = CaptureTab(self.browser_manager, self.capture_manager, self)
+        if ENABLE_CAPTURE_TAB and self.capture_manager is not None:
+            self.capture_tab = CaptureTab(self.browser_manager, self.capture_manager, self)
         self.xao_vang_tab = XaoVangTab(self)
         self.config_tab = ConfigTab(self)
         self.players_tab = PlayersTab(self)
@@ -444,7 +454,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # Tách 2 tab riêng để:
         # - tab Phân Tích chỉ tập trung đọc dữ liệu
         # - tab Kiểm Thử chỉ tập trung thao tác
-        if ENABLE_TAIXIU:
+        if ENABLE_TAIXIU and ENABLE_TAIXIU_LEGACY_TOOLS:
             if ENABLE_TAIXIU_ANALYSIS and self.taixiu_tab is not None:
                 tabs.addTab(self.taixiu_tab, "Tài Xỉu Phân Tích")
             tabs.addTab(self.taixiu_control_tab, "Tài Xỉu Kiểm Thử")
@@ -455,7 +465,8 @@ class MainWindow(QMainWindow, WebSocketGateway):
         tabs.addTab(self.profiles_tab_v2, "Trình duyệt v2")
         # tabs.addTab(self.dashboard_tab, "Dashboard")
         tabs.addTab(self.config_tab, "Cấu hình")
-        tabs.addTab(self.capture_tab, "Fix tọa độ")
+        if ENABLE_CAPTURE_TAB and self.capture_tab is not None:
+            tabs.addTab(self.capture_tab, "Fix tọa độ")
         tabs.addTab(self.players_tab, "Người chơi")
         # tabs.addTab(self.ws_sim_tab, "Test Bài")
         
@@ -478,8 +489,8 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self.room_engine.sig_player_joined.connect(self._on_player_joined_toast)
         self.room_engine.sig_player_left.connect(self._on_player_left_toast)
 
-        # Signal đặt cược chỉ lấy từ tab Kiểm Thử
-        if ENABLE_TAIXIU:
+        # Legacy Tai/Xiu manual tab is optional; Xao Vang keeps using the same game-controller entrypoint.
+        if ENABLE_TAIXIU and ENABLE_TAIXIU_LEGACY_TOOLS and self.taixiu_control_tab is not None:
             self.taixiu_control_tab.request_play_tai_xiu.connect(self._on_request_play_tai_xiu)
         if self.xao_vang_tab is not None:
             self.xao_vang_tab.request_play_tai_xiu.connect(self._on_request_play_tai_xiu)
@@ -724,7 +735,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
                 pass
             
     def _on_request_send_auto_spam_test(self, profile_id: str, message: str) -> None:
-        if not ENABLE_TAIXIU:
+        if not ENABLE_TAIXIU or not ENABLE_TAIXIU_LEGACY_TOOLS:
             return
         if self.game_controller is None:
             if self.auto_spam_tab is not None:
@@ -748,7 +759,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         result_side: str,
         total: int,
     ) -> None:
-        if not ENABLE_TAIXIU:
+        if not ENABLE_TAIXIU or not ENABLE_TAIXIU_LEGACY_TOOLS:
             return
         if self.game_controller is None:
             return
@@ -799,6 +810,8 @@ class MainWindow(QMainWindow, WebSocketGateway):
         result_side: str,
         total: int,
     ) -> None:
+        if not ENABLE_TAIXIU_LEGACY_TOOLS:
+            return
         if self.telegram_tab is None:
             return
 
