@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.config import load_config
+from core.logger import log
 
 
 MAX_CHIP_CLICKS_PER_PROFILE = 6
@@ -37,6 +38,10 @@ class XaoVangTab(QWidget):
         self._chip_values: List[int] = []
         self._valid_bets: List[str] = []
         self._global_busy = False
+        self._auto_enabled = False
+        self._auto_remaining = 0
+        self._auto_index = 0
+        self._auto_seen_sids: set[str] = set()
         self._logs: Deque[str] = deque(maxlen=80)
         self._profile_buttons: Dict[str, QPushButton] = {}
         self._side_buttons: Dict[str, QPushButton] = {}
@@ -144,6 +149,25 @@ class XaoVangTab(QWidget):
         footer.addWidget(self.lbl_balance, 1)
         footer.addWidget(self.btn_execute)
         panel_lay.addLayout(footer)
+
+        auto_row = QHBoxLayout()
+        auto_row.setSpacing(8)
+        self.btn_auto_toggle = QPushButton("AUTO XÀO: TẮT")
+        self.btn_auto_toggle.setCheckable(True)
+        self.btn_auto_toggle.setObjectName("xv_auto_toggle")
+        self.btn_auto_toggle.clicked.connect(self._toggle_auto)
+        auto_count_label = QLabel("Số phiên")
+        auto_count_label.setObjectName("xv_small_label")
+        self.spn_auto_rounds = QSpinBox()
+        self.spn_auto_rounds.setRange(1, 999)
+        self.spn_auto_rounds.setValue(10)
+        self.lbl_auto_status = QLabel("Auto: tắt")
+        self.lbl_auto_status.setObjectName("xv_auto_status")
+        auto_row.addWidget(self.btn_auto_toggle)
+        auto_row.addWidget(auto_count_label)
+        auto_row.addWidget(self.spn_auto_rounds)
+        auto_row.addWidget(self.lbl_auto_status, 1)
+        panel_lay.addLayout(auto_row)
 
         self.lbl_status = QLabel("Status: Sẵn sàng")
         panel_lay.addWidget(self.lbl_status)
@@ -315,9 +339,10 @@ class XaoVangTab(QWidget):
         search(0, amount, [])
         return best_plan
 
-    def _current_plan(self) -> Dict[str, Dict[str, object]]:
+    def _current_plan(self, main_profile: Optional[str] = None) -> Dict[str, Dict[str, object]]:
         if not self._selected_bet:
             return {}
+        selected_profile = main_profile or self._selected_profile
         main_bet = self._parse_int(self._selected_bet)
         counter_bet = main_bet // 2
         main_chips = self._decompose_amount(main_bet)
@@ -328,7 +353,7 @@ class XaoVangTab(QWidget):
         opposite = self._opposite_side(self._selected_side)
         plan: Dict[str, Dict[str, object]] = {}
         for profile_id in self._profiles:
-            if profile_id == self._selected_profile:
+            if profile_id == selected_profile:
                 plan[profile_id] = {"side": self._selected_side, "bet": str(main_bet), "chips": main_chips}
             else:
                 plan[profile_id] = {"side": opposite, "bet": str(counter_bet), "chips": counter_chips}
@@ -368,17 +393,21 @@ class XaoVangTab(QWidget):
         self.lbl_status.setText("Status: Sẵn sàng")
 
     def _emit_xao_vang(self) -> bool:
+        return self._emit_plan_for_profile(self._selected_profile, source="manual")
+
+    def _emit_plan_for_profile(self, main_profile: str, source: str, sid: str = "") -> bool:
         if self._global_busy:
             return False
-        plan = self._current_plan()
+        plan = self._current_plan(main_profile)
         delay_ms = int(self.spn_manual_delay.value())
         if not plan:
             self.lbl_status.setText("Status: Chưa có gói chip hợp lệ")
             return False
 
         self._set_global_busy(True)
-        main_text = f"{self._selected_profile} {self._side_text(self._selected_side)} {self._format_money(self._selected_bet)}"
-        self._append_log(f"Xào Vàng | {main_text} | delay={delay_ms}")
+        main_text = f"{main_profile} {self._side_text(self._selected_side)} {self._format_money(self._selected_bet)}"
+        sid_text = f" | sid={sid}" if sid else ""
+        self._append_log(f"Xào Vàng {source} | {main_text} | delay={delay_ms}{sid_text}")
         max_clicks = 0
         for index, profile_id in enumerate(self._profiles):
             item = plan[profile_id]
@@ -398,6 +427,76 @@ class XaoVangTab(QWidget):
             )
         release_ms = len(self._profiles) * 150 + max(2000, (max_clicks + 2) * max(delay_ms, 50))
         QTimer.singleShot(release_ms, self._release_busy)
+        return True
+
+    def _toggle_auto(self) -> None:
+        if self.btn_auto_toggle.isChecked():
+            self._auto_enabled = True
+            self._auto_remaining = int(self.spn_auto_rounds.value())
+            self._auto_index = 0
+            self._auto_seen_sids.clear()
+            self.btn_auto_toggle.setText("AUTO XÀO: BẬT")
+            self.lbl_auto_status.setText(f"Auto: bật | còn {self._auto_remaining} phiên | chờ socket")
+            self._append_log(f"Auto bật | số phiên={self._auto_remaining}")
+            log.info(
+                "XaoVang auto enabled | rounds=%s side=%s bet=%s",
+                self._auto_remaining,
+                self._selected_side,
+                self._selected_bet,
+            )
+        else:
+            self._disable_auto("người dùng tắt")
+
+    def _disable_auto(self, reason: str) -> None:
+        self._auto_enabled = False
+        self._auto_remaining = 0
+        self.btn_auto_toggle.setChecked(False)
+        self.btn_auto_toggle.setText("AUTO XÀO: TẮT")
+        self.lbl_auto_status.setText(f"Auto: tắt | {reason}")
+        self._append_log(f"Auto tắt | {reason}")
+        log.info("XaoVang auto disabled | reason=%s", reason)
+
+    def trigger_auto_for_sid(self, sid: str) -> bool:
+        sid_str = str(sid or "").strip()
+        if not self._auto_enabled or self._auto_remaining <= 0:
+            log.debug(
+                "XaoVang auto skip | sid=%s enabled=%s remaining=%s",
+                sid_str,
+                self._auto_enabled,
+                self._auto_remaining,
+            )
+            return False
+        if not sid_str or sid_str in self._auto_seen_sids:
+            log.debug("XaoVang auto skip duplicate/empty sid | sid=%s", sid_str)
+            return False
+        if self._global_busy:
+            self.lbl_auto_status.setText(f"Auto: bận, bỏ qua sid {sid_str}")
+            self._append_log(f"Auto bỏ qua sid={sid_str} vì đang bận")
+            log.info("XaoVang auto skip busy | sid=%s", sid_str)
+            return False
+
+        main_profile = self._profiles[self._auto_index % len(self._profiles)]
+        ok = self._emit_plan_for_profile(main_profile, source="auto", sid=sid_str)
+        if not ok:
+            log.info("XaoVang auto fire failed | sid=%s main=%s", sid_str, main_profile)
+            return False
+
+        log.info(
+            "XaoVang auto fired | sid=%s main=%s remaining_before=%s",
+            sid_str,
+            main_profile,
+            self._auto_remaining,
+        )
+        self._auto_seen_sids.add(sid_str)
+        self._auto_index += 1
+        self._auto_remaining -= 1
+        if self._auto_remaining <= 0:
+            self._disable_auto(f"đã đủ phiên, sid cuối {sid_str}")
+        else:
+            next_profile = self._profiles[self._auto_index % len(self._profiles)]
+            self.lbl_auto_status.setText(
+                f"Auto: đã xào {main_profile} | còn {self._auto_remaining} phiên | tiếp {next_profile}"
+            )
         return True
 
     def _release_busy(self) -> None:
@@ -482,6 +581,14 @@ class XaoVangTab(QWidget):
             QPushButton#xv_execute:disabled {
                 background:#50472F; border-color:#5B5137; color:#9A8E72;
             }
+            QPushButton#xv_auto_toggle {
+                background:#17202B; border-color:#3A4B61; color:#DCEBFA;
+                min-width:130px;
+            }
+            QPushButton#xv_auto_toggle:checked {
+                background:#17543A; border-color:#2BC56D; color:#BDF8D0;
+            }
+            QLabel#xv_auto_status { color:#BDD6EF; font-weight:800; }
             QFrame#xv_summary {
                 background:#10151C; border:1px solid #303846; border-radius:8px;
             }

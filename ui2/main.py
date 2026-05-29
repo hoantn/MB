@@ -1087,7 +1087,12 @@ class MainWindow(QMainWindow, WebSocketGateway):
                 if not isinstance(payload, dict):
                     return
 
+                direction = str(evt.get("direction") or "").strip().lower()
                 cmd = payload.get("cmd") or payload.get("CMD")
+                try:
+                    cmd = int(cmd)
+                except Exception:
+                    pass
                 sid = payload.get("sid")
                 sid_str = str(sid) if sid is not None else None
 
@@ -1188,6 +1193,37 @@ class MainWindow(QMainWindow, WebSocketGateway):
                             "raw_last_json": None,
                         },
                     )
+
+                    try:
+                        # Auto Xao Vang chi dung frame server recv co du lieu snapshot that.
+                        # Khong dung frame send/request hoac 1008 thieu rmT/gi de tranh ban sai thoi diem.
+                        has_round_snapshot = (
+                            direction == "recv"
+                            and (
+                                payload.get("rmT") is not None
+                                or bool(payload.get("gi"))
+                            )
+                        )
+                        if self.xao_vang_tab is not None and has_round_snapshot:
+                            fired = self.xao_vang_tab.trigger_auto_for_sid(sid_str)
+                            if fired:
+                                log.info(
+                                    "Auto Xao Vang triggered from cmd=1008 | sid=%s profile=%s rmT=%s gS=%s",
+                                    sid_str,
+                                    profile_id,
+                                    payload.get("rmT"),
+                                    payload.get("gS"),
+                                )
+                        elif self.xao_vang_tab is not None:
+                            log.debug(
+                                "Auto Xao Vang skip non-snapshot 1008 | sid=%s direction=%s rmT=%s gi=%s",
+                                sid_str,
+                                direction,
+                                payload.get("rmT"),
+                                bool(payload.get("gi")),
+                            )
+                    except Exception:
+                        log.exception("Auto Xao Vang trigger failed | sid=%s", sid_str)
                     return
 
                 # --------------------------------------------------
