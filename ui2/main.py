@@ -60,10 +60,20 @@ from ui2.tabs.poker_tab import PokerTab
 
 ENABLE_WS_TEST_TAB = True
 ENABLE_TAIXIU = True
-if ENABLE_TAIXIU:
+
+# Hard flags for keeping the tool light.
+# - Analysis tab polls taixiu_history.sqlite3 every 1.5s, so keep it off unless needed.
+# - History DB writes are not required for Xao Vang auto; Xao Vang only needs live cmd=1008.
+ENABLE_TAIXIU_ANALYSIS = False
+ENABLE_TAIXIU_HISTORY_DB = False
+
+if ENABLE_TAIXIU and ENABLE_TAIXIU_ANALYSIS:
     from ui2.tabs.taixiu_tab import TaiXiuTab
+if ENABLE_TAIXIU:
     from ui2.tabs.taixiu_control_tab import TaiXiuControlTab
+if ENABLE_TAIXIU and ENABLE_TAIXIU_HISTORY_DB:
     from ui2.bridge.taixiu_store import tx_store
+if ENABLE_TAIXIU:
     from ui2.tabs.auto_spam_tab import AutoSpamTab
     from ui2.tabs.telegram_tab import TelegramTab
     
@@ -378,10 +388,10 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # self.dashboard_tab = DashboardTab(self.browser_manager, self.capture_manager, self)
         self.room_tab = RoomControlTab(self.browser_manager, self)
         if ENABLE_TAIXIU:
-            # TAB PHÂN TÍCH TÀI XỈU
-            # - chỉ đọc dữ liệu DB
-            # - hiển thị cầu / lịch sử / money flow / profile result
-            self.taixiu_tab = TaiXiuTab(self)
+            if ENABLE_TAIXIU_ANALYSIS:
+                # TAB PHÂN TÍCH TÀI XỈU
+                # Disabled by default to avoid the 1.5s DB polling cost.
+                self.taixiu_tab = TaiXiuTab(self)
 
             # TAB KIỂM THỬ / THAO TÁC TÀI XỈU
             # - chứa control đặt cược theo profile
@@ -435,7 +445,8 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # - tab Phân Tích chỉ tập trung đọc dữ liệu
         # - tab Kiểm Thử chỉ tập trung thao tác
         if ENABLE_TAIXIU:
-            tabs.addTab(self.taixiu_tab, "Tài Xỉu Phân Tích")
+            if ENABLE_TAIXIU_ANALYSIS and self.taixiu_tab is not None:
+                tabs.addTab(self.taixiu_tab, "Tài Xỉu Phân Tích")
             tabs.addTab(self.taixiu_control_tab, "Tài Xỉu Kiểm Thử")
             tabs.addTab(self.auto_spam_tab, "Auto Spam")
             tabs.addTab(self.telegram_tab, "Đọc Lệnh TG")
@@ -1132,15 +1143,16 @@ class MainWindow(QMainWindow, WebSocketGateway):
                     elif eid_raw in ("0", "2"):
                         bet_side = "xiu"
 
-                    tx_store.save_user_bet(
-                        game_type=game_type,
-                        sid=effective_sid,
-                        profile_id=profile_id,
-                        bet_side=bet_side,
-                        bet_amount=amount,
-                        eid_raw=eid_raw,
-                        source_cmd=cmd,
-                    )
+                    if ENABLE_TAIXIU_HISTORY_DB:
+                        tx_store.save_user_bet(
+                            game_type=game_type,
+                            sid=effective_sid,
+                            profile_id=profile_id,
+                            bet_side=bet_side,
+                            bet_amount=amount,
+                            eid_raw=eid_raw,
+                            source_cmd=cmd,
+                        )
                     return
 
                 # --------------------------------------------------
@@ -1177,22 +1189,23 @@ class MainWindow(QMainWindow, WebSocketGateway):
                             xiu_total_users = int(s_side.get("tU") or 0)
                             xiu_total_bet = int(s_side.get("tB") or 0)
 
-                    tx_store.upsert_round(
-                        game_type=game_type,
-                        sid=sid_str,
-                        updates={
-                            "profile_id_first_seen": profile_id,
-                            "profile_id_last_seen": profile_id,
-                            "game_state": payload.get("gS"),
-                            "remain_time_ms": payload.get("rmT"),
-                            "tai_total_bet": tai_total_bet,
-                            "xiu_total_bet": xiu_total_bet,
-                            "tai_total_users": tai_total_users,
-                            "xiu_total_users": xiu_total_users,
-                            "totals_cmd": cmd,
-                            "raw_last_json": None,
-                        },
-                    )
+                    if ENABLE_TAIXIU_HISTORY_DB:
+                        tx_store.upsert_round(
+                            game_type=game_type,
+                            sid=sid_str,
+                            updates={
+                                "profile_id_first_seen": profile_id,
+                                "profile_id_last_seen": profile_id,
+                                "game_state": payload.get("gS"),
+                                "remain_time_ms": payload.get("rmT"),
+                                "tai_total_bet": tai_total_bet,
+                                "xiu_total_bet": xiu_total_bet,
+                                "tai_total_users": tai_total_users,
+                                "xiu_total_users": xiu_total_users,
+                                "totals_cmd": cmd,
+                                "raw_last_json": None,
+                            },
+                        )
 
                     try:
                         # Auto Xao Vang chi dung frame server recv co du lieu snapshot that.
@@ -1280,57 +1293,54 @@ class MainWindow(QMainWindow, WebSocketGateway):
                             updates["xiu_total_users"] = int(s_side.get("tU") or 0)
                             updates["xiu_total_bet"] = int(s_side.get("tB") or 0)
 
-                    # Lưu kết quả phiên
-                    tx_store.upsert_round(
-                        game_type=game_type,
-                        sid=effective_sid,
-                        updates=updates,
-                    )
+                    if ENABLE_TAIXIU_HISTORY_DB:
+                        # History DB is disabled by default; keep this block intact for future analysis mode.
+                        tx_store.upsert_round(
+                            game_type=game_type,
+                            sid=effective_sid,
+                            updates=updates,
+                        )
 
-                    # Chốt thắng/thua cho toàn bộ cược cùng sid
-                    tx_store.settle_user_bets(
-                        game_type=game_type,
-                        sid=effective_sid,
-                        result_side=result_side,
-                    )
-                    # --------------------------------------------------
-                    # AUTO KIỂM THỬ:
-                    # Sau khi phiên vừa có kết quả final,
-                    # đợi 20 giây rồi mới kích hoạt auto cho phiên kế tiếp.
-                    # --------------------------------------------------
-                    try:
-                        final_sid_str = str(effective_sid or "").strip()
-                        if (
-                            final_sid_str
-                            and self.taixiu_control_tab is not None
-                            and final_sid_str not in self._tx_auto_scheduled_sids
-                        ):
-                            self._tx_auto_scheduled_sids.add(final_sid_str)
+                        tx_store.settle_user_bets(
+                            game_type=game_type,
+                            sid=effective_sid,
+                            result_side=result_side,
+                        )
 
-                            def _fire_auto_from_final(sid_to_use=final_sid_str, gt=game_type):
-                                try:
-                                    if self.taixiu_control_tab is None:
-                                        return
-
-                                    final_rows = tx_store.get_recent_final_rounds(
-                                        game_type=gt,
-                                        limit=200
-                                    )
-
-                                    self.taixiu_control_tab.on_auto_final_ready(
-                                        sid_to_use,
-                                        final_rows or []
-                                    )
-                                except Exception:
-                                    log.exception("Auto control delayed fire failed")
-
-                            QTimer.singleShot(20000, _fire_auto_from_final)
-                            log.info(
-                                "Auto control scheduled after final result | sid=%s | delay=20000ms",
+                        # AUTO KIỂM THỬ depends on recent final rows from DB, so it is tied to history mode.
+                        try:
+                            final_sid_str = str(effective_sid or "").strip()
+                            if (
                                 final_sid_str
-                            )
-                    except Exception:
-                        log.exception("Auto control schedule after final failed")
+                                and self.taixiu_control_tab is not None
+                                and final_sid_str not in self._tx_auto_scheduled_sids
+                            ):
+                                self._tx_auto_scheduled_sids.add(final_sid_str)
+
+                                def _fire_auto_from_final(sid_to_use=final_sid_str, gt=game_type):
+                                    try:
+                                        if self.taixiu_control_tab is None:
+                                            return
+
+                                        final_rows = tx_store.get_recent_final_rounds(
+                                            game_type=gt,
+                                            limit=200
+                                        )
+
+                                        self.taixiu_control_tab.on_auto_final_ready(
+                                            sid_to_use,
+                                            final_rows or []
+                                        )
+                                    except Exception:
+                                        log.exception("Auto control delayed fire failed")
+
+                                QTimer.singleShot(20000, _fire_auto_from_final)
+                                log.info(
+                                    "Auto control scheduled after final result | sid=%s | delay=20000ms",
+                                    final_sid_str
+                                )
+                        except Exception:
+                            log.exception("Auto control schedule after final failed")
 
                     try:
                         self._trigger_taixiu_auto_spam(
