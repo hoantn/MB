@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Xao Vang UI Concepts</title>
+  <style>
+    :root {
+      --bg: #0e1116;
+      --panel: #171c23;
+      --panel2: #202733;
+      --line: #303846;
+      --text: #edf2f7;
+      --muted: #9aa6b2;
+      --tai: #16a34a;
+      --xiu: #dc2626;
+      --gold: #f2b84b;
+      --blue: #3b82f6;
+      --violet: #8b5cf6;
+      --cyan: #06b6d4;
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #0b0d11;
+      color: var(--text);
+      font-family: Inter, Segoe UI, Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    .page {
+      max-width: 1480px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .titlebar {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      gap: 16px;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 26px; }
+    .sub { color: var(--muted); font-size: 14px; margin-top: 6px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .concept {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      min-height: 355px;
+    }
+
+    .concept-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,.025);
+    }
+
+    .concept-head h2 { font-size: 15px; }
+    .tag { color: var(--muted); font-size: 12px; }
+    .body { padding: 16px; }
+
+    .btn, .pill, .amount, .profile, .side {
+      border: 1px solid var(--line);
+      background: #11161d;
+      color: var(--text);
+      border-radius: 7px;
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 14px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .profile.on { background: #21324d; border-color: #4b7cc7; }
+    .side.tai.on { background: rgba(22,163,74,.22); border-color: var(--tai); color: #8ff0b0; }
+    .side.xiu.on { background: rgba(220,38,38,.20); border-color: var(--xiu); color: #ffaaa5; }
+    .amount.on { background: rgba(242,184,75,.16); border-color: var(--gold); color: #ffd989; }
+    .primary { background: #f2b84b; color: #15110a; border-color: #f2b84b; }
+    .blue { background: #2563eb; border-color: #2563eb; }
+    .ghost { background: transparent; }
+
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .label { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
+    .section { margin-bottom: 14px; }
+    .summary {
+      border: 1px solid var(--line);
+      background: #10151c;
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .summary-row {
+      display: grid;
+      grid-template-columns: 54px 1fr 1fr;
+      align-items: center;
+      gap: 8px;
+      min-height: 42px;
+      padding: 0 12px;
+      border-top: 1px solid rgba(255,255,255,.06);
+    }
+    .summary-row:first-child { border-top: 0; }
+    .money { color: #ffd16b; font-weight: 900; }
+    .tai-text { color: #75e59a; font-weight: 900; }
+    .xiu-text { color: #ff928d; font-weight: 900; }
+    .muted { color: var(--muted); }
+
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .big-number {
+      font-size: 42px;
+      font-weight: 950;
+      color: #ffd16b;
+      line-height: 1;
+    }
+    .tile {
+      border: 1px solid var(--line);
+      background: #10151c;
+      border-radius: var(--radius);
+      padding: 12px;
+    }
+    .footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; }
+
+    /* 1 */
+    .c1 .control-band { display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 12px; }
+
+    /* 2 */
+    .c2 .hero {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      gap: 16px;
+      align-items: stretch;
+    }
+    .c2 .side-stack { display: grid; gap: 8px; }
+    .c2 .side { height: 58px; font-size: 18px; }
+
+    /* 3 */
+    .c3 .matrix {
+      display: grid;
+      grid-template-columns: 120px repeat(3, 1fr);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .c3 .cell {
+      min-height: 48px;
+      padding: 10px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: #10151c;
+    }
+    .c3 .cell:nth-child(4n) { border-right: 0; }
+    .c3 .cell.head { background: #202733; font-weight: 900; color: #cdd7e3; }
+
+    /* 4 */
+    .c4 .wizard { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .step {
+      border: 1px solid var(--line);
+      background: #10151c;
+      border-radius: var(--radius);
+      padding: 12px;
+      min-height: 120px;
+    }
+    .step-num { color: var(--gold); font-weight: 900; margin-bottom: 8px; }
+
+    /* 5 */
+    .c5 .ticket {
+      background: #f6f0df;
+      color: #18130a;
+      border-radius: var(--radius);
+      padding: 16px;
+      border: 1px solid #d7c99e;
+    }
+    .c5 .ticket .muted { color: #6d634a; }
+    .c5 .ticket .profile, .c5 .ticket .amount, .c5 .ticket .side {
+      background: #fffaf0;
+      color: #17120b;
+      border-color: #d8c89a;
+    }
+    .c5 .ticket .side.tai.on { background: #dff6e7; color: #0d6b33; }
+    .c5 .ticket .side.xiu.on { background: #ffe1de; color: #9d1d1a; }
+
+    /* 6 */
+    .c6 .rail {
+      display: grid;
+      grid-template-columns: 84px 1fr;
+      gap: 12px;
+    }
+    .vertical { display: grid; gap: 8px; align-content: start; }
+    .vertical .profile { height: 54px; }
+
+    /* 7 */
+    .c7 .dashboard {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+    .metric {
+      background: #10151c;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+    }
+    .metric strong { display: block; font-size: 22px; margin-top: 4px; }
+
+    /* 8 */
+    .c8 .compact {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr;
+      gap: 14px;
+    }
+    .c8 .amount-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+
+    /* 9 */
+    .c9 .command {
+      background: #0b1220;
+      border: 1px solid #1d4ed8;
+      border-radius: var(--radius);
+      padding: 14px;
+    }
+    .c9 .commandline {
+      display: flex;
+      align-items: center;
+      min-height: 54px;
+      font-size: 20px;
+      font-weight: 900;
+      color: #dbeafe;
+      border-bottom: 1px solid rgba(255,255,255,.1);
+      margin-bottom: 12px;
+    }
+
+    /* 10 */
+    .c10 .operator {
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 14px;
+    }
+    .c10 .profile-card {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      min-height: 58px;
+      border: 1px solid var(--line);
+      background: #10151c;
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+      .c1 .control-band, .c2 .hero, .split, .c8 .compact, .c10 .operator { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="titlebar">
+      <div>
+        <h1>10 mẫu UI Xào Vàng</h1>
+        <p class="sub">Mục tiêu: chọn 1P chính, cửa chính, tổng vàng. Hai P còn lại tự đánh cửa đối diện với 1/2 tiền.</p>
+      </div>
+      <span class="tag">Demo tĩnh - không nối logic</span>
+    </div>
+
+    <div class="grid">
+      <section class="concept c1">
+        <div class="concept-head"><h2>1. Bảng Điều Khiển Nhanh</h2><span class="tag">rõ, dễ bấm</span></div>
+        <div class="body">
+          <div class="control-band">
+            <div class="section"><div class="label">P chính</div><div class="row"><span class="profile on">P1</span><span class="profile">P2</span><span class="profile">P3</span></div></div>
+            <div class="section"><div class="label">Cửa P chính</div><div class="row"><span class="side tai on">TÀI</span><span class="side xiu">XỈU</span></div></div>
+            <div class="section"><div class="label">Vàng cần xào</div><div class="row"><span class="amount">10K</span><span class="amount on">20K</span><span class="amount">50K</span><span class="amount">100K</span></div></div>
+          </div>
+          <div class="summary">
+            <div class="summary-row"><b>P1</b><span class="tai-text">TÀI</span><span class="money">20.000</span></div>
+            <div class="summary-row"><b>P2</b><span class="xiu-text">XỈU</span><span class="money">10.000</span></div>
+            <div class="summary-row"><b>P3</b><span class="xiu-text">XỈU</span><span class="money">10.000</span></div>
+          </div>
+          <div class="footer"><span class="muted">Tài 20K / Xỉu 20K - cân cửa</span><span class="btn primary">ĐÁNH XÀO VÀNG</span></div>
+        </div>
+      </section>
+
+      <section class="concept c2">
+        <div class="concept-head"><h2>2. Chọn Cửa Lớn</h2><span class="tag">ưu tiên thao tác nhanh</span></div>
+        <div class="body">
+          <div class="hero">
+            <div class="side-stack"><span class="side tai on">TÀI</span><span class="side xiu">XỈU</span></div>
+            <div>
+              <div class="section"><div class="label">P chính</div><div class="row"><span class="profile">P1</span><span class="profile on">P2</span><span class="profile">P3</span></div></div>
+              <div class="section"><div class="label">Số vàng</div><div class="row"><span class="amount">20K</span><span class="amount on">50K</span><span class="amount">100K</span><span class="amount">500K</span></div></div>
+            </div>
+          </div>
+          <div class="split">
+            <div class="tile"><div class="muted">P chính</div><h3>P2 đặt <span class="tai-text">TÀI</span></h3><div class="big-number">50K</div></div>
+            <div class="tile"><div class="muted">P còn lại</div><h3>P1 + P3 đặt <span class="xiu-text">XỈU</span></h3><div class="big-number">25K</div></div>
+          </div>
+          <div class="footer"><span class="btn ghost">RESET</span><span class="btn primary">BẮT ĐẦU</span></div>
+        </div>
+      </section>
+
+      <section class="concept c3">
+        <div class="concept-head"><h2>3. Ma Trận Lệnh</h2><span class="tag">nhìn như bảng thao tác</span></div>
+        <div class="body">
+          <div class="section"><div class="row"><span class="profile">P1</span><span class="profile">P2</span><span class="profile on">P3</span><span class="side xiu on">XỈU</span><span class="amount on">200K</span></div></div>
+          <div class="matrix">
+            <div class="cell head">Profile</div><div class="cell head">Cửa</div><div class="cell head">Vàng</div><div class="cell head">Vai trò</div>
+            <div class="cell">P1</div><div class="cell tai-text">TÀI</div><div class="cell money">100K</div><div class="cell">Đối ứng</div>
+            <div class="cell">P2</div><div class="cell tai-text">TÀI</div><div class="cell money">100K</div><div class="cell">Đối ứng</div>
+            <div class="cell">P3</div><div class="cell xiu-text">XỈU</div><div class="cell money">200K</div><div class="cell">P chính</div>
+          </div>
+          <div class="footer"><span class="muted">Chênh lệch 0</span><span class="btn primary">ĐÁNH 3P</span></div>
+        </div>
+      </section>
+
+      <section class="concept c4">
+        <div class="concept-head"><h2>4. Wizard 3 Bước</h2><span class="tag">ít nhầm khi thao tác</span></div>
+        <div class="body">
+          <div class="wizard">
+            <div class="step"><div class="step-num">1. P chính</div><div class="row"><span class="profile on">P1</span><span class="profile">P2</span><span class="profile">P3</span></div></div>
+            <div class="step"><div class="step-num">2. Cửa</div><div class="row"><span class="side tai">TÀI</span><span class="side xiu on">XỈU</span></div></div>
+            <div class="step"><div class="step-num">3. Vàng</div><div class="row"><span class="amount on">20K</span><span class="amount">50K</span><span class="amount">100K</span></div></div>
+          </div>
+          <div class="summary">
+            <div class="summary-row"><b>P1</b><span class="xiu-text">XỈU</span><span class="money">20.000</span></div>
+            <div class="summary-row"><b>P2</b><span class="tai-text">TÀI</span><span class="money">10.000</span></div>
+            <div class="summary-row"><b>P3</b><span class="tai-text">TÀI</span><span class="money">10.000</span></div>
+          </div>
+          <div class="footer"><span class="muted">Xác nhận trước khi đánh</span><span class="btn primary">XÁC NHẬN ĐÁNH</span></div>
+        </div>
+      </section>
+
+      <section class="concept c5">
+        <div class="concept-head"><h2>5. Phiếu Xào Vàng</h2><span class="tag">sáng, nổi vàng</span></div>
+        <div class="body">
+          <div class="ticket">
+            <div class="section"><div class="label">Cấu hình phiếu</div><div class="row"><span class="profile on">P1</span><span class="profile">P2</span><span class="profile">P3</span><span class="side tai on">TÀI</span><span class="amount on">100K</span></div></div>
+            <div class="split">
+              <div><p class="muted">P chính nhận</p><h2>P1 / TÀI / 100K</h2></div>
+              <div><p class="muted">Tự đối ứng</p><h2>P2 + P3 / XỈU / 50K</h2></div>
+            </div>
+            <div class="footer"><span class="muted">Cân cửa tuyệt đối</span><span class="btn primary">ĐÁNH</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="concept c6">
+        <div class="concept-head"><h2>6. Rail Profile Bên Trái</h2><span class="tag">dễ đổi P chính</span></div>
+        <div class="body">
+          <div class="rail">
+            <div class="vertical"><span class="profile">P1</span><span class="profile on">P2</span><span class="profile">P3</span></div>
+            <div>
+              <div class="section"><div class="label">P2 là P chính</div><div class="row"><span class="side tai on">TÀI</span><span class="side xiu">XỈU</span></div></div>
+              <div class="section"><div class="label">Vàng</div><div class="row"><span class="amount">10K</span><span class="amount">20K</span><span class="amount on">50K</span><span class="amount">100K</span></div></div>
+              <div class="summary"><div class="summary-row"><b>P2</b><span class="tai-text">TÀI</span><span class="money">50K</span></div><div class="summary-row"><b>P1</b><span class="xiu-text">XỈU</span><span class="money">25K</span></div><div class="summary-row"><b>P3</b><span class="xiu-text">XỈU</span><span class="money">25K</span></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="concept c7">
+        <div class="concept-head"><h2>7. Dashboard Cân Cửa</h2><span class="tag">tập trung vào tổng</span></div>
+        <div class="body">
+          <div class="dashboard">
+            <div class="metric"><span class="muted">Tổng Tài</span><strong class="tai-text">20K</strong></div>
+            <div class="metric"><span class="muted">Tổng Xỉu</span><strong class="xiu-text">20K</strong></div>
+            <div class="metric"><span class="muted">Lệch</span><strong class="money">0</strong></div>
+          </div>
+          <div class="section"><div class="label">Thiết lập</div><div class="row"><span class="profile on">P1</span><span class="profile">P2</span><span class="profile">P3</span><span class="side tai on">TÀI</span><span class="amount on">20K</span></div></div>
+          <div class="summary"><div class="summary-row"><b>P1</b><span class="tai-text">TÀI</span><span class="money">20K</span></div><div class="summary-row"><b>P2</b><span class="xiu-text">XỈU</span><span class="money">10K</span></div><div class="summary-row"><b>P3</b><span class="xiu-text">XỈU</span><span class="money">10K</span></div></div>
+          <div class="footer"><span class="muted">Trạng thái: Cân cửa</span><span class="btn primary">ĐÁNH NGAY</span></div>
+        </div>
+      </section>
+
+      <section class="concept c8">
+        <div class="concept-head"><h2>8. Compact Operator</h2><span class="tag">gọn cho màn hình nhỏ</span></div>
+        <div class="body">
+          <div class="compact">
+            <div>
+              <div class="section"><div class="label">P chính</div><div class="row"><span class="profile">P1</span><span class="profile">P2</span><span class="profile on">P3</span></div></div>
+              <div class="section"><div class="label">Cửa</div><div class="row"><span class="side tai">TÀI</span><span class="side xiu on">XỈU</span></div></div>
+            </div>
+            <div class="amount-grid"><span class="amount">10K</span><span class="amount on">20K</span><span class="amount">50K</span><span class="amount">100K</span></div>
+          </div>
+          <div class="footer"><span>P3 XỈU 20K / P1,P2 TÀI 10K</span><span class="btn primary">GO</span></div>
+        </div>
+      </section>
+
+      <section class="concept c9">
+        <div class="concept-head"><h2>9. Command Mode</h2><span class="tag">rất nhanh khi quen tay</span></div>
+        <div class="body">
+          <div class="command">
+            <div class="commandline">P1 TÀI 20K → P2/P3 XỈU 10K</div>
+            <div class="row"><span class="profile on">P1</span><span class="profile">P2</span><span class="profile">P3</span><span class="side tai on">TÀI</span><span class="side xiu">XỈU</span><span class="amount">10K</span><span class="amount on">20K</span><span class="amount">50K</span></div>
+            <div class="footer"><span class="muted">Một dòng lệnh rõ kết quả</span><span class="btn blue">EXECUTE</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="concept c10">
+        <div class="concept-head"><h2>10. Operator Cards</h2><span class="tag">trực quan từng P</span></div>
+        <div class="body">
+          <div class="operator">
+            <div>
+              <div class="profile-card"><b>P1</b><span class="tai-text">TÀI</span><span class="money">20K</span></div>
+              <div class="profile-card"><b>P2</b><span class="xiu-text">XỈU</span><span class="money">10K</span></div>
+              <div class="profile-card"><b>P3</b><span class="xiu-text">XỈU</span><span class="money">10K</span></div>
+            </div>
+            <div class="tile">
+              <div class="label">Thiết lập nhanh</div>
+              <div class="row"><span class="profile on">P1</span><span class="profile">P2</span><span class="profile">P3</span></div>
+              <div class="row" style="margin-top:8px"><span class="side tai on">TÀI</span><span class="side xiu">XỈU</span></div>
+              <div class="row" style="margin-top:8px"><span class="amount">10K</span><span class="amount on">20K</span><span class="amount">50K</span></div>
+              <div class="footer"><span></span><span class="btn primary">ĐÁNH</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

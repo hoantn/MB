@@ -24,6 +24,7 @@ from .strategy_view import StrategyView
 from .strategy_suggest_worker import build_suggestions_for_codes
 from .strategy_suggest import pick_default_suggestion
 from .strategy_anti_sap import build_anti_sap_suggestions
+from .strategy_combo_sap_lang import find_sap_lang_combo, SapLangCombo
 from .strategy_special13 import detect_special_13  # FIX: use separated module
 
 from .modules.ws_ingest import WSIngest, WSUpdate  # NEW: WS ingest module
@@ -139,6 +140,7 @@ class StrategyTab(QWidget):
         self.view.ngu_label_clicked.connect(self._on_ngu_label_clicked)
         self.view.btn_hup.clicked.connect(lambda: self._on_apply(self.active_profile))
         self.view.apply_all_clicked.connect(self._on_apply_all)
+        self.view.break_sap_lang_clicked.connect(self._on_break_sap_lang)
         
         # retry gợi ý P ACTIVE khi không có gợi ý
         if hasattr(self.view, "p_retry_clicked"):
@@ -159,11 +161,13 @@ class StrategyTab(QWidget):
         self._ngu_suggestions: List[dict] = []
         self._ngu_selected_index: int = 0
         self._ngu_key: Optional[str] = None
+        self._sap_lang_combo: Optional[SapLangCombo] = None
         # Đánh dấu đã từng click chọn 1 gợi ý OPP/NGU hay chưa
         self._ngu_clicked_once: bool = False
 
-        # Anti-sập (vs NGU) is expensive. Default OFF to avoid lag/spam labels.
-        self._anti_sap_enabled: bool = False
+        # Anti-sap uses bounded smart permutations for P hands only.
+        # NGU stays fixed as the reference hand.
+        self._anti_sap_enabled: bool = True
 
         # gen + result queue (extended tuple)
         self._gen: Dict[str, int] = {pid: 0 for pid in (self.profiles + ["NGU"])}
@@ -566,6 +570,11 @@ class StrategyTab(QWidget):
         self._last_hand_hash[pid] = None
         # Khi bất kỳ P nào reset bài, coi như NGU key cũ không còn giá trị
         self._ngu_key = None
+        self._sap_lang_combo = None
+        try:
+            self.view.set_break_sap_lang_available(False)
+        except Exception:
+            pass
         # 3) clear UI list ngay nếu pid đang active
         if pid == self.active_profile:
             try:
@@ -779,10 +788,12 @@ class StrategyTab(QWidget):
     def _render_ngu(self) -> None:
         self._renderer.render_ngu(self)
         self._update_special_labels()   # mỗi lần render OPP, cập nhật label
+        self._refresh_sap_lang_combo()
 
     def _render_p_active(self) -> None:
         self._renderer.render_p_active(self)
         self._update_special_labels()   # mỗi lần render P active, cập nhật label
+        self._refresh_sap_lang_combo()
 
 
     # =================== NGU derive ===================
@@ -849,37 +860,58 @@ class StrategyTab(QWidget):
 
     def _on_apply_all(self) -> None:
         """
-        Khi click ALL:
-        - Lần lượt click P1 -> P2 -> P3 (giống user bấm nút P)
-        - Mỗi lần click cách nhau 100ms để dễ quan sát
-        - Sau đó mới chạy ApplyController.on_apply_all (hành vi cũ)
+        Apply ALL:
+        - Snapshot P1/P2/P3 without switching active_profile.
+        - Start per-profile apply workers with a small stagger.
         """
-        ordered = ["P1", "P2", "P3"]
-        ordered = [pid for pid in ordered if pid in self.profiles]
+        try:
+            self._apply_controller.on_apply_all(self)
+        except Exception:
+            log.exception("[ALL] on_apply_all failed")
 
-        delay_ms = 100
+    def _get_selected_opp_suggestion(self) -> Optional[dict]:
+        lst = list(self._ngu_suggestions or [])
+        if not lst:
+            return None
+        idx = int(self._ngu_selected_index or 0)
+        if idx < 0 or idx >= len(lst):
+            idx = 0
+        if self._is_special_row(lst[idx]) and len(lst) > 1:
+            idx = 1
+        return lst[idx]
 
-        def _click_next(index: int):
-            if index >= len(ordered):
-                # Sau khi click xong P1,P2,P3 -> chạy ALL như cũ
-                try:
-                    self._apply_controller.on_apply_all(self)
-                except Exception:
-                    log.exception("[ALL] on_apply_all failed")
-                return
-
-            pid = ordered[index]
+    def _refresh_sap_lang_combo(self) -> None:
+        """Detect a global 3P sap-lang combo and show/hide its action button."""
+        try:
+            opp = self._get_selected_opp_suggestion()
+            combo = find_sap_lang_combo(
+                suggestions_by_pid={
+                    pid: list(self._suggestions_render.get(pid) or []) + list(self._suggestions.get(pid) or [])
+                    for pid in self.profiles
+                },
+                ws_codes_by_pid={pid: list(self._codes_slot_order.get(pid) or []) for pid in self.profiles},
+                opp_suggestion=opp,
+            )
+            self._sap_lang_combo = combo
+            if hasattr(self.view, "set_break_sap_lang_available"):
+                self.view.set_break_sap_lang_available(combo is not None, combo.leader if combo else "")
+        except Exception as e:
+            self._sap_lang_combo = None
             try:
-                log.info("[ALL] click profile %s", pid)
-                self._on_profile_switch(pid)
+                self.view.set_break_sap_lang_available(False)
             except Exception:
-                log.exception("[ALL] click profile %s failed", pid)
+                pass
+            log.exception("[Strategy2] refresh sap-lang combo failed: %s", e)
 
-            # Hẹn click profile tiếp theo sau 100ms
-            QTimer.singleShot(delay_ms, lambda: _click_next(index + 1))
-
-        # Bắt đầu chuỗi click
-        _click_next(0)
+    def _on_break_sap_lang(self) -> None:
+        """Apply the detected sap-lang combo for all 3 profiles."""
+        combo = getattr(self, "_sap_lang_combo", None)
+        if combo is None:
+            return
+        try:
+            self._apply_controller.on_apply_combo(self, combo.suggestions)
+        except Exception:
+            log.exception("[BẺ SẬP] apply combo failed")
 
     # ===== Legacy UI contract (used by strategy_suggest.py) =====
     def _apply_btn_set_busy(self, profile_id: str) -> None:

@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>10 fresh UI concepts</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #f2f4f8;
+      color: #172033;
+      font: 12px/1.35 Inter, "Segoe UI", Arial, sans-serif;
+    }
+    .page { max-width: 1760px; margin: 0 auto; padding: 20px; }
+    .intro { display: flex; justify-content: space-between; gap: 18px; align-items: end; margin-bottom: 16px; }
+    h1 { margin: 0 0 6px; font-size: 24px; letter-spacing: 0; }
+    .intro p { margin: 0; max-width: 860px; color: #667085; }
+    .pill { border: 1px solid #d0d5dd; background: #fff; color: #475467; border-radius: 999px; padding: 6px 10px; }
+    .pills { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .app {
+      --bg: #ffffff;
+      --surface: #f8fafc;
+      --panel: #ffffff;
+      --panel2: #f1f5f9;
+      --line: #d8dee8;
+      --text: #172033;
+      --muted: #667085;
+      --primary: #2563eb;
+      --primary-soft: #dbeafe;
+      --accent: #f97316;
+      --danger: #ef4444;
+      --ok: #16a34a;
+      height: 560px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      background: var(--bg);
+      box-shadow: 0 22px 55px rgba(15, 23, 42, .12);
+      display: grid;
+      grid-template-rows: 46px 1fr 34px;
+    }
+    .app.dark {
+      --bg: #0b1020;
+      --surface: #10172a;
+      --panel: #151e33;
+      --panel2: #0f172a;
+      --line: #25324a;
+      --text: #edf2ff;
+      --muted: #9aa8c7;
+      --primary: #8b5cf6;
+      --primary-soft: rgba(139, 92, 246, .18);
+      --accent: #22d3ee;
+      --danger: #fb7185;
+      --ok: #34d399;
+      box-shadow: 0 22px 55px rgba(0,0,0,.3);
+    }
+    .app.warm {
+      --bg: #fffaf3;
+      --surface: #f6efe4;
+      --panel: #fffdf8;
+      --panel2: #f4eadc;
+      --line: #e2d3bf;
+      --text: #2b221a;
+      --muted: #7c6d5d;
+      --primary: #b45309;
+      --primary-soft: #ffedd5;
+      --accent: #0f766e;
+      --danger: #b91c1c;
+      --ok: #15803d;
+    }
+    .app.terminal {
+      --bg: #05070a;
+      --surface: #0a0f14;
+      --panel: #0e151b;
+      --panel2: #091017;
+      --line: #1d2b35;
+      --text: #d7fbe8;
+      --muted: #83a798;
+      --primary: #00e58a;
+      --primary-soft: rgba(0, 229, 138, .12);
+      --accent: #f6c453;
+      --danger: #ff4d6d;
+      --ok: #00e58a;
+    }
+    .app.graphite {
+      --bg: #f7f7f5;
+      --surface: #ebece8;
+      --panel: #ffffff;
+      --panel2: #eeefeb;
+      --line: #d8d9d4;
+      --text: #20211f;
+      --muted: #6d7169;
+      --primary: #111827;
+      --primary-soft: #e5e7eb;
+      --accent: #64748b;
+      --danger: #dc2626;
+      --ok: #059669;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+    }
+    .brand { display: flex; align-items: center; gap: 9px; font-weight: 900; font-size: 14px; }
+    .mark { width: 26px; height: 26px; border-radius: 8px; background: var(--primary); box-shadow: inset 0 0 0 6px var(--primary-soft); }
+    .nav { display: flex; gap: 6px; align-items: center; }
+    .nav span { padding: 7px 10px; border-radius: 8px; color: var(--muted); }
+    .nav .on { background: var(--primary-soft); color: var(--primary); font-weight: 800; }
+    .body { min-height: 0; padding: 12px; background: var(--surface); display: grid; gap: 12px; }
+    .footer { display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-top: 1px solid var(--line); background: var(--panel); color: var(--muted); }
+    .panel { min-width: 0; min-height: 0; border: 1px solid var(--line); background: var(--panel); border-radius: 14px; padding: 12px; overflow: hidden; }
+    .panel.flat { border-color: transparent; box-shadow: none; }
+    .head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; color: var(--text); font-weight: 900; }
+    .sub { color: var(--muted); font-weight: 500; }
+    .profiles { display: grid; gap: 8px; }
+    .profile {
+      display: grid;
+      grid-template-columns: 38px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      border-radius: 12px;
+      padding: 9px;
+    }
+    .profile.on { border-color: var(--primary); background: var(--primary-soft); }
+    .badge { width: 38px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--panel2); color: var(--text); font-weight: 900; }
+    .profile.on .badge { background: var(--primary); color: #fff; }
+    .profile b { display: block; font-size: 13px; color: var(--text); margin-bottom: 2px; }
+    .profile span { display: block; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+    .profile.on .dot { background: var(--primary); }
+    .busy .dot, .busy .badge { background: var(--accent); color: #111; }
+    .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .metric { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+    .metric span { display: block; color: var(--muted); font-size: 11px; }
+    .metric b { display: block; margin-top: 3px; color: var(--text); font-size: 17px; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; overflow: hidden; border-radius: 12px; }
+    th, td { padding: 8px 9px; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    th { color: var(--muted); text-align: left; font-size: 11px; background: var(--panel2); }
+    td { color: var(--text); background: var(--bg); }
+    .btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .btn { border: 0; background: var(--primary); color: #fff; border-radius: 10px; padding: 8px 12px; font-weight: 900; min-width: 72px; text-align: center; }
+    .btn.secondary { background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
+    .btn.accent { background: var(--accent); color: #111; }
+    .btn.danger { background: var(--danger); }
+    .input { min-width: 90px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text); }
+    .input.grow { flex: 1; min-width: 0; }
+    .cards { display: grid; grid-template-columns: repeat(6, minmax(34px, 1fr)); gap: 7px; align-items: end; }
+    .card { height: 72px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+    .card.tall { height: 112px; }
+    .lane { display: grid; grid-template-columns: 60px 1fr; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .chi { padding: 9px 7px; border-radius: 10px; background: var(--primary-soft); color: var(--primary); font-weight: 900; text-align: center; }
+    .suggest { display: grid; gap: 8px; }
+    .suggest div { display: flex; justify-content: space-between; gap: 10px; border: 1px solid var(--line); background: var(--bg); border-radius: 12px; padding: 9px; color: var(--text); }
+    .layout1 .body { grid-template-columns: 300px 1fr; }
+    .layout1 .main { display: grid; grid-template-columns: 43% 1fr; gap: 12px; }
+    .layout2 .body { grid-template-columns: 250px 1fr 270px; }
+    .layout3 .body { grid-template-rows: 78px 1fr; }
+    .layout3 .strip { display: grid; grid-template-columns: 1fr 1fr 1fr 1.5fr; gap: 10px; }
+    .layout3 .main { display: grid; grid-template-columns: 36% 1fr; gap: 12px; }
+    .layout4 .body { grid-template-columns: 72px 1fr; }
+    .rail { display: grid; gap: 8px; align-content: start; }
+    .rail .rbtn { height: 52px; border-radius: 16px; display: grid; place-items: center; background: var(--panel); border: 1px solid var(--line); color: var(--muted); font-weight: 900; }
+    .rail .on { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .layout4 .main { display: grid; grid-template-columns: 45% 1fr; gap: 12px; }
+    .layout5 .body { grid-template-columns: 1fr 1fr; }
+    .layout6 .body { grid-template-rows: auto 1fr; }
+    .layout6 .wide-profiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .layout6 .main { display: grid; grid-template-columns: 48% 1fr; gap: 12px; }
+    .layout7 .body { grid-template-columns: 34% 1fr; }
+    .layout8 .body { grid-template-columns: 300px 1fr; }
+    .layout9 .body { grid-template-columns: 1fr 320px; }
+    .layout10 .body { grid-template-columns: 38% 1fr; }
+    .kpi-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    @media (max-width: 1260px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="intro">
+      <div>
+        <h1>10 demo UI mới hoàn toàn</h1>
+        <p>Không bám màu sắc/phong cách cũ. Các mẫu dùng hướng web app/SaaS/dashboard/operator console, chỉ giữ lại nghiệp vụ cần hiển thị.</p>
+      </div>
+      <div class="pills"><span class="pill">Fresh UI</span><span class="pill">Web app style</span><span class="pill">Logic giữ nguyên</span></div>
+    </div>
+
+    <section class="grid">
+      <article class="app layout1">
+        <div class="topbar"><div class="brand"><span class="mark"></span>MB Control</div><div class="nav"><span class="on">Workspace</span><span>Browser</span><span>Config</span><span>Players</span></div></div>
+        <div class="body">
+          <div class="panel"><div class="head">Profiles <span class="sub">room control</span></div><div class="profiles"><div class="profile on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="dot"></div></div><div class="profile busy"><div class="badge">P2</div><div><b>Profile 2</b><span>Đang vào phòng</span></div><div class="dot"></div></div><div class="profile"><div class="badge">P3</div><div><b>Profile 3</b><span>Sẵn sàng</span></div><div class="dot"></div></div></div></div>
+          <div class="main"><div class="panel"><div class="head">Phòng Game</div><div class="metric-grid"><div class="metric"><span>Phòng</span><b>-</b></div><div class="metric"><span>Cược</span><b>100</b></div><div class="metric"><span>Người</span><b>0/4</b></div></div><table><thead><tr><th>Tên</th><th>Vàng</th><th>UID</th></tr></thead><tbody><tr><td>cuem525279</td><td>442458</td><td>43_819818</td></tr><tr><td>falang</td><td>17800</td><td>1_276568235</td></tr></tbody></table><div class="btns"><div class="btn">Tạo</div><div class="btn accent">Tìm khách</div><div class="btn danger">Dừng</div></div></div><div class="panel"><div class="head">Chiến thuật <span class="sub">P1 active</span></div><div class="lane"><div class="chi">Chi 3</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div></div></div><div class="lane"><div class="chi">Chi 2</div><div class="cards"><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div></div></div><div class="btns"><div class="btn">Xếp bài</div><div class="btn secondary">ALL</div></div></div></div>
+        </div><div class="footer"><span>Ready</span><b>TOOL 1</b><span>Clean SaaS</span></div>
+      </article>
+
+      <article class="app dark layout2">
+        <div class="topbar"><div class="brand"><span class="mark"></span>Orbit Console</div><div class="nav"><span class="on">Command</span><span>Data</span><span>Settings</span></div></div>
+        <div class="body"><div class="panel"><div class="head">Profiles</div><div class="profiles"><div class="profile on"><div class="badge">P1</div><div><b>Alpha</b><span>Active</span></div><div class="dot"></div></div><div class="profile"><div class="badge">P2</div><div><b>Beta</b><span>Ready</span></div><div class="dot"></div></div><div class="profile busy"><div class="badge">P3</div><div><b>Gamma</b><span>Joining</span></div><div class="dot"></div></div></div></div><div class="panel"><div class="head">Strategy Board</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div><div class="card"></div><div class="card"></div></div><div class="suggest"><div><span>Best split</span><b>+12</b></div><div><span>Balanced split</span><b>+9</b></div></div></div><div class="panel"><div class="head">Room Ops</div><div class="metric-grid"><div class="metric"><span>Room</span><b>-</b></div><div class="metric"><span>Bet</span><b>100</b></div><div class="metric"><span>Players</span><b>0</b></div></div><div class="btns"><div class="btn">Create</div><div class="btn accent">Invite</div><div class="btn danger">Stop</div></div></div></div>
+        <div class="footer"><span>Connected</span><b>TOOL 1</b><span>Dark glass console</span></div>
+      </article>
+
+      <article class="app warm layout3">
+        <div class="topbar"><div class="brand"><span class="mark"></span>Studio Desk</div><div class="nav"><span class="on">Overview</span><span>Rooms</span><span>Strategy</span></div></div>
+        <div class="body"><div class="strip"><div class="metric"><span>Profile</span><b>P1</b></div><div class="metric"><span>Room</span><b>-</b></div><div class="metric"><span>Bet</span><b>100</b></div><div class="metric"><span>Status</span><b>Chờ bài</b></div></div><div class="main"><div class="panel"><div class="head">Profiles</div><div class="profiles"><div class="profile on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="dot"></div></div><div class="profile"><div class="badge">P2</div><div><b>Profile 2</b><span>Sẵn sàng</span></div><div class="dot"></div></div><div class="profile"><div class="badge">P3</div><div><b>Profile 3</b><span>Sẵn sàng</span></div><div class="dot"></div></div></div><div class="btns"><div class="btn">Tạo</div><div class="btn secondary">Vào</div></div></div><div class="panel"><div class="head">Bàn chiến thuật</div><div class="lane"><div class="chi">Chi 3</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div></div></div><div class="lane"><div class="chi">Chi 2</div><div class="cards"><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div></div></div></div></div></div>
+        <div class="footer"><span>Ready</span><b>TOOL 1</b><span>Warm studio</span></div>
+      </article>
+
+      <article class="app terminal layout4">
+        <div class="topbar"><div class="brand"><span class="mark"></span>Ops Terminal</div><div class="nav"><span class="on">Live</span><span>Logs</span><span>Config</span></div></div>
+        <div class="body"><div class="rail"><div class="rbtn on">P1</div><div class="rbtn">P2</div><div class="rbtn">P3</div><div class="rbtn">⏹</div></div><div class="main"><div class="panel"><div class="head">Room Stream</div><table><thead><tr><th>Tên</th><th>Vàng</th><th>UID</th></tr></thead><tbody><tr><td>cuem525279</td><td>442458</td><td>43_819818</td></tr><tr><td>falang</td><td>17800</td><td>1_276568235</td></tr></tbody></table><div class="btns"><div class="btn">CREATE</div><div class="btn accent">FIND</div><div class="btn danger">STOP</div></div></div><div class="panel"><div class="head">Decision Engine</div><div class="suggest"><div><span>WAITING_FOR_CARDS</span><b>OK</b></div><div><span>ROOM_FILTER</span><b>PASS</b></div><div><span>ACTION</span><b>IDLE</b></div></div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div></div></div></div></div>
+        <div class="footer"><span>ws: live</span><b>TOOL 1</b><span>Terminal operator</span></div>
+      </article>
+
+      <article class="app graphite layout5">
+        <div class="topbar"><div class="brand"><span class="mark"></span>Graphite Workbench</div><div class="nav"><span class="on">Desk</span><span>Browser</span><span>People</span></div></div>
+        <div class="body"><div class="panel"><div class="head">Phòng Game</div><div class="profiles"><div class="profile on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="dot"></div></div><div class="profile"><div class="badge">P2</div><div><b>Profile 2</b><span>Sẵn sàng</span></div><div class="dot"></div></div><div class="profile"><div class="badge">P3</div><div><b>Profile 3</b><span>Sẵn sàng</span></div><div class="dot"></div></div></div><table><thead><tr><th>Tên</th><th>Vàng</th><th>UID</th></tr></thead><tbody><tr><td>-</td><td>-</td><td>-</td></tr></tbody></table></div><div class="panel"><div class="head">Chiến thuật</div><div class="metric-grid"><div class="metric"><span>Mode</span><b>Auto</b></div><div class="metric"><span>Score</span><b>-</b></div><div class="metric"><span>Apply</span><b>Ready</b></div></div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div></div><div class="btns"><div class="btn">Xếp bài</div></div></div></div>
+        <div class="footer"><span>Ready</span><b>TOOL 1</b><span>Minimal graphite</span></div>
+      </article>
+
+      <article class="app layout6">
+        <div class="topbar"><div class="brand"><span class="mark"></span>Profile First</div><div class="nav"><span class="on">Workspace</span><span>Config</span></div></div>
+        <div class="body"><div class="wide-profiles"><div class="profile on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="dot"></div></div><div class="profile busy"><div class="badge">P2</div><div><b>Profile 2</b><span>Đang vào phòng</span></div><div class="dot"></div></div><div class="profile"><div class="badge">P3</div><div><b>Profile 3</b><span>Sẵn sàng</span></div><div class="dot"></div></div></div><div class="main"><div class="panel"><div class="head">Room</div><table><thead><tr><th>Tên</th><th>Vàng</th><th>UID</th></tr></thead><tbody><tr><td>tondonhung</td><td>316403</td><td>1_285364925</td></tr></tbody></table><div class="btns"><div class="btn">Tạo phòng</div><div class="btn secondary">Vào phòng</div><div class="btn danger">Dừng</div></div></div><div class="panel"><div class="head">Strategy</div><div class="lane"><div class="chi">Chi 3</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div></div></div><div class="suggest"><div><span>Chưa có bài</span><b>-</b></div></div></div></div></div>
+        <div class="footer"><span>Ready</span><b>TOOL 1</b><span>Top profile cards</span></div>
+      </article>
+
+      <article class="app dark layout7">
+        <div class="topbar"><div class="brand"><span class="mark"></span>Command Hub</div><div class="nav"><span class="on">Hub</span><span>Data</span><span>Run</span></div></div>
+        <div class="body"><div class="panel"><div class="head">Run Controls</div><div class="metric-grid"><div class="metric"><span>Room</span><b>-</b></div><div class="metric"><span>Bet</span><b>100</b></div><div class="metric"><span>Delay</span><b>0ms</b></div></div><div class="btns"><div class="btn">Create</div><div class="btn accent">Find guest</div><div class="btn secondary">Join</div><div class="btn danger">Stop all</div></div><div class="profiles"><div class="profile on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="dot"></div></div><div class="profile"><div class="badge">P2</div><div><b>Profile 2</b><span>Sẵn sàng</span></div><div class="dot"></div></div></div></div><div class="panel"><div class="head">Live Strategy</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div><div class="card"></div></div><div class="suggest"><div><span>Best path</span><b>+12</b></div><div><span>Safe path</span><b>+8</b></div></div></div></div>
+        <div class="footer"><span>Connected</span><b>TOOL 1</b><span>Command hub</span></div>
+      </article>
+
+      <article class="app warm layout8">
+        <div class="topbar"><div class="brand"><span class="mark"></span>Room Ledger</div><div class="nav"><span class="on">Room</span><span>Strategy</span><span>Players</span></div></div>
+        <div class="body"><div class="panel"><div class="head">Profiles</div><div class="profiles"><div class="profile on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="dot"></div></div><div class="profile"><div class="badge">P2</div><div><b>Profile 2</b><span>Sẵn sàng</span></div><div class="dot"></div></div><div class="profile busy"><div class="badge">P3</div><div><b>Profile 3</b><span>Đang tạo</span></div><div class="dot"></div></div></div><div class="kpi-row"><div class="metric"><span>Room</span><b>-</b></div><div class="metric"><span>Bet</span><b>100</b></div></div></div><div class="panel"><div class="head">Operations + Strategy</div><table><thead><tr><th>Tên</th><th>Vàng</th><th>UID</th></tr></thead><tbody><tr><td>falang</td><td>17800</td><td>1_276568235</td></tr></tbody></table><div class="lane"><div class="chi">Chi 3</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div></div></div><div class="btns"><div class="btn">Xếp bài</div><div class="btn accent">Gọi team</div></div></div></div>
+        <div class="footer"><span>Ready</span><b>TOOL 1</b><span>Ledger style</span></div>
+      </article>
+
+      <article class="app graphite layout9">
+        <div class="topbar"><div class="brand"><span class="mark"></span>Strategy First</div><div class="nav"><span class="on">Strategy</span><span>Room</span><span>Config</span></div></div>
+        <div class="body"><div class="panel"><div class="head">Strategy Canvas</div><div class="lane"><div class="chi">Chi 3</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div></div></div><div class="lane"><div class="chi">Chi 2</div><div class="cards"><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div></div></div><div class="suggest"><div><span>Ưu tiên thắng chi trên</span><b>+10</b></div><div><span>Giữ thế cân bằng</span><b>+7</b></div></div></div><div class="panel"><div class="head">Room Sidebar</div><div class="profiles"><div class="profile on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="dot"></div></div><div class="profile"><div class="badge">P2</div><div><b>Profile 2</b><span>Sẵn sàng</span></div><div class="dot"></div></div></div><div class="btns"><div class="btn">Tạo</div><div class="btn secondary">Vào</div><div class="btn danger">Dừng</div></div></div></div>
+        <div class="footer"><span>Ready</span><b>TOOL 1</b><span>Strategy-first</span></div>
+      </article>
+
+      <article class="app terminal layout10">
+        <div class="topbar"><div class="brand"><span class="mark"></span>Live Cockpit</div><div class="nav"><span class="on">Cockpit</span><span>Monitor</span><span>Settings</span></div></div>
+        <div class="body"><div class="panel"><div class="head">Room Cockpit</div><div class="profiles"><div class="profile on"><div class="badge">P1</div><div><b>Profile 1</b><span>ACTIVE</span></div><div class="dot"></div></div><div class="profile busy"><div class="badge">P2</div><div><b>Profile 2</b><span>JOINING</span></div><div class="dot"></div></div><div class="profile"><div class="badge">P3</div><div><b>Profile 3</b><span>READY</span></div><div class="dot"></div></div></div><div class="metric-grid"><div class="metric"><span>ROOM</span><b>-</b></div><div class="metric"><span>BET</span><b>100</b></div><div class="metric"><span>PLAYERS</span><b>0/4</b></div></div></div><div class="panel"><div class="head">Decision Cockpit</div><table><thead><tr><th>Signal</th><th>Status</th><th>Value</th></tr></thead><tbody><tr><td>Room filter</td><td>waiting</td><td>-</td></tr><tr><td>Hand scan</td><td>idle</td><td>-</td></tr></tbody></table><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div><div class="card"></div></div><div class="btns"><div class="btn">APPLY</div><div class="btn accent">REFRESH</div></div></div></div>
+        <div class="footer"><span>live</span><b>TOOL 1</b><span>Cockpit terminal</span></div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

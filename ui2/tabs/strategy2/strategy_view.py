@@ -36,6 +36,7 @@ class StrategyView(QWidget):
     ngu_label_clicked = Signal(int)        # index in NGU list
     p_label_clicked = Signal(int)          # index in P list
     apply_all_clicked = Signal()           # click ALL apply
+    break_sap_lang_clicked = Signal()      # click global sap-lang combo apply
     p_retry_clicked = Signal()            # click reset gợi ý cho P ACTIVE
 
     CARD_W = 67
@@ -195,6 +196,18 @@ class StrategyView(QWidget):
         self.btn_all.clicked.connect(self.apply_all_clicked.emit)
         act.addWidget(self.btn_all, 0, Qt.AlignRight)
 
+        self.btn_break_sap_lang = QPushButton("Bẻ Sập Làng")
+        self.btn_break_sap_lang.setVisible(False)
+        self.btn_break_sap_lang.setMinimumWidth(130)
+        self.btn_break_sap_lang.setMinimumHeight(30)
+        self.btn_break_sap_lang.setStyleSheet(
+            "QPushButton{border-radius:14px; padding:0 12px; font-weight:900;"
+            "background:#f59e0b; color:#111827;}"
+            "QPushButton:hover{background:#fbbf24;}"
+        )
+        self.btn_break_sap_lang.clicked.connect(self.break_sap_lang_clicked.emit)
+        act.addWidget(self.btn_break_sap_lang, 0, Qt.AlignRight)
+
         act.addStretch(1)
         row.addLayout(act, 0)
         p_sel_root.addLayout(row, 1)
@@ -226,6 +239,13 @@ class StrategyView(QWidget):
                 "QPushButton{border-radius:14px; padding:0 12px;}"
             )
         return b
+
+    def set_break_sap_lang_available(self, available: bool, leader: str = "") -> None:
+        self.btn_break_sap_lang.setVisible(bool(available))
+        if available and leader:
+            self.btn_break_sap_lang.setText(f"Bẻ Sập Làng ({leader})")
+        else:
+            self.btn_break_sap_lang.setText("Bẻ Sập Làng")
 
     # ---------------- cards ----------------
     def _make_card_label(self) -> QLabel:

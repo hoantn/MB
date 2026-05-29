@@ -11,6 +11,7 @@ import atexit
 import faulthandler
 import signal
 from ui2.tools.ws_simulator_ui import WSSimulatorTab
+from ui2.tools.ws_test_tab import WSTestTab
 from ui2.phom.main_view import PhomMainView
 from engine.phom.store import PhomVisibilityStore
 
@@ -51,11 +52,14 @@ from ui2.tabs.profile_tab import ProfileTab
 from ui2.tabs.room_tab import RoomControlTab, TrangThaiPhong, NguoiChoiPhong
 from ui2.tabs.profiles_tab_v2 import ProfilesTabV2
 from ui2.tabs.config_tab import ConfigTab
+from ui2.tabs.capture_tab import CaptureTab
+from ui2.tabs.xao_vang_tab import XaoVangTab
 from core.config import load_config
 from ui2.tabs.players_tab import PlayersTab
 from ui2.tabs.poker_tab import PokerTab
 
-ENABLE_TAIXIU = False
+ENABLE_WS_TEST_TAB = True
+ENABLE_TAIXIU = True
 if ENABLE_TAIXIU:
     from ui2.tabs.taixiu_tab import TaiXiuTab
     from ui2.tabs.taixiu_control_tab import TaiXiuControlTab
@@ -161,6 +165,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self._activate_dialog_shown_once = False
         self._room_tab_is_floating: bool = False
         self._room_tab_float_window: Optional[QDialog] = None
+        self._ws_test_window: Optional[QDialog] = None
 
         self.browser_manager = None
         self.game_controller = None
@@ -170,6 +175,8 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self.taixiu_control_tab = None
         self.auto_spam_tab = None
         self.telegram_tab = None
+        self.xao_vang_tab = None
+        self.ws_test_tab = None
         
         self.tab_widget: Optional[QTabWidget] = None
         self.toast: Optional[DesktopToastManager] = None
@@ -391,8 +398,11 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # self.phom_tab = PhomMainView(store=self.phom_store)
         self.strategy_tab = StrategyTabV2(self.browser_manager, self)
         self.profiles_tab_v2 = ProfilesTabV2(self.browser_manager, self)
+        self.capture_tab = CaptureTab(self.browser_manager, self.capture_manager, self)
+        self.xao_vang_tab = XaoVangTab(self)
         self.config_tab = ConfigTab(self)
         self.players_tab = PlayersTab(self)
+        self.ws_test_tab = WSTestTab(self) if ENABLE_WS_TEST_TAB else None
         # self.poker_tab = PokerTab(self)
         # PokerTab: realtime refresh snapshot khi có cmd=200 (vào/ra phòng)
         # self.poker_tab.yeu_cau_lam_moi_snapshot.connect(self._on_poker_request_refresh_snapshot)
@@ -417,6 +427,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self._apply_strategy_room_splitter_layout()
 
         tabs.addTab(self.strategy_room_splitter, "Chiến Thuật")
+        tabs.addTab(self.xao_vang_tab, "Xào Vàng")
         # tabs.addTab(self.poker_tab, "Poker")
         # tabs.addTab(self.phom_tab, "Phỏm")
 
@@ -433,11 +444,14 @@ class MainWindow(QMainWindow, WebSocketGateway):
         tabs.addTab(self.profiles_tab_v2, "Trình duyệt v2")
         # tabs.addTab(self.dashboard_tab, "Dashboard")
         tabs.addTab(self.config_tab, "Cấu hình")
+        tabs.addTab(self.capture_tab, "Fix tọa độ")
         tabs.addTab(self.players_tab, "Người chơi")
         # tabs.addTab(self.ws_sim_tab, "Test Bài")
         
         self.tab_widget = tabs
         self.setCentralWidget(tabs)
+        if self.ws_test_tab is not None:
+            self._show_ws_test_window()
 
 
         # Toast
@@ -456,6 +470,8 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # Signal đặt cược chỉ lấy từ tab Kiểm Thử
         if ENABLE_TAIXIU:
             self.taixiu_control_tab.request_play_tai_xiu.connect(self._on_request_play_tai_xiu)
+        if self.xao_vang_tab is not None:
+            self.xao_vang_tab.request_play_tai_xiu.connect(self._on_request_play_tai_xiu)
         if self.auto_spam_tab is not None:
             self.auto_spam_tab.request_send_test.connect(self._on_request_send_auto_spam_test)
         # WS bridge + poll timer
@@ -476,6 +492,39 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self._init_theme_widgets()
 
         log.info("App initialized after license OK")
+
+    def _show_ws_test_window(self) -> None:
+        """Show the internal WS test tool as a floating window."""
+        if not ENABLE_WS_TEST_TAB or self.ws_test_tab is None:
+            return
+        if self._ws_test_window is not None:
+            try:
+                self._ws_test_window.show()
+                self._ws_test_window.raise_()
+                self._ws_test_window.activateWindow()
+            except Exception:
+                pass
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Floating Test Window - WS")
+        dlg.setAttribute(Qt.WA_DeleteOnClose)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        dlg.setLayout(layout)
+        layout.addWidget(self.ws_test_tab)
+
+        dlg.resize(520, 520)
+        self._ws_test_window = dlg
+
+        def _on_closed(_result: int = 0, self_ref=self) -> None:
+            self_ref._ws_test_window = None
+
+        dlg.finished.connect(_on_closed)
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
 
     def _set_room_tab_floating(self, floating: bool) -> None:
         """
@@ -602,13 +651,22 @@ class MainWindow(QMainWindow, WebSocketGateway):
             side = str(params.get("side") or "").strip().lower()
             bet = int(params.get("bet") or 0)
             delay_ms = int(params.get("delay_ms") or 0)
+            chips = params.get("chips")
 
-            self.game_controller.play_tai_xiu_once(
-                profile_id=profile_id,
-                bet=bet,
-                side=side,
-                delay_ms=delay_ms,
-            )
+            if chips:
+                self.game_controller.play_tai_xiu_chip_plan(
+                    profile_id=profile_id,
+                    chips=chips,
+                    side=side,
+                    delay_ms=delay_ms,
+                )
+            else:
+                self.game_controller.play_tai_xiu_once(
+                    profile_id=profile_id,
+                    bet=bet,
+                    side=side,
+                    delay_ms=delay_ms,
+                )
 
             msg = f"Đã chơi {'TÀI' if side == 'tai' else 'XỈU'} | {profile_id} | Bet {bet}"
 
@@ -627,8 +685,19 @@ class MainWindow(QMainWindow, WebSocketGateway):
             except Exception:
                 pass
 
+            try:
+                if hasattr(self, "xao_vang_tab") and self.xao_vang_tab is not None:
+                    self.xao_vang_tab.dat_trang_thai_profile(profile_id, msg)
+            except Exception:
+                pass
+
         except Exception as e:
             msg = f"Lỗi: {e}"
+            try:
+                if hasattr(self, "xao_vang_tab") and self.xao_vang_tab is not None:
+                    self.xao_vang_tab.dat_trang_thai_profile(profile_id, msg)
+            except Exception:
+                pass
 
             try:
                 if hasattr(self, "taixiu_control_tab") and self.taixiu_control_tab is not None:
@@ -1532,6 +1601,11 @@ class MainWindow(QMainWindow, WebSocketGateway):
         set_current_theme_name(name)
 
     def closeEvent(self, event) -> None:
+        try:
+            if self._ws_test_window is not None:
+                self._ws_test_window.close()
+        except Exception:
+            pass
         try:
             self._stop_background_services()
         except Exception:

@@ -210,15 +210,15 @@ class RenderController:
 
         try:
             anti = tab.build_anti_sap_suggestions(
-                my_base=my_base, opp_base=opp, label_prefix="Chống sập", max_out=3
+                my_base=my_base, opp_base=opp, label_prefix="Tối ưu", max_out=3
             )
         except Exception as e:
-            tab.log.error("[Strategy2] anti_sap build error: %s", e)
+            tab.log.error("[Strategy2] optimize_vs_ngu build error: %s", e)
             anti = []
 
         for i, s in enumerate(anti):
-            s["mode"] = "anti_sap"
-            s["label"] = f"[Chống sập {i+1}]"
+            s["mode"] = "optimize_vs_ngu"
+            s["label"] = f"[TỐI ƯU] Gợi ý {i+1}"
         out.extend(anti)
         return out
 
@@ -955,6 +955,11 @@ class RenderController:
 
             # Label gốc (giữ logic cũ)
             s["label_html"] = tab._labeling.build_label_html_vs(s, opp)
+            if str(s.get("mode", "")).lower() in ("anti_sap", "optimize_vs_ngu"):
+                s["label_html"] = (
+                    '<span style="color:#f59e0b; font-weight:900;">[TỐI ƯU]</span> '
+                    + str(s.get("label_html") or "")
+                )
 
             # Thêm phần hiển thị chênh lệch so với base MONEY (ΔB: chi1,chi2,chi3) theo hạng bài
             # if base_for_delta and base_tpl is not None and base_for_delta is not s:

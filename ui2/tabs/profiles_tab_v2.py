@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QFrame,
     QSizePolicy,
+    QFileDialog,
 )
 
 # Reuse 100% logic gốc
@@ -185,7 +186,16 @@ class ProfilesTabV2(ProfileTab):
         prof_group = QGroupBox("Cấu hình Profile")
         prof_form = QFormLayout(prof_group)
         prof_form.addRow("Tên hiển thị:", self.name_edit)
-        prof_form.addRow("Chrome path:", self.chrome_path_edit)
+        browser_source_row = QWidget()
+        browser_source_l = QHBoxLayout(browser_source_row)
+        browser_source_l.setContentsMargins(0, 0, 0, 0)
+        browser_source_l.setSpacing(6)
+        self._btn_pick_browser_source = QPushButton("Chọn")
+        self._btn_pick_browser_source.setFixedWidth(70)
+        self._btn_pick_browser_source.clicked.connect(self._pick_browser_source_dir_v2)
+        browser_source_l.addWidget(self.chrome_path_edit, 1)
+        browser_source_l.addWidget(self._btn_pick_browser_source, 0)
+        prof_form.addRow("Thư mục Profile sạch/gốc:", browser_source_row)
         prof_form.addRow("User data dir:", self.user_data_dir_edit)
 
         # --- Window group
@@ -261,6 +271,7 @@ class ProfilesTabV2(ProfileTab):
 
         default_row_l.addWidget(self._btn_create_default, 1)
         default_row_l.addWidget(self._btn_create_default_all, 0)
+        default_row.setVisible(False)
 
         left_col.addWidget(default_row)
                 
@@ -345,6 +356,16 @@ class ProfilesTabV2(ProfileTab):
         self.save_profile()
         self._refresh_sidebar_status()
         self._sync_ui_for_pid(pid)
+
+    def _pick_browser_source_dir_v2(self) -> None:
+        """Pick the clean browser/profile source folder stored in chrome_path."""
+        current = (self.chrome_path_edit.text() or "").strip()
+        start_dir = current if os.path.isdir(current) else os.path.dirname(current)
+        if not start_dir or not os.path.isdir(start_dir):
+            start_dir = os.getcwd()
+        folder = QFileDialog.getExistingDirectory(self, "Chọn thư mục Profile sạch/gốc", start_dir)
+        if folder:
+            self.chrome_path_edit.setText(folder)
 
     def _on_sidebar_item_changed(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
         if not current:
@@ -606,7 +627,7 @@ class ProfilesTabV2(ProfileTab):
         provider = self._infer_provider_from_proxy_dict(proxy)
 
         parts = []
-        if chrome_path and user_data_dir:
+        if chrome_path:
             parts.append("Configured")
         else:
             parts.append("Missing config")
@@ -648,7 +669,7 @@ class ProfilesTabV2(ProfileTab):
             port = int(proxy.get("port", 0) or 0)
             provider = self._infer_provider_from_proxy_dict(proxy)
 
-            badge = "✅" if (chrome_path and user_data_dir) else "⚠"
+            badge = "✅" if chrome_path else "⚠"
 
             if provider == "tmproxy":
                 p_badge = "TM"
@@ -964,6 +985,34 @@ class ProfilesTabV2(ProfileTab):
             return False, f"Lỗi copy: {e}"
 
     def _on_delete_all_profiles_clicked_v2(self) -> None:
+        ret = QMessageBox.question(
+            self,
+            "Xoa Toan Bo Runtime",
+            (
+                "Ban co chac muon xoa runtime trinh duyet cua P1, P2, P3?\n"
+                "Lan mo sau tool se copy lai tu thu muc Profile sach/goc.\n"
+                "Cau hinh profile trong file config van duoc giu nguyen."
+            ),
+        )
+        if ret != QMessageBox.Yes:
+            return
+
+        bm = getattr(self, "browser_manager", None)
+        if bm is None or not hasattr(bm, "delete_profile_user_data"):
+            QMessageBox.warning(self, "Loi", "BrowserManager khong ho tro delete_profile_user_data().")
+            return
+
+        ok_all = True
+        for pid in ("P1", "P2", "P3"):
+            if not bm.delete_profile_user_data(pid):
+                ok_all = False
+                QMessageBox.warning(self, "Loi", f"Khong the xoa runtime trinh duyet cua {pid}. Vui long xem log.")
+                break
+
+        if ok_all:
+            QMessageBox.information(self, "Hoan tat", "Da xoa runtime trinh duyet cua P1, P2, P3.")
+        return
+
         """
         Xóa toàn bộ user-data-dir của P1, P2, P3 (tuần tự).
         Reuse đúng cơ chế delete_profile_user_data() của BrowserManager.
@@ -1039,6 +1088,36 @@ class ProfilesTabV2(ProfileTab):
         self._run_next_delete_in_queue_v2()
 
     def _on_delete_profile_clicked_v2(self) -> None:
+        pid = self.profile_combo.currentText() or "P1"
+        ret = QMessageBox.question(
+            self,
+            "Xoa Runtime",
+            (
+                f"Ban co chac muon xoa runtime trinh duyet cua {pid}?\n"
+                "Lan mo sau tool se copy lai tu thu muc Profile sach/goc.\n"
+                "Cau hinh profile trong file config van duoc giu nguyen."
+            ),
+        )
+        if ret != QMessageBox.Yes:
+            return
+
+        bm = getattr(self, "browser_manager", None)
+        if bm is None or not hasattr(bm, "delete_profile_user_data"):
+            QMessageBox.warning(self, "Loi", "BrowserManager khong ho tro delete_profile_user_data().")
+            return
+
+        ok = bm.delete_profile_user_data(pid)
+        if ok:
+            QMessageBox.information(
+                self,
+                "Hoan tat",
+                f"Da xoa runtime trinh duyet cua {pid}.\n"
+                "Lan mo trinh duyet tiep theo se copy lai tu Profile sach/goc.",
+            )
+        else:
+            QMessageBox.warning(self, "Loi", f"Khong the xoa runtime trinh duyet cua {pid}. Vui long xem log.")
+        return
+
         """
         Xóa sạch user-data-dir của profile hiện tại.
         - KHÔNG xóa cấu hình trong config.

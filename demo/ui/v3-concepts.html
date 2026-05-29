@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>10 mau UI v3</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #0e1012;
+      color: #eef2f6;
+      font: 12px/1.35 "Segoe UI", Arial, sans-serif;
+    }
+    .page { max-width: 1680px; margin: 0 auto; padding: 18px; }
+    .intro { display: flex; justify-content: space-between; gap: 18px; align-items: end; margin-bottom: 16px; }
+    h1 { margin: 0 0 5px; font-size: 22px; }
+    .intro p { margin: 0; color: #9da7b2; max-width: 900px; }
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .chip { border: 1px solid #39424d; background: #171b20; color: #b6c0cc; border-radius: 999px; padding: 5px 10px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .concept {
+      --bg: #131619;
+      --shell: #171b20;
+      --panel: #20252b;
+      --panel2: #171c22;
+      --line: #343d48;
+      --line2: #44505d;
+      --text: #f2f6fa;
+      --muted: #a4afbb;
+      --primary: #2ba043;
+      --primary2: #21883a;
+      --info: #2f81d7;
+      --warn: #d69b2d;
+      --danger: #d83a3a;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      border-radius: 8px;
+      overflow: hidden;
+      min-height: 530px;
+      box-shadow: 0 16px 34px rgba(0,0,0,.28);
+    }
+    .titlebar {
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      background: #f4f4f4;
+      color: #1a1a1a;
+      font-size: 12px;
+    }
+    .window-title { display: flex; align-items: center; gap: 7px; }
+    .appicon { width: 16px; height: 16px; border-radius: 4px; background: linear-gradient(135deg,#f04f46,#ffd25c); }
+    .winbtns { letter-spacing: 8px; color: #222; }
+    .tabs {
+      display: flex;
+      justify-content: center;
+      gap: 4px;
+      height: 34px;
+      padding-top: 5px;
+      background: var(--shell);
+      border-bottom: 1px solid var(--line);
+    }
+    .tab {
+      padding: 6px 14px;
+      border: 1px solid var(--line);
+      border-bottom: 0;
+      background: #1d2228;
+      color: #dbe3ec;
+      border-radius: 6px 6px 0 0;
+    }
+    .tab.on { background: var(--primary); color: #fff; font-weight: 800; border-color: var(--primary); }
+    .body { height: 424px; padding: 10px; display: grid; gap: 10px; }
+    .footer {
+      height: 40px;
+      display: grid;
+      grid-template-columns: 1fr 160px 1.2fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 0 10px;
+      border-top: 1px solid var(--line);
+      background: #111418;
+      color: #c8d0d9;
+    }
+    .tool-pill {
+      justify-self: center;
+      min-width: 150px;
+      text-align: center;
+      border: 1px solid var(--warn);
+      color: #facc15;
+      background: #111827;
+      border-radius: 7px;
+      padding: 5px 20px;
+      font-size: 18px;
+      font-weight: 900;
+    }
+    .panel {
+      min-width: 0;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 7px;
+      padding: 9px;
+      overflow: hidden;
+    }
+    .panel.soft { background: var(--panel2); }
+    .section-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 900; color: var(--text); }
+    .muted { color: var(--muted); font-weight: 500; }
+    .split { display: grid; grid-template-columns: 43% 1fr; gap: 10px; }
+    .split.room-wide { grid-template-columns: 50% 1fr; }
+    .split.strategy-wide { grid-template-columns: 36% 1fr; }
+    .stack { display: grid; grid-template-rows: auto 1fr auto; gap: 8px; min-height: 0; }
+    .room-grid { display: grid; grid-template-columns: 210px 1fr; gap: 10px; min-height: 0; }
+    .profile-nav { border: 1px solid var(--line); background: #1b1f24; border-radius: 7px; padding: 7px; }
+    .profile-card {
+      display: grid;
+      grid-template-columns: 34px 1fr 6px;
+      gap: 8px;
+      align-items: center;
+      min-height: 52px;
+      border: 1px solid #36414d;
+      background: #171c22;
+      border-radius: 6px;
+      padding: 7px;
+      margin-bottom: 7px;
+    }
+    .profile-card.on { background: color-mix(in srgb, var(--primary) 28%, #141a1f); border-color: var(--primary); box-shadow: 0 8px 16px rgba(0,0,0,.16); }
+    .badge {
+      width: 34px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 5px;
+      background: #2b333d;
+      color: #fff;
+      font-weight: 900;
+    }
+    .profile-card.on .badge { background: var(--primary); }
+    .profile-card b { display: block; color: #fff; font-size: 13px; margin-bottom: 2px; }
+    .profile-card span { display: block; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .statebar { width: 6px; height: 32px; border-radius: 4px; background: #4a5563; }
+    .profile-card.on .statebar { background: var(--primary); }
+    .profile-card.busy { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 18%, #171c22); }
+    .profile-card.busy .badge, .profile-card.busy .statebar { background: var(--warn); color: #111; }
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+    .metric { border: 1px solid #34404c; background: #151a20; border-radius: 6px; padding: 7px 8px; }
+    .metric span { color: var(--muted); font-size: 11px; display: block; }
+    .metric b { font-size: 15px; display: block; margin-top: 2px; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+    th, td { border-bottom: 1px solid #303944; padding: 7px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    th { background: #2a3037; color: #dce4ed; font-weight: 700; }
+    td { color: #e9eef4; }
+    .actions { display: grid; gap: 7px; }
+    .row { display: flex; align-items: center; gap: 7px; min-height: 30px; }
+    .row.right { justify-content: flex-end; }
+    .input, .select {
+      min-width: 62px;
+      border: 1px solid #3a4653;
+      background: #14191f;
+      color: #eef3f8;
+      border-radius: 6px;
+      padding: 7px 9px;
+    }
+    .input.grow { flex: 1; min-width: 0; }
+    .btn {
+      border: 1px solid transparent;
+      background: var(--primary);
+      color: #fff;
+      border-radius: 6px;
+      padding: 7px 11px;
+      font-weight: 900;
+      min-width: 76px;
+      text-align: center;
+    }
+    .btn.info { background: var(--info); }
+    .btn.danger { background: var(--danger); }
+    .btn.ghost { background: #1a2027; border-color: #3b4653; color: #dce4ed; }
+    .cards { display: grid; grid-template-columns: repeat(6, minmax(34px, 1fr)); gap: 6px; align-items: end; }
+    .card { height: 70px; border: 1px solid #3c4652; background: #181c21; border-radius: 6px; }
+    .card.tall { height: 104px; }
+    .lane { display: grid; grid-template-columns: 54px 1fr; gap: 8px; align-items: center; margin-bottom: 7px; }
+    .chi { background: #14191f; border-left: 4px solid var(--primary); border-radius: 5px; padding: 8px 7px; font-weight: 900; text-align: center; }
+    .suggestions { display: grid; gap: 6px; }
+    .suggestion { border: 1px solid #36414d; background: #171c22; border-radius: 6px; padding: 8px; display: flex; justify-content: space-between; gap: 8px; }
+    .toolbar { display: flex; gap: 7px; justify-content: flex-end; align-items: center; }
+    .mini-nav { display: flex; gap: 6px; }
+    .mini-nav .btn { min-width: 46px; padding: 6px 9px; border-radius: 999px; }
+    .layout-b .body { grid-template-columns: 235px 1fr; }
+    .layout-b .room-grid { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .layout-c .body { grid-template-rows: 70px 1fr; }
+    .layout-c .top-strip { display: grid; grid-template-columns: 1fr 1fr 1fr 1.4fr; gap: 8px; }
+    .layout-c .room-grid { grid-template-columns: 1fr; }
+    .layout-d .body { grid-template-columns: 1fr 270px; }
+    .layout-d .side-tools { display: grid; gap: 8px; }
+    .layout-e .body { grid-template-columns: 290px 1fr 260px; }
+    .layout-f .body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .layout-f .wide-nav { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .layout-g .body { grid-template-columns: 48% 1fr; }
+    .layout-h .body { grid-template-columns: 1fr 1fr; }
+    .layout-i .body { grid-template-columns: 70px 1fr; }
+    .layout-i .rail { display: grid; gap: 8px; align-content: start; }
+    .layout-i .rail .btn { min-width: 48px; padding: 11px 0; }
+    .layout-j .body { grid-template-columns: 39% 1fr; }
+    .layout-j .tabs { justify-content: flex-start; padding-left: 180px; }
+    .c2 { --primary:#18b894; --primary2:#0f8d70; --info:#3498db; --bg:#11181b; --shell:#142026; --panel:#1b282d; --panel2:#142025; --line:#2c444c; }
+    .c3 { --primary:#4aa3ff; --primary2:#267ad0; --info:#8b9cff; --bg:#11151b; --shell:#151b24; --panel:#1d2631; --panel2:#151d27; --line:#334252; }
+    .c4 { --primary:#d69b2d; --primary2:#a7761d; --info:#3f87d6; --bg:#171512; --shell:#211d17; --panel:#28231c; --panel2:#1d1a15; --line:#463c2c; }
+    .c5 { --primary:#ba3f82; --primary2:#913066; --info:#5f8dd3; --bg:#161216; --shell:#201920; --panel:#291f28; --panel2:#1c171d; --line:#493747; }
+    .c6 { --primary:#7aa23a; --primary2:#5f812c; --info:#2f81d7; --bg:#131611; --shell:#1a2118; --panel:#222b20; --panel2:#171d16; --line:#3d4a37; }
+    .c7 { --primary:#00a3a3; --primary2:#087a7a; --info:#466fd6; --bg:#111416; --shell:#151c20; --panel:#1d252a; --panel2:#151b1f; --line:#324148; }
+    .c8 { --primary:#e05d3f; --primary2:#b94831; --info:#2f81d7; --bg:#161312; --shell:#211917; --panel:#2a201d; --panel2:#1c1715; --line:#493a34; }
+    .c9 { --primary:#6f7ddf; --primary2:#535fb7; --info:#2f81d7; --bg:#12141a; --shell:#191c26; --panel:#222633; --panel2:#171a23; --line:#393f53; }
+    .c10 { --primary:#4d9f55; --primary2:#397840; --info:#b56f32; --bg:#151515; --shell:#1c1c1c; --panel:#252525; --panel2:#1a1a1a; --line:#3e3e3e; }
+    @media (max-width: 1260px) {
+      .grid { grid-template-columns: 1fr; }
+      .concept { min-height: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="intro">
+      <div>
+        <h1>10 mau demo UI v3</h1>
+        <p>Cac mau nay la mockup cho huong xay UI moi song song: cung du lieu Phong Game + Chien Thuat, nhung shell, bo cuc, mau sac va cap bac thi giac duoc lam lai.</p>
+      </div>
+      <div class="chips"><span class="chip">UI v3 song song</span><span class="chip">Khong dung logic cu</span><span class="chip">Website-style QSS</span></div>
+    </div>
+
+    <section class="grid">
+      <article class="concept c1">
+        <div class="titlebar"><div class="window-title"><span class="appicon"></span>Tập trung vào làm! Tài xỉu ít thôi.</div><div class="winbtns">─ □ ×</div></div>
+        <div class="tabs"><div class="tab on">Chiến Thuật</div><div class="tab">Trình duyệt v2</div><div class="tab">Cấu hình</div><div class="tab">Người chơi</div></div>
+        <div class="body split">
+          <div class="panel room-grid">
+            <div class="profile-nav"><div class="profile-card on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="statebar"></div></div><div class="profile-card busy"><div class="badge">P2</div><div><b>Profile 2</b><span>Đang vào phòng</span></div><div class="statebar"></div></div><div class="profile-card"><div class="badge">P3</div><div><b>Profile 3</b><span>Sẵn sàng</span></div><div class="statebar"></div></div></div>
+            <div class="stack"><div><div class="section-head">Chi tiết phòng <span class="muted">P1</span></div><div class="metrics"><div class="metric"><span>Phòng</span><b>-</b></div><div class="metric"><span>Cược</span><b>100</b></div><div class="metric"><span>Người</span><b>0/4</b></div></div></div><table><thead><tr><th>Tên</th><th>Vàng</th><th>UID</th></tr></thead><tbody><tr><td>cuem525279</td><td>442458</td><td>43_819818</td></tr><tr><td>falang</td><td>17800</td><td>1_276568235</td></tr></tbody></table><div class="actions"><div class="row"><span>Tạo:</span><div class="select">100</div><div class="btn">Tạo phòng</div><div class="btn info">Gọi team</div></div><div class="row"><span>UID:</span><div class="btn ghost">P2</div><div class="btn ghost">P3</div><div class="input grow"></div><div class="btn">Vào phòng</div></div></div></div>
+          </div>
+          <div class="panel stack"><div><div class="section-head">P1 ACTIVE <span class="muted">Chờ bài...</span></div></div><div><div class="lane"><div class="chi">Chi 3</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div><div class="card"></div></div></div><div class="lane"><div class="chi">Chi 2</div><div class="cards"><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div></div></div><div class="lane"><div class="chi">Chi 1</div><div class="cards"><div class="card"></div><div class="card"></div><div class="card"></div></div></div></div><div class="toolbar"><div class="mini-nav"><div class="btn">P1</div><div class="btn ghost">P2</div><div class="btn ghost">P3</div></div><div class="btn">XẾP BÀI</div></div></div>
+        </div>
+        <div class="footer"><span>Ready</span><div class="tool-pill">TOOL 1</div><span>Bản quyền: OK | Hết hạn: 2027-03-17</span><span>Giao diện: Tối</span></div>
+      </article>
+
+      <article class="concept c2 layout-b">
+        <div class="titlebar"><div class="window-title"><span class="appicon"></span>Tool MB</div><div class="winbtns">─ □ ×</div></div>
+        <div class="tabs"><div class="tab on">Bàn & Chiến thuật</div><div class="tab">Trình duyệt</div><div class="tab">Cấu hình</div></div>
+        <div class="body">
+          <div class="panel"><div class="section-head">Profiles</div><div class="profile-nav"><div class="profile-card on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="statebar"></div></div><div class="profile-card"><div class="badge">P2</div><div><b>Profile 2</b><span>Sẵn sàng</span></div><div class="statebar"></div></div><div class="profile-card"><div class="badge">P3</div><div><b>Profile 3</b><span>Sẵn sàng</span></div><div class="statebar"></div></div></div><div class="actions"><div class="btn">Tạo phòng</div><div class="btn info">Vào phòng</div><div class="btn danger">Dừng</div></div></div>
+          <div class="split"><div class="panel stack"><div class="section-head">Phòng Game</div><table><thead><tr><th>Tên</th><th>Vàng</th><th>UID</th></tr></thead><tbody><tr><td>-</td><td>-</td><td>-</td></tr></tbody></table><div class="metrics"><div class="metric"><span>Room</span><b>-</b></div><div class="metric"><span>Bet</span><b>100</b></div><div class="metric"><span>Players</span><b>0/4</b></div></div></div><div class="panel stack"><div class="section-head">Chiến thuật</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div><div class="card"></div><div class="card"></div></div><div class="suggestions"><div class="suggestion"><span>Gợi ý an toàn</span><b>+12</b></div><div class="suggestion"><span>Gợi ý cân bằng</span><b>+9</b></div></div></div></div>
+        </div>
+        <div class="footer"><span>Ready</span><div class="tool-pill">TOOL 1</div><span>License OK</span><span>Teal</span></div>
+      </article>
+
+      <article class="concept c3 layout-c">
+        <div class="titlebar"><div class="window-title"><span class="appicon"></span>Tool MB</div><div class="winbtns">─ □ ×</div></div>
+        <div class="tabs"><div class="tab on">Điều khiển</div><div class="tab">Người chơi</div><div class="tab">Cấu hình</div></div>
+        <div class="body">
+          <div class="top-strip"><div class="metric"><span>Profile</span><b>P1 Active</b></div><div class="metric"><span>Room</span><b>-</b></div><div class="metric"><span>Bet</span><b>100</b></div><div class="metric"><span>Trạng thái</span><b>Chờ bài...</b></div></div>
+          <div class="split strategy-wide"><div class="panel room-grid"><div class="profile-nav"><div class="profile-card on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="statebar"></div></div><div class="profile-card"><div class="badge">P2</div><div><b>Profile 2</b><span>Sẵn sàng</span></div><div class="statebar"></div></div><div class="profile-card busy"><div class="badge">P3</div><div><b>Profile 3</b><span>Đang tạo</span></div><div class="statebar"></div></div></div><table><thead><tr><th>Tên</th><th>Vàng</th><th>UID</th></tr></thead><tbody><tr><td>cuem525279</td><td>442458</td><td>43_819818</td></tr></tbody></table></div><div class="panel stack"><div class="section-head">Bàn chiến thuật</div><div><div class="lane"><div class="chi">Chi 3</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div></div></div><div class="lane"><div class="chi">Chi 2</div><div class="cards"><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div></div></div></div><div class="toolbar"><div class="btn">XẾP BÀI</div></div></div></div>
+        </div>
+        <div class="footer"><span>Ready</span><div class="tool-pill">TOOL 1</div><span>Blue control layout</span><span>Tối</span></div>
+      </article>
+
+      <article class="concept c4 layout-d">
+        <div class="titlebar"><div class="window-title"><span class="appicon"></span>Tool MB</div><div class="winbtns">─ □ ×</div></div>
+        <div class="tabs"><div class="tab on">Chiến Thuật</div><div class="tab">Trình duyệt</div><div class="tab">Cấu hình</div></div>
+        <div class="body">
+          <div class="split room-wide"><div class="panel room-grid"><div class="profile-nav"><div class="profile-card on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="statebar"></div></div><div class="profile-card"><div class="badge">P2</div><div><b>Profile 2</b><span>Sẵn sàng</span></div><div class="statebar"></div></div><div class="profile-card"><div class="badge">P3</div><div><b>Profile 3</b><span>Sẵn sàng</span></div><div class="statebar"></div></div></div><div class="stack"><div class="section-head">Phòng Game</div><table><thead><tr><th>Tên</th><th>Vàng</th><th>UID</th></tr></thead><tbody><tr><td>falang</td><td>17800</td><td>1_276568235</td></tr></tbody></table><div class="row"><div class="btn">Tạo</div><div class="btn info">Gọi</div><div class="btn">Vào</div></div></div></div><div class="panel"><div class="section-head">Chiến thuật</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div><div class="card"></div></div><div class="suggestions"><div class="suggestion"><span>Ưu tiên thắng chi 3</span><b>+8</b></div><div class="suggestion"><span>Giữ bài đều</span><b>+6</b></div></div></div></div>
+          <div class="panel side-tools"><div class="section-head">Lệnh nhanh</div><div class="btn">Tìm khách</div><div class="btn info">Làm mới</div><div class="btn danger">Dừng tất cả</div><div class="metric"><span>Delay</span><b>0ms</b></div></div>
+        </div>
+        <div class="footer"><span>Ready</span><div class="tool-pill">TOOL 1</div><span>Amber action layout</span><span>Tối</span></div>
+      </article>
+
+      <article class="concept c5 layout-e">
+        <div class="titlebar"><div class="window-title"><span class="appicon"></span>Tool MB</div><div class="winbtns">─ □ ×</div></div>
+        <div class="tabs"><div class="tab on">Workspace</div><div class="tab">Profiles</div><div class="tab">Config</div></div>
+        <div class="body">
+          <div class="panel"><div class="section-head">Profiles</div><div class="profile-nav"><div class="profile-card on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="statebar"></div></div><div class="profile-card busy"><div class="badge">P2</div><div><b>Profile 2</b><span>Đang vào</span></div><div class="statebar"></div></div><div class="profile-card"><div class="badge">P3</div><div><b>Profile 3</b><span>Sẵn sàng</span></div><div class="statebar"></div></div></div></div>
+          <div class="panel stack"><div class="section-head">Game Room</div><table><thead><tr><th>Tên</th><th>Vàng</th><th>UID</th></tr></thead><tbody><tr><td>tondonhung</td><td>316403</td><td>1_285364925</td></tr><tr><td>falang</td><td>17800</td><td>1_276568235</td></tr></tbody></table><div class="actions"><div class="row"><div class="select">100</div><div class="btn">Tạo phòng</div><div class="btn">Tìm khách</div><div class="btn danger">Dừng</div></div></div></div>
+          <div class="panel stack"><div class="section-head">Strategy</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div></div><div class="btn">XẾP BÀI</div></div>
+        </div>
+        <div class="footer"><span>Ready</span><div class="tool-pill">TOOL 1</div><span>Three-column workspace</span><span>Wine</span></div>
+      </article>
+
+      <article class="concept c6 layout-f">
+        <div class="titlebar"><div class="window-title"><span class="appicon"></span>Tool MB</div><div class="winbtns">─ □ ×</div></div>
+        <div class="tabs"><div class="tab on">Chiến Thuật</div><div class="tab">Trình duyệt</div><div class="tab">Cấu hình</div><div class="tab">Người chơi</div></div>
+        <div class="body">
+          <div class="wide-nav"><div class="profile-card on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="statebar"></div></div><div class="profile-card"><div class="badge">P2</div><div><b>Profile 2</b><span>Sẵn sàng</span></div><div class="statebar"></div></div><div class="profile-card busy"><div class="badge">P3</div><div><b>Profile 3</b><span>Đang tạo phòng</span></div><div class="statebar"></div></div></div>
+          <div class="split"><div class="panel stack"><div class="section-head">Phòng Game</div><table><thead><tr><th>Tên</th><th>Vàng</th><th>UID</th></tr></thead><tbody><tr><td>-</td><td>-</td><td>-</td></tr></tbody></table><div class="row"><div class="btn">Tạo</div><div class="btn info">Vào</div><div class="btn danger">Dừng</div></div></div><div class="panel stack"><div class="section-head">Chiến thuật</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div><div class="card"></div></div><div class="suggestion"><span>Gợi ý đang chờ dữ liệu</span><b>-</b></div></div></div>
+        </div>
+        <div class="footer"><span>Ready</span><div class="tool-pill">TOOL 1</div><span>Top profile nav</span><span>Olive</span></div>
+      </article>
+
+      <article class="concept c7 layout-g">
+        <div class="titlebar"><div class="window-title"><span class="appicon"></span>Tool MB</div><div class="winbtns">─ □ ×</div></div>
+        <div class="tabs"><div class="tab on">Bàn Game</div><div class="tab">Browser</div><div class="tab">Settings</div></div>
+        <div class="body">
+          <div class="panel stack"><div class="section-head">Room Command Center</div><div class="room-grid"><div class="profile-nav"><div class="profile-card on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="statebar"></div></div><div class="profile-card"><div class="badge">P2</div><div><b>Profile 2</b><span>Sẵn sàng</span></div><div class="statebar"></div></div><div class="profile-card"><div class="badge">P3</div><div><b>Profile 3</b><span>Sẵn sàng</span></div><div class="statebar"></div></div></div><div class="actions"><div class="metric"><span>Room</span><b>-</b></div><div class="metric"><span>Bet</span><b>100</b></div><div class="btn">Tạo phòng</div><div class="btn">Tìm khách</div><div class="btn danger">Dừng</div></div></div><table><thead><tr><th>Tên</th><th>Vàng</th><th>UID</th></tr></thead><tbody><tr><td>cuem525279</td><td>442458</td><td>43_819818</td></tr></tbody></table></div>
+          <div class="panel stack"><div class="section-head">Strategy Board</div><div><div class="lane"><div class="chi">Chi 3</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div></div></div><div class="lane"><div class="chi">Chi 2</div><div class="cards"><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div></div></div></div><div class="toolbar"><div class="btn">XẾP BÀI</div></div></div>
+        </div>
+        <div class="footer"><span>Ready</span><div class="tool-pill">TOOL 1</div><span>Command center</span><span>Teal</span></div>
+      </article>
+
+      <article class="concept c8 layout-h">
+        <div class="titlebar"><div class="window-title"><span class="appicon"></span>Tool MB</div><div class="winbtns">─ □ ×</div></div>
+        <div class="tabs"><div class="tab on">Chiến Thuật</div><div class="tab">Trình duyệt</div><div class="tab">Người chơi</div></div>
+        <div class="body">
+          <div class="panel stack"><div class="section-head">Phòng Game</div><div class="profile-nav"><div class="profile-card on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="statebar"></div></div><div class="profile-card"><div class="badge">P2</div><div><b>Profile 2</b><span>Sẵn sàng</span></div><div class="statebar"></div></div><div class="profile-card busy"><div class="badge">P3</div><div><b>Profile 3</b><span>Đang vào</span></div><div class="statebar"></div></div></div><table><thead><tr><th>Tên</th><th>Vàng</th><th>UID</th></tr></thead><tbody><tr><td>-</td><td>-</td><td>-</td></tr></tbody></table></div>
+          <div class="panel stack"><div class="section-head">Chiến thuật</div><div class="metrics"><div class="metric"><span>Mode</span><b>Auto</b></div><div class="metric"><span>Score</span><b>-</b></div><div class="metric"><span>Apply</span><b>Ready</b></div></div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div><div class="card"></div></div><div class="row right"><div class="btn">XẾP BÀI</div></div></div>
+        </div>
+        <div class="footer"><span>Ready</span><div class="tool-pill">TOOL 1</div><span>Equal split</span><span>Red action</span></div>
+      </article>
+
+      <article class="concept c9 layout-i">
+        <div class="titlebar"><div class="window-title"><span class="appicon"></span>Tool MB</div><div class="winbtns">─ □ ×</div></div>
+        <div class="tabs"><div class="tab on">Workspace</div><div class="tab">Config</div><div class="tab">Players</div></div>
+        <div class="body">
+          <div class="panel rail"><div class="btn">P1</div><div class="btn ghost">P2</div><div class="btn ghost">P3</div><div class="btn danger">⏹</div></div>
+          <div class="split"><div class="panel stack"><div class="section-head">Phòng Game</div><div class="metrics"><div class="metric"><span>Profile</span><b>P1</b></div><div class="metric"><span>Room</span><b>-</b></div><div class="metric"><span>Bet</span><b>100</b></div></div><table><thead><tr><th>Tên</th><th>Vàng</th><th>UID</th></tr></thead><tbody><tr><td>falang</td><td>17800</td><td>1_276568235</td></tr></tbody></table><div class="row"><div class="btn">Tạo</div><div class="btn info">Vào</div></div></div><div class="panel stack"><div class="section-head">Chiến thuật</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div></div><div class="suggestions"><div class="suggestion"><span>Compact rail layout</span><b>+0</b></div></div></div></div>
+        </div>
+        <div class="footer"><span>Ready</span><div class="tool-pill">TOOL 1</div><span>Left rail profile</span><span>Indigo</span></div>
+      </article>
+
+      <article class="concept c10 layout-j">
+        <div class="titlebar"><div class="window-title"><span class="appicon"></span>Tool MB</div><div class="winbtns">─ □ ×</div></div>
+        <div class="tabs"><div class="tab on">Chiến Thuật</div><div class="tab">Trình duyệt v2</div><div class="tab">Cấu hình</div><div class="tab">Người chơi</div></div>
+        <div class="body">
+          <div class="panel room-grid"><div class="profile-nav"><div class="profile-card on"><div class="badge">P1</div><div><b>Profile 1</b><span>Đang chọn</span></div><div class="statebar"></div></div><div class="profile-card"><div class="badge">P2</div><div><b>Profile 2</b><span>Sẵn sàng</span></div><div class="statebar"></div></div><div class="profile-card"><div class="badge">P3</div><div><b>Profile 3</b><span>Sẵn sàng</span></div><div class="statebar"></div></div></div><div class="stack"><div class="section-head">Phòng</div><table><thead><tr><th>Tên</th><th>Vàng</th><th>UID</th></tr></thead><tbody><tr><td>-</td><td>-</td><td>-</td></tr></tbody></table><div class="actions"><div class="row"><div class="btn">Tạo</div><div class="btn">Tìm</div><div class="btn danger">Dừng</div></div></div></div></div>
+          <div class="panel stack"><div class="section-head">Chiến thuật rộng</div><div><div class="lane"><div class="chi">Chi 3</div><div class="cards"><div class="card tall"></div><div class="card tall"></div><div class="card tall"></div><div class="card"></div><div class="card"></div></div></div><div class="lane"><div class="chi">Chi 2</div><div class="cards"><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div></div></div></div><div class="toolbar"><div class="mini-nav"><div class="btn">P1</div><div class="btn ghost">P2</div><div class="btn ghost">P3</div><div class="btn ghost">ALL</div></div><div class="btn">XẾP BÀI</div></div></div>
+        </div>
+        <div class="footer"><span>Ready</span><div class="tool-pill">TOOL 1</div><span>Neutral production UI</span><span>Tối</span></div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

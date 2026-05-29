@@ -28,12 +28,23 @@ call venv\Scripts\activate
 REM --- B5: upgrade pip ---
 python -m pip install --upgrade pip
 
+REM --- B5.1: opencv-python GUI dễ lỗi DLL trong PyInstaller; dùng headless cho xử lý ảnh ---
+pip uninstall -y opencv-python >nul 2>nul
+
 REM --- B6: cài dependency ---
 if exist requirements.txt (
     echo [INFO] Installing requirements...
     pip install -r requirements.txt
 ) else (
     echo [WARN] requirements.txt not found, skipping.
+)
+
+REM --- B6.1: fail fast nếu Qt binding không có trong đúng venv build ---
+python -c "import PySide6, shiboken6; print('[INFO] PySide6 OK:', PySide6.__file__)"
+if errorlevel 1 (
+    echo [ERROR] PySide6 is missing in build venv. Check requirements.txt/install log.
+    pause
+    exit /b 1
 )
 
 REM --- B7: cài PyInstaller ---
@@ -84,8 +95,19 @@ xcopy /E /I /Y config\games dist\MBTool\config\games >nul
 
 copy /Y icon.ico dist\MBTool\icon.ico >nul
 
+REM --- copy chrome extensions theo Tool ---
+if not exist dist\MBTool\chrome_ext (
+    mkdir dist\MBTool\chrome_ext
+)
+xcopy /E /I /Y chrome_ext dist\MBTool\chrome_ext >nul
+
 REM --- B11: kiểm tra kết quả ---
 if exist dist\MBTool\MBTool.exe (
+    if not exist dist\MBTool\_internal\PySide6 (
+        echo [ERROR] BUILD INVALID: dist\MBTool\_internal\PySide6 is missing.
+        pause
+        exit /b 1
+    )
     echo.
     echo ==========================================
     echo  BUILD SUCCESS!

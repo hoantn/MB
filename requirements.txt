@@ -1,8 +1,9 @@
 pillow
 imagehash
-opencv-python
+opencv-python-headless
 numpy
 requests
 websocket-client
 pynacl
 cbor2
+PySide6

@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Xào Vàng Reskin Samples</title>
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --panel: #121820;
+      --panel2: #18212c;
+      --line: #2a3544;
+      --text: #f3f7fb;
+      --muted: #8f9cab;
+      --gold: #f5b94d;
+      --tai: #2bc56d;
+      --xiu: #ff6961;
+      --blue: #4f8cff;
+      --cyan: #40c5d8;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #080a0d;
+      color: var(--text);
+      font-family: "Segoe UI", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+    .page { max-width: 1500px; margin: 0 auto; padding: 24px; }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 26px; margin-bottom: 6px; }
+    .sub { color: var(--muted); margin-bottom: 22px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .sample {
+      min-height: 430px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .sample-head {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: rgba(255,255,255,.025);
+      border-bottom: 1px solid var(--line);
+    }
+    .sample-head h2 { font-size: 15px; }
+    .tag { color: var(--muted); font-size: 12px; }
+    .body { padding: 16px; }
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .btn {
+      height: 36px;
+      min-width: 58px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #0e141b;
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .btn.on { background: #1c355a; border-color: var(--blue); }
+    .btn.tai.on { background: #124d2c; border-color: var(--tai); color: #9ff4bc; }
+    .btn.xiu.on { background: #562026; border-color: var(--xiu); color: #ffc0bb; }
+    .btn.gold.on { background: rgba(245,185,77,.16); border-color: var(--gold); color: #ffd991; }
+    .primary {
+      background: var(--gold);
+      color: #15100a;
+      border-color: var(--gold);
+      min-width: 180px;
+      height: 42px;
+    }
+    .table {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #0d1218;
+    }
+    .tr {
+      display: grid;
+      grid-template-columns: 70px 1fr 1fr 1.4fr;
+      align-items: center;
+      min-height: 44px;
+      border-top: 1px solid rgba(255,255,255,.06);
+      padding: 0 12px;
+      gap: 10px;
+    }
+    .tr:first-child { border-top: 0; }
+    .money { color: #ffd16b; font-weight: 950; }
+    .tai-text { color: #84eba7; font-weight: 950; }
+    .xiu-text { color: #ffa19a; font-weight: 950; }
+    .muted { color: var(--muted); }
+    .footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+    .status { background: #0d1218; border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px; color: #bdd6ef; }
+    .log { margin-top: 12px; min-height: 76px; background: #0a1017; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; color: #d9e7f5; font-size: 12px; }
+    .section { margin-bottom: 14px; }
+    .chips { color: #bcd0e2; font-weight: 850; }
+
+    /* Sample 1 */
+    .s1 .top { display: grid; grid-template-columns: .85fr .85fr 2fr; gap: 12px; }
+
+    /* Sample 2 */
+    .s2 .split { display: grid; grid-template-columns: 270px 1fr; gap: 14px; }
+    .s2 .side-panel { background: #0d1218; border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+    .s2 .stack { display: grid; gap: 8px; }
+    .s2 .stack .btn { justify-content: flex-start; height: 44px; }
+
+    /* Sample 3 */
+    .s3 .command {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 12px;
+      background: #0e141b;
+      border: 1px solid #34445a;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 14px;
+    }
+    .s3 .command strong { font-size: 22px; color: #ffd16b; }
+
+    /* Sample 4 */
+    .s4 .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+    .card { background: #0d1218; border: 1px solid var(--line); border-radius: 8px; padding: 13px; }
+    .card.main { border-color: var(--gold); background: rgba(245,185,77,.08); }
+    .card h3 { font-size: 15px; margin-bottom: 8px; }
+    .big { font-size: 26px; font-weight: 950; margin-top: 4px; }
+
+    /* Sample 5 */
+    .s5 .wide-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr 2.2fr auto;
+      gap: 10px;
+      align-items: end;
+      margin-bottom: 14px;
+    }
+    .s5 .mini-panel { background: #0d1218; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+    .s5 .summary-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+      .s1 .top, .s2 .split, .s5 .wide-actions { grid-template-columns: 1fr; }
+      .tr { grid-template-columns: 50px 1fr 1fr; }
+      .tr .chips { grid-column: 2 / 4; padding-bottom: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>Reskin Xào Vàng</h1>
+    <p class="sub">Các mẫu tập trung vào thao tác chip thật: chọn P chính, chọn cửa, chọn gói hợp lệ, xem 3 lệnh rồi đánh.</p>
+
+    <div class="grid">
+      <section class="sample s1">
+        <div class="sample-head"><h2>1. Gọn Theo Luồng</h2><span class="tag">dễ chuyển từ bản hiện tại</span></div>
+        <div class="body">
+          <div class="top">
+            <div class="section"><div class="label">P chính</div><div class="row"><span class="btn on">P2</span><span class="btn">P1</span><span class="btn">P3</span></div></div>
+            <div class="section"><div class="label">Cửa</div><div class="row"><span class="btn tai on">TÀI</span><span class="btn xiu">XỈU</span></div></div>
+            <div class="section"><div class="label">Gói chip hợp lệ</div><div class="row"><span class="btn gold">20K</span><span class="btn gold on">100K</span><span class="btn gold">200K</span><span class="btn gold">1M</span><span class="btn gold">2M</span></div></div>
+          </div>
+          <div class="table">
+            <div class="tr"><b>P1</b><span class="xiu-text">XỈU</span><span class="money">50.000</span><span class="chips">50K</span></div>
+            <div class="tr"><b>P2</b><span class="tai-text">TÀI</span><span class="money">100.000</span><span class="chips">100K</span></div>
+            <div class="tr"><b>P3</b><span class="xiu-text">XỈU</span><span class="money">50.000</span><span class="chips">50K</span></div>
+          </div>
+          <div class="footer"><span class="status">Tài 100.000 / Xỉu 100.000 - cân cửa</span><span class="btn primary">ĐÁNH XÀO VÀNG</span></div>
+          <div class="log">[07:43:18] Xào Vàng | P2 TÀI 100.000 | chip plan OK</div>
+        </div>
+      </section>
+
+      <section class="sample s2">
+        <div class="sample-head"><h2>2. Rail Trái</h2><span class="tag">đổi P chính nhanh</span></div>
+        <div class="body">
+          <div class="split">
+            <div class="side-panel">
+              <div class="section"><div class="label">Profile</div><div class="stack"><span class="btn">P1</span><span class="btn on">P2</span><span class="btn">P3</span></div></div>
+              <div class="section"><div class="label">Cửa P chính</div><div class="row"><span class="btn tai on">TÀI</span><span class="btn xiu">XỈU</span></div></div>
+              <div class="section"><div class="label">Gói</div><div class="row"><span class="btn gold on">100K</span><span class="btn gold">1M</span><span class="btn gold">10M</span></div></div>
+              <span class="btn primary" style="width:100%">ĐÁNH</span>
+            </div>
+            <div>
+              <div class="table">
+                <div class="tr"><b>P1</b><span class="xiu-text">XỈU</span><span class="money">50.000</span><span class="chips">50K</span></div>
+                <div class="tr"><b>P2</b><span class="tai-text">TÀI</span><span class="money">100.000</span><span class="chips">100K</span></div>
+                <div class="tr"><b>P3</b><span class="xiu-text">XỈU</span><span class="money">50.000</span><span class="chips">50K</span></div>
+              </div>
+              <div class="log">Status: Sẵn sàng<br>Delay: 100ms<br>Chip chỉ lấy từ tọa độ đã fix</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="sample s3">
+        <div class="sample-head"><h2>3. Command Rõ Kết Quả</h2><span class="tag">nhìn một dòng là hiểu</span></div>
+        <div class="body">
+          <div class="command">
+            <div>
+              <div class="label">Lệnh sẽ chạy</div>
+              <strong>P2 TÀI 100K → P1/P3 XỈU 50K</strong>
+            </div>
+            <span class="btn primary">ĐÁNH</span>
+          </div>
+          <div class="section"><div class="label">Chọn nhanh</div><div class="row"><span class="btn">P1</span><span class="btn on">P2</span><span class="btn">P3</span><span class="btn tai on">TÀI</span><span class="btn xiu">XỈU</span><span class="btn gold">20K</span><span class="btn gold on">100K</span><span class="btn gold">1M</span></div></div>
+          <div class="table">
+            <div class="tr"><b>P1</b><span class="xiu-text">XỈU</span><span class="money">50.000</span><span class="chips">1 click 50K</span></div>
+            <div class="tr"><b>P2</b><span class="tai-text">TÀI</span><span class="money">100.000</span><span class="chips">1 click 100K</span></div>
+            <div class="tr"><b>P3</b><span class="xiu-text">XỈU</span><span class="money">50.000</span><span class="chips">1 click 50K</span></div>
+          </div>
+          <div class="footer"><span class="status">Không hiện gói không bấm được</span><span class="muted">100ms</span></div>
+        </div>
+      </section>
+
+      <section class="sample s4">
+        <div class="sample-head"><h2>4. Card 3P</h2><span class="tag">trực quan từng profile</span></div>
+        <div class="body">
+          <div class="section"><div class="label">Thiết lập</div><div class="row"><span class="btn">P1</span><span class="btn on">P2</span><span class="btn">P3</span><span class="btn tai on">TÀI</span><span class="btn gold on">100K</span></div></div>
+          <div class="cards">
+            <div class="card"><h3>P1</h3><span class="xiu-text">XỈU</span><div class="big money">50K</div><p class="chips">50K</p></div>
+            <div class="card main"><h3>P2 - chính</h3><span class="tai-text">TÀI</span><div class="big money">100K</div><p class="chips">100K</p></div>
+            <div class="card"><h3>P3</h3><span class="xiu-text">XỈU</span><div class="big money">50K</div><p class="chips">50K</p></div>
+          </div>
+          <div class="footer"><span class="status">Cân cửa tuyệt đối</span><span class="btn primary">ĐÁNH XÀO VÀNG</span></div>
+          <div class="log">Gợi ý dùng khi muốn người vận hành nhìn từng P rõ hơn bảng dòng.</div>
+        </div>
+      </section>
+
+      <section class="sample s5">
+        <div class="sample-head"><h2>5. Operator Dense</h2><span class="tag">gọn cho màn hình ngang</span></div>
+        <div class="body">
+          <div class="wide-actions">
+            <div class="mini-panel"><div class="label">P chính</div><div class="row"><span class="btn">P1</span><span class="btn on">P2</span><span class="btn">P3</span></div></div>
+            <div class="mini-panel"><div class="label">Cửa</div><div class="row"><span class="btn tai on">TÀI</span><span class="btn xiu">XỈU</span></div></div>
+            <div class="mini-panel"><div class="label">Gói chip</div><div class="row"><span class="btn gold">20K</span><span class="btn gold on">100K</span><span class="btn gold">200K</span><span class="btn gold">1M</span><span class="btn gold">2M</span></div></div>
+            <span class="btn primary">ĐÁNH</span>
+          </div>
+          <div class="summary-strip">
+            <div class="card"><b>P1</b><p><span class="xiu-text">XỈU</span> <span class="money">50K</span></p><p class="chips">50K</p></div>
+            <div class="card main"><b>P2</b><p><span class="tai-text">TÀI</span> <span class="money">100K</span></p><p class="chips">100K</p></div>
+            <div class="card"><b>P3</b><p><span class="xiu-text">XỈU</span> <span class="money">50K</span></p><p class="chips">50K</p></div>
+          </div>
+          <div class="log">Dạng này hợp nếu muốn tab thấp hơn, ít chiếm chiều cao hơn bản hiện tại.</div>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

@@ -3,7 +3,10 @@ from pathlib import Path
 import os
 import subprocess
 import shutil
+import time
+import ctypes
 from typing import Dict, Optional
+import requests
 from .local_proxy import AuthHttpForwardProxy
 
 from core.config import load_config, save_config
@@ -22,6 +25,12 @@ from .tab import BrowserTab
 
 
 PROFILE_PORTS = {}
+RUNTIME_BROWSER_DIR = os.path.join(BASE_DIR, "runtime")
+PREFERRED_BROWSER_EXES = (
+    "GoogleChromePortable.exe",
+    "chrome.exe",
+    "msedge.exe",
+)
 
 
 def get_default_chrome_path() -> str:
@@ -29,11 +38,68 @@ def get_default_chrome_path() -> str:
     candidates = [
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
         r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     ]
     for p in candidates:
         if os.path.exists(p):
             return p
     return "chrome"
+
+
+def is_official_chromium_path(path: str) -> bool:
+    p = (path or "").lower().replace("/", "\\")
+    return (
+        p.endswith("\\google\\chrome\\application\\chrome.exe")
+        or p.endswith("\\microsoft\\edge\\application\\msedge.exe")
+    )
+
+
+def profile_has_tool_extension(user_data_dir: str, ext_dir: str) -> bool:
+    pref_path = os.path.join(user_data_dir, "Default", "Preferences")
+    if not os.path.exists(pref_path):
+        return False
+    try:
+        with open(pref_path, "r", encoding="utf-8") as f:
+            prefs = json.load(f)
+        settings = ((prefs.get("extensions") or {}).get("settings") or {})
+        ext_abs = os.path.abspath(ext_dir)
+        for item in settings.values():
+            path = os.path.abspath(str(item.get("path") or ""))
+            manifest = item.get("manifest") or {}
+            name = str(manifest.get("name") or "")
+            if path == ext_abs or name.startswith("Kendz MB Tool"):
+                return True
+    except Exception:
+        return False
+    return False
+
+
+def open_chrome_extensions_page(port: int) -> bool:
+    url = f"http://127.0.0.1:{port}/json/new?chrome://extensions/"
+    for _ in range(12):
+        try:
+            requests.put(url, timeout=0.5)
+            return True
+        except Exception:
+            time.sleep(0.25)
+    return False
+
+
+def is_devtools_port_ready(port: int, timeout: float = 0.4) -> bool:
+    """Return True only when the DevTools endpoint has an attachable page tab."""
+    try:
+        r = requests.get(f"http://127.0.0.1:{int(port)}/json", timeout=timeout)
+        if r.status_code != 200:
+            return False
+        tabs = r.json()
+        return any(
+            t.get("type") == "page" and t.get("webSocketDebuggerUrl")
+            for t in tabs
+            if isinstance(t, dict)
+        )
+    except Exception:
+        return False
 
 
 def get_default_user_data_dir(profile_id: str) -> str:
@@ -53,6 +119,189 @@ class BrowserManager:
         self.tabs: Dict[str, BrowserTab] = {}
         self.processes: Dict[str, subprocess.Popen] = {}
         self.local_proxies: dict[str, AuthHttpForwardProxy] = {}
+
+    def _find_browser_exe_in_dir(self, folder: str) -> Optional[str]:
+        """Find the executable inside a clean portable browser folder."""
+        if not os.path.isdir(folder):
+            return None
+
+        for name in PREFERRED_BROWSER_EXES:
+            p = os.path.join(folder, name)
+            if os.path.isfile(p):
+                return p
+
+        try:
+            for name in os.listdir(folder):
+                p = os.path.join(folder, name)
+                if os.path.isfile(p) and name.lower().endswith(".exe"):
+                    return p
+        except Exception:
+            return None
+        return None
+
+    def _resolve_browser_template(self, chrome_path: str) -> tuple[str, str]:
+        """
+        Resolve user input into (template_dir, exe_name).
+
+        The UI still stores the value in chrome_path for compatibility, but the
+        value can now be either a clean portable folder or the executable inside
+        that folder.
+        """
+        raw = os.path.abspath(str(chrome_path or "").strip())
+        if os.path.isdir(raw):
+            exe = self._find_browser_exe_in_dir(raw)
+            if not exe:
+                raise FileNotFoundError(f"Không tìm thấy file exe trong thư mục trình duyệt: {raw}")
+            return raw, os.path.basename(exe)
+
+        if os.path.isfile(raw) and raw.lower().endswith(".exe"):
+            return os.path.dirname(raw), os.path.basename(raw)
+
+        raise FileNotFoundError(f"Đường dẫn trình duyệt không hợp lệ: {chrome_path}")
+
+    def _get_runtime_profile_dir(self, profile_id: str) -> str:
+        return os.path.join(RUNTIME_BROWSER_DIR, str(profile_id or "P1"))
+
+    def _terminate_process_tree(self, proc: subprocess.Popen, profile_id: str) -> None:
+        """Terminate launcher + child chrome.exe processes for this profile."""
+        if proc is None or proc.poll() is not None:
+            return
+        try:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                    creationflags=0x08000000,
+                )
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    pass
+            else:
+                proc.terminate()
+                proc.wait(timeout=5)
+            log.info("Chrome process tree for %s terminated", profile_id)
+        except Exception as e:
+            log.warning("Cannot terminate Chrome process tree for %s: %s", profile_id, e)
+
+    def _get_browser_pids_by_port(self, port: int) -> set[int]:
+        """Find browser processes that belong to the profile DevTools port."""
+        if os.name != "nt":
+            return set()
+
+        needle = f"--remote-debugging-port={int(port)}"
+        cmd = (
+            "$ErrorActionPreference='SilentlyContinue'; "
+            "Get-CimInstance Win32_Process | "
+            f"Where-Object {{ $_.CommandLine -like '*{needle}*' }} | "
+            "ForEach-Object { $_.ProcessId }"
+        )
+        try:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", cmd],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=2,
+                creationflags=0x08000000,
+            )
+        except Exception:
+            return set()
+
+        pids: set[int] = set()
+        for line in (result.stdout or "").splitlines():
+            try:
+                pids.add(int(line.strip()))
+            except ValueError:
+                pass
+        return pids
+
+    def _focus_browser_window_by_port(self, profile_id: str, port: int) -> bool:
+        """Bring the visible Windows browser window for this profile to front."""
+        pids = self._get_browser_pids_by_port(port)
+        if not pids or os.name != "nt":
+            return False
+
+        user32 = ctypes.windll.user32
+        hwnds: list[int] = []
+
+        @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+        def enum_proc(hwnd, _lparam):
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            pid = ctypes.c_ulong()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if int(pid.value) in pids and user32.GetWindowTextLengthW(hwnd) > 0:
+                hwnds.append(int(hwnd))
+            return True
+
+        try:
+            user32.EnumWindows(enum_proc, 0)
+            if not hwnds:
+                return False
+
+            hwnd = hwnds[0]
+            SW_RESTORE = 9
+            user32.ShowWindow(hwnd, SW_RESTORE)
+            user32.BringWindowToTop(hwnd)
+            ok = bool(user32.SetForegroundWindow(hwnd))
+            log.info("Browser[%s] focused existing window: hwnd=%s ok=%s", profile_id, hwnd, ok)
+            return ok
+        except Exception as e:
+            log.warning("Browser[%s] cannot focus existing window: %s", profile_id, e)
+            return False
+
+    def _bring_existing_browser_to_front(self, profile_id: str, port: int) -> None:
+        """Reuse an existing browser and guide the user back to its window."""
+        try:
+            tab = self.ensure_tab(profile_id)
+            if tab:
+                tab.devtools.install_title_prefix(f"[{profile_id}]")
+                tab.devtools.bring_to_front()
+        except Exception as e:
+            log.warning("Browser[%s] cannot bring DevTools page to front: %s", profile_id, e)
+        self._focus_browser_window_by_port(profile_id, port)
+
+    def _install_profile_title_prefix(self, profile_id: str) -> None:
+        """Make the profile id visible in the browser title/taskbar preview."""
+        try:
+            tab = self.ensure_tab(profile_id)
+            if tab:
+                tab.devtools.install_title_prefix(f"[{profile_id}]")
+        except Exception as e:
+            log.warning("Browser[%s] cannot install title prefix: %s", profile_id, e)
+
+    def _prepare_runtime_browser_dir(self, profile_id: str, chrome_path: str) -> str:
+        """
+        Copy the clean browser template folder into runtime/<profile> on first open.
+
+        The source folder is never launched directly. If runtime/<profile> already
+        contains the expected executable, it is reused as-is.
+        """
+        template_dir, exe_name = self._resolve_browser_template(chrome_path)
+        runtime_dir = self._get_runtime_profile_dir(profile_id)
+        runtime_exe = os.path.join(runtime_dir, exe_name)
+
+        if not os.path.isfile(runtime_exe):
+            os.makedirs(os.path.dirname(runtime_dir), exist_ok=True)
+            try:
+                shutil.copytree(template_dir, runtime_dir, dirs_exist_ok=True)
+                log.info(
+                    "Browser[%s] runtime browser copied: %s -> %s",
+                    profile_id,
+                    template_dir,
+                    runtime_dir,
+                )
+            except Exception as e:
+                log.error("Browser[%s] cannot copy runtime browser from %s: %s", profile_id, template_dir, e)
+                raise
+
+        if not os.path.isfile(runtime_exe):
+            raise FileNotFoundError(f"Không tìm thấy runtime browser exe: {runtime_exe}")
+
+        return runtime_exe
 
     # luôn load lại config mới nhất trước khi xử lý
     def _load_config_fresh(self) -> dict:
@@ -293,10 +542,25 @@ chrome.webRequest.onAuthRequired.addListener(
         tool_index = get_tool_index()
         tool_name = get_tool_name(tool_index)
 
+        # Chrome Portable may leave the launcher process while the real browser
+        # process is already serving DevTools. Treat the DevTools page as the
+        # source of truth so repeated "Open" clicks cannot spawn duplicates.
+        if is_devtools_port_ready(port):
+            log.info("Browser for %s already open on DevTools port %s (reuse).", profile_id, port)
+            self._bring_existing_browser_to_front(profile_id, port)
+            return
+
         chrome_path = cfg.chrome_path or get_default_chrome_path()
-        user_data_dir = cfg.user_data_dir or get_default_user_data_dir(profile_id)
+        launch_chrome_path = self._prepare_runtime_browser_dir(profile_id, chrome_path)
+        user_data_dir = os.path.join(self._get_runtime_profile_dir(profile_id), "user-data")
         os.makedirs(user_data_dir, exist_ok=True)
         ws_ext_dir = get_tool_extension_dir(profile_id, tool_index)
+        has_ws_ext = os.path.isdir(ws_ext_dir)
+        needs_manual_extension = (
+            has_ws_ext
+            and is_official_chromium_path(chrome_path)
+            and not profile_has_tool_extension(user_data_dir, ws_ext_dir)
+        )
 
         # width/height/scale từ cấu hình window
         width = cfg.window.width
@@ -307,10 +571,30 @@ chrome.webRequest.onAuthRequired.addListener(
 
         proc = self.processes.get(profile_id)
         if proc and proc.poll() is None:
-            log.info("Browser for %s already running (reuse).", profile_id)
+            if is_devtools_port_ready(port):
+                log.info("Browser for %s already running (reuse).", profile_id)
+                self._bring_existing_browser_to_front(profile_id, port)
+            else:
+                log.warning(
+                    "Browser for %s has live process but DevTools port %s is not ready; relaunch.",
+                    profile_id,
+                    port,
+                )
+                try:
+                    tab = self.tabs.pop(profile_id, None)
+                    if tab:
+                        tab.devtools.disconnect()
+                except Exception:
+                    pass
+                self._terminate_process_tree(proc, profile_id)
+                self.processes.pop(profile_id, None)
+                proc = None
+
+        if proc and proc.poll() is None:
+            pass
         else:
             args = [
-                chrome_path,
+                launch_chrome_path,
                 f"--remote-debugging-port={port}",
                 f"--user-data-dir={user_data_dir}",
 
@@ -325,10 +609,19 @@ chrome.webRequest.onAuthRequired.addListener(
                 f"--window-size={win_w},{win_h}",
                 "--remote-allow-origins=*",
             ]
-            if os.path.isdir(ws_ext_dir):
-                args.append(f"--disable-extensions-except={ws_ext_dir}")
+            if has_ws_ext:
+                if not is_official_chromium_path(chrome_path):
+                    args.append(f"--disable-extensions-except={ws_ext_dir}")
                 args.append(f"--load-extension={ws_ext_dir}")
                 log.info("Browser[%s] load WS extension for %s: %s", profile_id, tool_name, ws_ext_dir)
+                if needs_manual_extension:
+                    args.append("chrome://extensions/")
+                    log.warning(
+                        "Browser[%s] can cai extension thu cong cho %s: bat Developer mode, Load unpacked, chon thu muc: %s",
+                        profile_id,
+                        tool_name,
+                        ws_ext_dir,
+                    )
             else:
                 log.warning(
                     "Browser[%s] khÃ´ng tháº¥y WS extension cho %s: %s",
@@ -385,14 +678,22 @@ chrome.webRequest.onAuthRequired.addListener(
                     stderr=subprocess.DEVNULL,
                 )
                 self.processes[profile_id] = proc
+                if needs_manual_extension:
+                    if not open_chrome_extensions_page(port):
+                        log.warning(
+                            "Browser[%s] khong mo duoc chrome://extensions qua DevTools port %s",
+                            profile_id,
+                            port,
+                        )
                 log.info(
-                    "Launched Chrome for %s (%s) on port %s, window=%sx%s, scale=%.2f",
+                    "Launched Chrome for %s (%s) on port %s, window=%sx%s, scale=%.2f, exe=%s",
                     profile_id,
                     tool_name,
                     port,
                     win_w,
                     win_h,
                     scale,
+                    launch_chrome_path,
                 )
             except Exception as e:
                 log.error("Không thể mở Chrome cho %s: %s", profile_id, e)
@@ -402,6 +703,7 @@ chrome.webRequest.onAuthRequired.addListener(
         if hasattr(self, "ensure_tab"):
             try:
                 self.ensure_tab(profile_id)
+                self._install_profile_title_prefix(profile_id)
             except Exception as e:
                 log.error("Không thể attach DevTools cho %s: %s", profile_id, e)
 
@@ -415,9 +717,7 @@ chrome.webRequest.onAuthRequired.addListener(
         proc = self.processes.get(profile_id)
         if proc and proc.poll() is None:
             try:
-                proc.terminate()
-                proc.wait(timeout=5)
-                log.info("Chrome process for %s terminated", profile_id)
+                self._terminate_process_tree(proc, profile_id)
             except Exception as e:
                 log.warning("Không thể terminate Chrome cho %s: %s", profile_id, e)
         if profile_id in self.processes:
@@ -427,6 +727,27 @@ chrome.webRequest.onAuthRequired.addListener(
         return self.tabs.get(profile_id)
         
     def delete_profile_user_data(self, profile_id: str) -> bool:
+        """Delete runtime/<profile>; the clean browser source folder is untouched."""
+        self.close_browser(profile_id)
+
+        runtime_root = os.path.abspath(RUNTIME_BROWSER_DIR)
+        path = os.path.abspath(self._get_runtime_profile_dir(profile_id))
+        if not (path == runtime_root or path.startswith(runtime_root + os.sep)):
+            log.error("Refuse to delete runtime profile outside runtime root: %s", path)
+            return False
+
+        if not os.path.isdir(path):
+            log.info("Runtime browser profile %s does not exist, already clean: %s", profile_id, path)
+            return True
+
+        try:
+            shutil.rmtree(path)
+            log.info("Deleted runtime browser profile %s: %s", profile_id, path)
+            return True
+        except Exception as e:
+            log.error("Cannot delete runtime browser profile %s (%s): %s", profile_id, path, e)
+            return False
+
         """
         Xóa thư mục user_data_dir hiện tại của profile (P1/P2/P3),
         SAU ĐÓ nếu có thư mục template <user_data_dir>-D (P1-D/P2-D/P3-D)

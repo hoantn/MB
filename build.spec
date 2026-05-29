@@ -10,7 +10,14 @@ block_cipher = None
 
 # --- Hidden imports: gom chắc các module hay bị thiếu khi build exe ---
 hiddenimports = []
-hiddenimports += collect_submodules("PySide6")
+hiddenimports += [
+    "PySide6",
+    "PySide6.QtCore",
+    "PySide6.QtGui",
+    "PySide6.QtWidgets",
+    "PySide6.QtNetwork",
+]
+hiddenimports += collect_submodules("shiboken6")
 hiddenimports += collect_submodules("nacl")
 hiddenimports += collect_submodules("cbor2")
 hiddenimports += collect_submodules("ui2")
@@ -19,13 +26,15 @@ hiddenimports += collect_submodules("ui2")
 hiddenimports += collect_submodules("engine")
 hiddenimports += collect_submodules("browser")
 hiddenimports += collect_submodules("capture")
-hiddenimports += collect_submodules("cv2")
+hiddenimports += ["cv2"]
 
 # --- Datas: đúng yêu cầu của anh ---
 # - vision/opp là THƯ MỤC
 # - config/config.json là FILE
 # - icon.ico là FILE
 datas = [
+    ("vision/opp", "vision/opp"),
+    ("chrome_ext", "chrome_ext"),
     ("config/config.json", "config"),
 	("config/games", "config/games"),
     ("icon.ico", "."),
@@ -35,10 +44,12 @@ datas = [
 binaries = []
 binaries += collect_dynamic_libs("nacl")
 binaries += collect_dynamic_libs("cbor2")
-binaries += collect_dynamic_libs("cv2")
+binaries += collect_dynamic_libs("PySide6")
+binaries += collect_dynamic_libs("shiboken6")
 
 # PySide6/Qt plugins: gom data để tránh lỗi runtime (đen màn hình, missing plugin)
 datas += collect_data_files("PySide6")
+datas += collect_data_files("shiboken6")
 
 a = Analysis(
     ["ui2/main.py"],

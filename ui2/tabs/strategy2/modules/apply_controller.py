@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections import Counter
+
 from PySide6.QtCore import QTimer, QThread
 from PySide6.QtWidgets import QMessageBox
 
@@ -22,6 +24,54 @@ class ApplyController:
     def __init__(self) -> None:
         pass
 
+    def on_apply_combo(self, tab, suggestions_by_pid: dict) -> None:
+        """Apply an explicit global combo suggestion for P1/P2/P3."""
+        try:
+            contexts = []
+            for pid in getattr(tab, "profiles", ["P1", "P2", "P3"]):
+                sug = dict((suggestions_by_pid or {}).get(pid) or {})
+                ws_codes = list(tab._codes_slot_order.get(pid) or [])
+                if len(ws_codes) != 13 or not sug:
+                    continue
+
+                target = (
+                    list(sug.get("chi1_codes") or [])
+                    + list(sug.get("chi2_codes") or [])
+                    + list(sug.get("chi3_codes") or [])
+                )
+                if len(target) != 13 or Counter(map(str, target)) != Counter(map(str, ws_codes)):
+                    log.error("[APPLY COMBO SKIP] pid=%s card-mismatch", pid)
+                    continue
+
+                contexts.append({
+                    "pid": str(pid),
+                    "ws_codes": list(ws_codes),
+                    "suggestion": sug,
+                })
+
+            if len(contexts) != 3:
+                QMessageBox.warning(tab, "Bẻ Sập Làng", "Combo không đủ 3P hợp lệ để xếp.")
+                return
+
+            def _apply_context(ctx: dict) -> None:
+                pid = str(ctx.get("pid") or "")
+                try:
+                    apply_suggestion_dashboard_style(
+                        tab=tab,
+                        profile_id=pid,
+                        ws_codes=list(ctx.get("ws_codes") or []),
+                        suggestion=dict(ctx.get("suggestion") or {}),
+                    )
+                except Exception as e:
+                    log.exception("[Strategy2] ApplyController combo apply error pid=%s: %s", pid, e)
+
+            for i, ctx in enumerate(contexts):
+                QTimer.singleShot(i * 140, lambda c=ctx: _apply_context(c))
+
+        except Exception as e:
+            log.exception("[Strategy2] ApplyController.on_apply_combo error: %s", e)
+            QMessageBox.warning(tab, "Bẻ Sập Làng", f"Apply combo lỗi: {e}")
+
     # -----------------------
     # PUBLIC API (contract)
     # -----------------------
@@ -41,6 +91,8 @@ class ApplyController:
             if not suggs or idx < 0 or idx >= len(suggs):
                 QMessageBox.warning(tab, "HÚP", f"{pid}: Chưa có gợi ý.")
                 return
+
+            sug = suggs[idx]
 
             # If it is special-row, do not drag-apply
             try:
@@ -65,9 +117,7 @@ class ApplyController:
                 
             # FAIL-SAFE: suggestion phải sử dụng đúng 13 lá hiện tại
             try:
-                from collections import Counter
-                s = suggs[idx]
-                target = (s.get("chi1_codes") or []) + (s.get("chi2_codes") or []) + (s.get("chi3_codes") or [])
+                target = (sug.get("chi1_codes") or []) + (sug.get("chi2_codes") or []) + (sug.get("chi3_codes") or [])
                 if len(target) == 13:
                     if Counter(map(str, target)) != Counter(map(str, ws_codes)):
                         log.error(
@@ -85,7 +135,7 @@ class ApplyController:
                 tab=tab,
                 profile_id=pid,
                 ws_codes=list(ws_codes),
-                suggestion=suggs[idx],
+                suggestion=sug,
             )
 
         except Exception as e:
@@ -100,9 +150,10 @@ class ApplyController:
             if not pids:
                 pids = ["P1", "P2", "P3"]
 
+            contexts = []
             for pid in pids:
                 # Apply only if we have 13 cards + suggestions
-                ws_codes = tab._codes_slot_order.get(pid) or []
+                ws_codes = list(tab._codes_slot_order.get(pid) or [])
                 if len(ws_codes) != 13:
                     continue
                 suggs = tab._suggestions_render.get(pid) or tab._suggestions.get(pid) or []
@@ -110,14 +161,53 @@ class ApplyController:
                 if not suggs or idx < 0 or idx >= len(suggs):
                     continue
 
+                sug = dict(suggs[idx])
+
                 # Do NOT apply special row
                 try:
-                    if tab._is_special_row(suggs[idx]):
+                    if tab._is_special_row(sug):
                         continue
                 except Exception:
                     pass
 
-                self.on_apply(tab, pid)
+                target = (sug.get("chi1_codes") or []) + (sug.get("chi2_codes") or []) + (sug.get("chi3_codes") or [])
+                if len(target) == 13 and Counter(map(str, target)) != Counter(map(str, ws_codes)):
+                    log.error(
+                        "[APPLY ALL SKIP] pid=%s card-mismatch ws_first3=%s target_first3=%s",
+                        pid,
+                        list(ws_codes)[:3],
+                        list(target)[:3],
+                    )
+                    continue
+
+                # Snapshot everything needed before starting workers. After this,
+                # Apply All must not depend on active_profile or UI selection.
+                contexts.append({
+                    "pid": str(pid),
+                    "ws_codes": list(ws_codes),
+                    "suggestion": sug,
+                })
+
+            if not contexts:
+                return
+
+            def _apply_context(ctx: dict) -> None:
+                pid = str(ctx.get("pid") or "")
+                try:
+                    apply_suggestion_dashboard_style(
+                        tab=tab,
+                        profile_id=pid,
+                        ws_codes=list(ctx.get("ws_codes") or []),
+                        suggestion=dict(ctx.get("suggestion") or {}),
+                    )
+                except Exception as e:
+                    log.exception("[Strategy2] ApplyController parallel apply error pid=%s: %s", pid, e)
+
+            # Start nearly together, but not on the exact same millisecond.
+            # Each profile uses its own snapshot so P1/P2/P3 do not read shared
+            # active_profile/list selection while applying.
+            for i, ctx in enumerate(contexts):
+                QTimer.singleShot(i * 140, lambda c=ctx: _apply_context(c))
 
         except Exception as e:
             log.exception("[Strategy2] ApplyController.on_apply_all error: %s", e)

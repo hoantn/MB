@@ -1,12 +1,36 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
+
+hiddenimports = ['requests', 'cbor2', 'nacl', 'websocket', 'PIL', 'cv2', 'numpy', 'imagehash']
+hiddenimports += [
+    'PySide6',
+    'PySide6.QtCore',
+    'PySide6.QtGui',
+    'PySide6.QtWidgets',
+    'PySide6.QtNetwork',
+]
+hiddenimports += collect_submodules('shiboken6')
+
+binaries = []
+binaries += collect_dynamic_libs('PySide6')
+binaries += collect_dynamic_libs('shiboken6')
+
+datas = [
+    ('vision\\opp', 'vision\\opp'),
+    ('chrome_ext', 'chrome_ext'),
+    ('icon.ico', '.'),
+    ('config\\config.json', 'config'),
+]
+datas += collect_data_files('PySide6')
+datas += collect_data_files('shiboken6')
 
 a = Analysis(
     ['ui2\\main.py'],
     pathex=[],
-    binaries=[],
-    datas=[('vision\\opp', 'vision\\opp'), ('icon.ico', '.'), ('config\\config.json', 'config')],
-    hiddenimports=['requests', 'cbor2', 'nacl', 'websocket', 'PIL', 'cv2', 'numpy', 'imagehash'],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

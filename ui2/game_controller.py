@@ -301,6 +301,39 @@ class GameController:
             time.sleep(delay_ms / 1000.0)
 
         self.click_taixiu_confirm(profile_id)
+
+    def play_tai_xiu_chip_plan(self, profile_id: str, chips: list, side: str, delay_ms: int) -> None:
+        """
+        Luong rieng cho Xao Vang: chon cua, bam tung chip that tren game,
+        roi bam DAT CUOC. Khong nhap tien tu do.
+        """
+        side_norm = (side or "").strip().lower()
+        if side_norm not in ("tai", "xiu"):
+            raise RuntimeError(f"Side khong hop le: {side}")
+
+        chip_values = []
+        for chip in chips or []:
+            value = int(chip)
+            if value > 0:
+                chip_values.append(value)
+
+        if not chip_values:
+            raise RuntimeError("Chua co chip de dat cuoc")
+
+        if side_norm == "tai":
+            self.click_tai(profile_id)
+        else:
+            self.click_xiu(profile_id)
+
+        if delay_ms > 0:
+            time.sleep(delay_ms / 1000.0)
+
+        for chip in chip_values:
+            self.click_taixiu_bet(profile_id, chip)
+            if delay_ms > 0:
+                time.sleep(delay_ms / 1000.0)
+
+        self.click_taixiu_confirm(profile_id)
         
     # ==========================================================
     # AUTO SPAM / CHAT

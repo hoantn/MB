@@ -115,6 +115,91 @@ class DevToolsClient:
 
     # ================== SCREENSHOT ==========================
 
+    def bring_to_front(self) -> None:
+        """Ask Chrome DevTools to activate the attached page tab."""
+        ws = self._open_ws()
+        try:
+            ws.send(json.dumps({"id": 1, "method": "Page.enable"}))
+            ws.send(json.dumps({"id": 2, "method": "Page.bringToFront"}))
+        finally:
+            ws.close()
+
+    def install_title_prefix(self, prefix: str) -> None:
+        """Keep a visible profile prefix in the browser title bar/taskbar preview."""
+        clean_prefix = str(prefix or "").strip()
+        if not clean_prefix:
+            return
+
+        js_prefix = json.dumps(clean_prefix)
+        expr = f"""
+        (function () {{
+            var prefix = {js_prefix};
+            var marker = "__mb_title_prefix_installed";
+            var rawKey = "__mb_title_raw";
+
+            function stripKnownPrefix(title) {{
+                return String(title || "").replace(/^\\[(P1|P2|P3)\\]\\s*/, "");
+            }}
+
+            function applyPrefix() {{
+                try {{
+                    var current = String(document.title || "");
+                    var raw = window[rawKey] || stripKnownPrefix(current);
+                    if (current.indexOf(prefix + " ") === 0) {{
+                        return;
+                    }}
+                    if (current !== prefix + " " + raw) {{
+                        window[rawKey] = stripKnownPrefix(current);
+                        document.title = prefix + " " + window[rawKey];
+                    }}
+                }} catch (e) {{}}
+            }}
+
+            try {{
+                if (window[marker]) {{
+                    applyPrefix();
+                    return true;
+                }}
+                window[marker] = true;
+                applyPrefix();
+                setInterval(applyPrefix, 1000);
+                if (document.querySelector("title")) {{
+                    new MutationObserver(applyPrefix).observe(
+                        document.querySelector("title"),
+                        {{ childList: true, characterData: true, subtree: true }}
+                    );
+                }}
+                return true;
+            }} catch (e) {{
+                return false;
+            }}
+        }})()
+        """
+
+        ws = self._open_ws()
+        try:
+            ws.send(json.dumps({"id": 1, "method": "Runtime.enable"}))
+            ws.send(json.dumps({
+                "id": 2,
+                "method": "Page.addScriptToEvaluateOnNewDocument",
+                "params": {"source": expr},
+            }))
+            ws.send(json.dumps({
+                "id": 3,
+                "method": "Runtime.evaluate",
+                "params": {"expression": expr, "returnByValue": True},
+            }))
+            target_id = 3
+            while True:
+                raw = ws.recv()
+                if not raw:
+                    break
+                resp = json.loads(raw)
+                if resp.get("id") == target_id:
+                    break
+        finally:
+            ws.close()
+
     def capture_screenshot(self, region: Dict[str, int] | None = None) -> Image.Image:
         """
         Chụp screenshot qua Page.captureScreenshot.
