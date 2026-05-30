@@ -87,6 +87,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "bet_buttons_profile": {"P1": {}, "P2": {}, "P3": {}},
         "exit_button_profile": {"P1": None, "P2": None, "P3": None},
         "exit_button2_profile": {"P1": None, "P2": None, "P3": None},
+        "binh_button_profile": {"P1": None, "P2": None, "P3": None},
+        "done_button_profile": {"P1": None, "P2": None, "P3": None},
         "taixiu": {
             "tx_bet_values": [
                 "1000",

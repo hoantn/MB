@@ -60,6 +60,12 @@ class CaptureTab(QWidget):
         self._taixiu_pick_mode: bool = False
         self._taixiu_pick_side: str = ""
         self._taixiu_pick_kind: str = ""
+
+        # State: chọn tọa độ nút Báo binh cho Auto Play bài đặc biệt.
+        self._binh_pick_mode: bool = False
+
+        # State: chọn tọa độ nút Xong cho Auto Play xếp thường.
+        self._done_pick_mode: bool = False
         
         self._build_ui()
         self._load_existing_region()
@@ -124,9 +130,19 @@ class CaptureTab(QWidget):
         fix_exit2_btn.setToolTip("Chọn tọa độ nút Thoát phòng #2 trên ảnh Preview cho profile hiện tại")
         fix_exit2_btn.clicked.connect(self.fix_exit_room2_clicked)
         top.addWidget(fix_exit2_btn)
+
+        fix_binh_btn = QPushButton("Fix Binh")
+        fix_binh_btn.setToolTip("Chọn tọa độ nút Báo binh trên ảnh Preview cho profile hiện tại")
+        fix_binh_btn.clicked.connect(self.fix_binh_clicked)
+        top.addWidget(fix_binh_btn)
+
+        fix_done_btn = QPushButton("Fix Xong")
+        fix_done_btn.setToolTip("Chọn tọa độ nút Xong trên ảnh Preview cho profile hiện tại")
+        fix_done_btn.clicked.connect(self.fix_done_clicked)
+        top.addWidget(fix_done_btn)
         
         sync_btn = QPushButton("Đồng bộ config")
-        sync_btn.setToolTip("Copy tọa độ P1 sang P2, P3 (bet vào phòng, thoát phòng, 13 lá)")
+        sync_btn.setToolTip("Copy tọa độ P1 sang P2, P3 (Bet, thoát phòng, Báo binh, Xong, 13 lá)")
         sync_btn.clicked.connect(self.sync_config_from_p1)
         top.addWidget(sync_btn)
 
@@ -246,6 +262,10 @@ class CaptureTab(QWidget):
             self._bet_pick_index = 0
             self._bet_pick_target = "room"
             self._bet_pick_mode = True
+            self._exit_pick_mode = False
+            self._taixiu_pick_mode = False
+            self._binh_pick_mode = False
+            self._done_pick_mode = False
 
             first_bet = self._bet_pick_bets[0]
             QMessageBox.information(
@@ -303,6 +323,8 @@ class CaptureTab(QWidget):
             self._bet_pick_mode = True
             self._exit_pick_mode = False
             self._taixiu_pick_mode = False
+            self._binh_pick_mode = False
+            self._done_pick_mode = False
 
             QMessageBox.information(
                 self,
@@ -320,6 +342,54 @@ class CaptureTab(QWidget):
         
     def fix_confirm_clicked(self) -> None:
         self._start_taixiu_pick("confirm")
+
+    def fix_binh_clicked(self) -> None:
+        pid = self.current_profile
+        if not pid:
+            QMessageBox.warning(self, "Fix Binh", "Chưa chọn profile.")
+            return
+        if self.current_full_pixmap is None:
+            QMessageBox.warning(
+                self,
+                "Fix Binh",
+                "Chưa có ảnh Preview.\nHãy bấm 'Chụp full từ DevTools' trước.",
+            )
+            return
+
+        self._bet_pick_mode = False
+        self._exit_pick_mode = False
+        self._taixiu_pick_mode = False
+        self._done_pick_mode = False
+        self._binh_pick_mode = True
+        QMessageBox.information(
+            self,
+            "Fix Binh",
+            f"Profile {pid}: hãy drag một vùng nhỏ quanh nút BÁO BINH trên ảnh Preview.",
+        )
+
+    def fix_done_clicked(self) -> None:
+        pid = self.current_profile
+        if not pid:
+            QMessageBox.warning(self, "Fix Xong", "Chưa chọn profile.")
+            return
+        if self.current_full_pixmap is None:
+            QMessageBox.warning(
+                self,
+                "Fix Xong",
+                "Chưa có ảnh Preview.\nHãy bấm 'Chụp full từ DevTools' trước.",
+            )
+            return
+
+        self._bet_pick_mode = False
+        self._exit_pick_mode = False
+        self._taixiu_pick_mode = False
+        self._binh_pick_mode = False
+        self._done_pick_mode = True
+        QMessageBox.information(
+            self,
+            "Fix Xong",
+            f"Profile {pid}: hãy drag một vùng nhỏ quanh nút XONG trên ảnh Preview.",
+        )
         
     def _start_taixiu_pick(self, kind: str) -> None:
         pid = self.current_profile
@@ -337,6 +407,8 @@ class CaptureTab(QWidget):
 
         self._bet_pick_mode = False
         self._exit_pick_mode = False
+        self._binh_pick_mode = False
+        self._done_pick_mode = False
         self._taixiu_pick_kind = kind
         self._taixiu_pick_side = kind
         self._taixiu_pick_mode = True
@@ -378,6 +450,8 @@ class CaptureTab(QWidget):
 
         # Không cho chạy đồng thời với chế độ chọn Bet
         self._bet_pick_mode = False
+        self._binh_pick_mode = False
+        self._done_pick_mode = False
         self._exit_pick_index = 1
         self._exit_pick_mode = True
 
@@ -414,6 +488,8 @@ class CaptureTab(QWidget):
 
         # Không cho chạy đồng thời với chế độ chọn Bet
         self._bet_pick_mode = False
+        self._binh_pick_mode = False
+        self._done_pick_mode = False
         self._exit_pick_index = 2
         self._exit_pick_mode = True
 
@@ -465,6 +541,7 @@ class CaptureTab(QWidget):
                 "- Cửa sổ (width, height, % scale)\n"
                 "- 12 nút Bet (vào phòng)\n"
                 "- Nút Thoát phòng\n"
+                "- Nút Báo binh / Xong\n"
                 "- Vùng game\n"
                 "- 13 slot lá bài\n"
                 "- Design (region + slots 1280x720)\n\n"
@@ -513,11 +590,15 @@ class CaptureTab(QWidget):
             
             bet_profile = game_ui.setdefault("bet_buttons_profile", {})
             exit_profile = game_ui.setdefault("exit_button_profile", {})
+            binh_profile = game_ui.setdefault("binh_button_profile", {})
+            done_profile = game_ui.setdefault("done_button_profile", {})
 
             src_bets = bet_profile.get("P1")
             src_exit = exit_profile.get("P1")
             exit_profile2 = game_ui.setdefault("exit_button2_profile", {})
             src_exit2 = exit_profile2.get("P1")
+            src_binh = binh_profile.get("P1")
+            src_done = done_profile.get("P1")
 
             # ----------------- capture: region + slots + design -----------------
             capture_cfg = cfg.setdefault("capture", {})
@@ -529,7 +610,7 @@ class CaptureTab(QWidget):
             src_slots = slots.get("P1")
             src_design = design_cfg.get("P1")
 
-            if not any([src_window, src_bets, src_exit, src_exit2, src_region, src_slots, src_design]):
+            if not any([src_window, src_bets, src_exit, src_exit2, src_binh, src_done, src_region, src_slots, src_design]):
                 QMessageBox.warning(
                     self,
                     "Đồng bộ config",
@@ -554,6 +635,12 @@ class CaptureTab(QWidget):
                     
                 if isinstance(src_exit2, dict):
                     exit_profile2[pid] = copy.deepcopy(src_exit2)
+
+                if isinstance(src_binh, dict):
+                    binh_profile[pid] = copy.deepcopy(src_binh)
+
+                if isinstance(src_done, dict):
+                    done_profile[pid] = copy.deepcopy(src_done)
 
                 # 4) Vùng game (tọa độ sau khi resize)
                 if isinstance(src_region, dict):
@@ -586,6 +673,7 @@ class CaptureTab(QWidget):
                 "- Cửa sổ (width, height, % scale)\n"
                 "- 12 nút Bet vào phòng\n"
                 "- Nút Thoát phòng\n"
+                "- Nút Báo binh / Xong\n"
                 "- Vùng game\n"
                 "- 13 slot lá bài\n"
                 "- Design (region + slots 1280x720)\n"
@@ -629,7 +717,7 @@ class CaptureTab(QWidget):
         )
 
         # 👉 cập nhật editor khi ở chế độ chỉnh slot bình thường
-        if not self._bet_pick_mode and not self._exit_pick_mode and not self._taixiu_pick_mode:
+        if not self._bet_pick_mode and not self._exit_pick_mode and not self._taixiu_pick_mode and not self._binh_pick_mode and not self._done_pick_mode:
             if w > 0 and h > 0:
                 self.slot_x_spin.setValue(int(x))
                 self.slot_y_spin.setValue(int(y))
@@ -646,6 +734,14 @@ class CaptureTab(QWidget):
 
         if self._exit_pick_mode:
             self._handle_exit_pick_from_selection()
+            return
+
+        if self._binh_pick_mode:
+            self._handle_binh_pick_from_selection()
+            return
+
+        if self._done_pick_mode:
+            self._handle_done_pick_from_selection()
             return
             
     def _handle_bet_pick_from_selection(self) -> None:
@@ -822,6 +918,62 @@ class CaptureTab(QWidget):
                 f"Fix tọa độ thoát phòng {self._exit_pick_index}",
                 f"Lỗi khi lưu tọa độ EXIT cho {pid}: {e}",
             )
+
+    def _handle_binh_pick_from_selection(self) -> None:
+        if not self._binh_pick_mode or not self.current_selection:
+            return
+
+        pid = self.current_profile
+        x, y, w, h = self.current_selection
+        cx = int(x + w / 2)
+        cy = int(y + h / 2)
+
+        try:
+            cfg = load_config()
+            game_ui = cfg.setdefault("game_ui", {})
+            profile_map = game_ui.setdefault(
+                "binh_button_profile",
+                {"P1": None, "P2": None, "P3": None},
+            )
+            profile_map[pid] = {"x": cx, "y": cy}
+            save_config(cfg)
+            self._binh_pick_mode = False
+            QMessageBox.information(
+                self,
+                "Fix Binh",
+                f"Đã lưu nút Báo binh cho {pid}: x={cx}, y={cy}",
+            )
+        except Exception as e:
+            self._binh_pick_mode = False
+            QMessageBox.critical(self, "Fix Binh", f"Lỗi khi lưu tọa độ cho {pid}: {e}")
+
+    def _handle_done_pick_from_selection(self) -> None:
+        if not self._done_pick_mode or not self.current_selection:
+            return
+
+        pid = self.current_profile
+        x, y, w, h = self.current_selection
+        cx = int(x + w / 2)
+        cy = int(y + h / 2)
+
+        try:
+            cfg = load_config()
+            game_ui = cfg.setdefault("game_ui", {})
+            profile_map = game_ui.setdefault(
+                "done_button_profile",
+                {"P1": None, "P2": None, "P3": None},
+            )
+            profile_map[pid] = {"x": cx, "y": cy}
+            save_config(cfg)
+            self._done_pick_mode = False
+            QMessageBox.information(
+                self,
+                "Fix Xong",
+                f"Đã lưu nút Xong cho {pid}: x={cx}, y={cy}",
+            )
+        except Exception as e:
+            self._done_pick_mode = False
+            QMessageBox.critical(self, "Fix Xong", f"Lỗi khi lưu tọa độ cho {pid}: {e}")
 
     # ------------------------------------------------------------------ Actions
 

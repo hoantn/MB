@@ -1003,6 +1003,9 @@ class StrategyTab(QWidget):
                 for pid, idx in (plan.selected_index or {}).items()
                 if pid in plan.suggestions
             }
+            plan.report_binh_pids = tuple(
+                pid for pid in (plan.report_binh_pids or ()) if pid in plan.suggestions
+            )
             if not plan.suggestions:
                 return
 
@@ -1017,8 +1020,9 @@ class StrategyTab(QWidget):
                 self._auto_apply_suggestions_random(plan.suggestions)
             else:
                 ready_pids = list((plan.suggestions or {}).keys())
+                binh_text = f" | báo binh {','.join(plan.report_binh_pids)}" if plan.report_binh_pids else ""
                 self._auto_play_log(
-                    f"Chọn OPP #{plan.opp_index + 1} | {'xếp riêng ' + ','.join(ready_pids) if plan.partial else 'xếp thường tối ưu'} | score={plan.score}"
+                    f"Chọn OPP #{plan.opp_index + 1} | {'xếp riêng ' + ','.join(ready_pids) if plan.partial else 'xếp tối ưu'}{binh_text} | score={plan.score}"
                 )
                 opp = self._ngu_suggestions[plan.opp_index]
                 for pid in ready_pids:
@@ -1027,7 +1031,10 @@ class StrategyTab(QWidget):
                     self._selected_index[pid] = int(plan.selected_index.get(pid, 0))
                 self._render_ngu()
                 self._render_p_active()
-                self._auto_apply_suggestions_random(plan.suggestions)
+                self._auto_apply_suggestions_random(
+                    plan.suggestions,
+                    report_binh_pids=set(plan.report_binh_pids or ()),
+                )
 
             if self._auto_should_decrement_round():
                 self._auto_play_remaining -= 1
@@ -1044,10 +1051,51 @@ class StrategyTab(QWidget):
         dmax = max(dmin, int(getattr(self, "_auto_play_delay_max_ms", dmin) or dmin))
         return random.randint(dmin, dmax) if dmax > dmin else dmin
 
-    def _auto_apply_suggestions_random(self, suggestions_by_pid: Dict[str, dict]) -> None:
+    def _auto_schedule_click_binh(self, pid: str) -> None:
+        """Wait for the game to show Báo binh after special layout, then click it."""
+        self._auto_play_log(f"{pid}: đã xếp hình binh, chờ 2000ms để click Báo binh.")
+
+        def _click() -> None:
+            try:
+                owner = self.window()
+                controller = getattr(owner, "game_controller", None)
+                if controller is None or not hasattr(controller, "click_binh"):
+                    raise RuntimeError("game_controller chưa hỗ trợ click_binh")
+                controller.click_binh(pid)
+                self._auto_play_log(f"{pid}: đã click Báo binh.")
+            except Exception as e:
+                self._auto_play_log(f"{pid}: lỗi click Báo binh: {e}")
+                log.exception("[AUTO-PLAY] click Binh failed pid=%s", pid)
+
+        QTimer.singleShot(2000, _click)
+
+    def _auto_schedule_click_done(self, pid: str) -> None:
+        """Wait for the game to enable Xong after a normal layout, then click it."""
+        self._auto_play_log(f"{pid}: đã xếp bài, chờ 1000ms để click Xong.")
+
+        def _click() -> None:
+            try:
+                owner = self.window()
+                controller = getattr(owner, "game_controller", None)
+                if controller is None or not hasattr(controller, "click_done"):
+                    raise RuntimeError("game_controller chưa hỗ trợ click_done")
+                controller.click_done(pid)
+                self._auto_play_log(f"{pid}: đã click Xong.")
+            except Exception as e:
+                self._auto_play_log(f"{pid}: lỗi click Xong: {e}")
+                log.exception("[AUTO-PLAY] click Done failed pid=%s", pid)
+
+        QTimer.singleShot(1000, _click)
+
+    def _auto_apply_suggestions_random(
+        self,
+        suggestions_by_pid: Dict[str, dict],
+        report_binh_pids=None,
+    ) -> None:
         """Apply Auto Play profile-by-profile with an independent random delay per P."""
         from ui2.tabs.strategy2.strategy_suggest import apply_suggestion_dashboard_style
 
+        report_binh_pids = set(report_binh_pids or ())
         for pid in self.profiles:
             sug = dict((suggestions_by_pid or {}).get(pid) or {})
             ws_codes = list(self._codes_slot_order.get(pid) or [])
@@ -1065,6 +1113,11 @@ class StrategyTab(QWidget):
                         profile_id=profile_id,
                         ws_codes=list(cards),
                         suggestion=dict(suggestion),
+                        on_complete=(
+                            (lambda p=profile_id: self._auto_schedule_click_binh(p))
+                            if profile_id in report_binh_pids
+                            else (lambda p=profile_id: self._auto_schedule_click_done(p))
+                        ),
                     )
                 except Exception as e:
                     self._auto_play_log(f"{profile_id}: lỗi xếp auto: {e}")

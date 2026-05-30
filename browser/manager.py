@@ -33,6 +33,54 @@ PREFERRED_BROWSER_EXES = (
 )
 
 
+class _WindowsRect(ctypes.Structure):
+    _fields_ = [
+        ("left", ctypes.c_long),
+        ("top", ctypes.c_long),
+        ("right", ctypes.c_long),
+        ("bottom", ctypes.c_long),
+    ]
+
+
+def get_primary_work_area() -> tuple[int, int, int, int]:
+    """Return the usable primary desktop area, excluding the Windows taskbar."""
+    try:
+        rect = _WindowsRect()
+        ok = ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0)
+        if ok and rect.right > rect.left and rect.bottom > rect.top:
+            return int(rect.left), int(rect.top), int(rect.right), int(rect.bottom)
+    except Exception:
+        pass
+
+    try:
+        width = int(ctypes.windll.user32.GetSystemMetrics(0))
+        height = int(ctypes.windll.user32.GetSystemMetrics(1))
+        if width > 0 and height > 0:
+            return 0, 0, width, height
+    except Exception:
+        pass
+
+    return 0, 0, 1920, 1080
+
+
+def get_profile_window_position(profile_id: str, win_w: int) -> tuple[int, int]:
+    """Anchor P1/P2/P3 at the top-left, top-center and top-right."""
+    left, top, right, _bottom = get_primary_work_area()
+    available_w = max(1, int(right) - int(left))
+    window_w = max(1, int(win_w))
+    max_x = max(int(left), int(right) - window_w)
+
+    pid = str(profile_id or "").upper()
+    if pid == "P1":
+        x = int(left)
+    elif pid == "P3":
+        x = max_x
+    else:
+        x = int(left) + max(0, (available_w - window_w) // 2)
+        x = min(max_x, x)
+    return x, int(top)
+
+
 def get_default_chrome_path() -> str:
     """Tìm chrome.exe mặc định trên Windows, nếu không thấy thì trả 'chrome'."""
     candidates = [
@@ -568,6 +616,7 @@ chrome.webRequest.onAuthRequired.addListener(
         scale = max(10, cfg.window.scale_percent) / 100.0  # tránh 0
         win_w = int(width * scale)
         win_h = int(height * scale)
+        win_x, win_y = get_profile_window_position(profile_id, win_w)
 
         proc = self.processes.get(profile_id)
         if proc and proc.poll() is None:
@@ -606,6 +655,7 @@ chrome.webRequest.onAuthRequired.addListener(
                 "--no-first-run",
                 "--no-default-browser-check",
                 f"--window-size={win_w},{win_h}",
+                f"--window-position={win_x},{win_y}",
                 "--remote-allow-origins=*",
             ]
             if exe_name != "googlechromeportable.exe":
@@ -690,12 +740,14 @@ chrome.webRequest.onAuthRequired.addListener(
                             port,
                         )
                 log.info(
-                    "Launched Chrome for %s (%s) on port %s, window=%sx%s, scale=%.2f, exe=%s",
+                    "Launched Chrome for %s (%s) on port %s, window=%sx%s@%s,%s, scale=%.2f, exe=%s",
                     profile_id,
                     tool_name,
                     port,
                     win_w,
                     win_h,
+                    win_x,
+                    win_y,
                     scale,
                     launch_chrome_path,
                 )

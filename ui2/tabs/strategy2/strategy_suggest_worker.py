@@ -152,6 +152,7 @@ def build_suggestions_for_codes(profile_id: str, codes: List[str], stage: str = 
                     "chi_types": chi_types,
                     "_is_special_row": True,
                     "special_name": special_name,
+                    "special_chi_points": int(chi_pts),
                     "label_html": label_html,
                     "is_special": True,
                     "special_has_split": True,
@@ -205,4 +206,3 @@ def build_suggestions_for_codes(profile_id: str, codes: List[str], stage: str = 
     if special_sugg:
         return [special_sugg] + out
     return out
-

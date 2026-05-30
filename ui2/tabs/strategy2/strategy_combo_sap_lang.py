@@ -77,12 +77,12 @@ def _best_follower_candidate(
             continue
 
         # Follower must lose all 3 chis to the leader so the leader can sap-lang.
-        vs_leader = _eval_vs_opp(cand_three, leader_three)
+        vs_leader = _eval_vs_opp(cand_three, leader_three, allow_special_13=False)
         if not vs_leader.lose_all:
             continue
 
         # Among valid "nhuong" candidates, keep the one best versus OPP.
-        vs_opp = _eval_vs_opp(cand_three, opp_three)
+        vs_opp = _eval_vs_opp(cand_three, opp_three, allow_special_13=False)
         score = _score_vs_opp(vs_opp)
         if best is None or score > best[1]:
             best = (cand, score)
@@ -121,7 +121,7 @@ def find_sap_lang_combo(
             if leader_three is None:
                 continue
 
-            leader_vs_opp = _eval_vs_opp(leader_three, opp_three)
+            leader_vs_opp = _eval_vs_opp(leader_three, opp_three, allow_special_13=False)
             if not leader_vs_opp.win_all:
                 continue
 

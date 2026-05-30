@@ -72,6 +72,7 @@ def build_special_row(
 
         # Gán thẳng tên bài đặc biệt cho UI dùng
         "special_name": name,
+        "special_chi_points": int(chi_pts),
         "is_special": True,
     }
     # Không build split nữa để tránh đơ UI.

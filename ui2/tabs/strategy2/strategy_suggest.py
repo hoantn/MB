@@ -55,6 +55,7 @@ def apply_suggestion_dashboard_style(
     profile_id: str,
     ws_codes: List[str],
     suggestion: dict,
+    on_complete: Optional[Callable[[], None]] = None,
 ) -> None:
     """
     Apply gợi ý theo phong cách Dashboard, nhưng đảm bảo:
@@ -222,6 +223,11 @@ def apply_suggestion_dashboard_style(
                 tab._ws_freeze[pid] = False
             except Exception:
                 pass
+
+            # Auto Play special uses this hook to click Báo binh only after the
+            # drag worker has finished. Manual apply keeps the default None.
+            if not err_msg and callable(on_complete):
+                _ui_call(tab, on_complete, delay_ms=0)
             # ------------------------------------------------------------------
             # LẦN 2 (FORCE): chạy ngay 1 vòng nữa cho chắc
             # - Mục tiêu: tương đương click Apply 2 lần thủ công

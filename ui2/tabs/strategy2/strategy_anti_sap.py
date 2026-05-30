@@ -85,8 +85,8 @@ class _EvalInfo:
         return 3 - self.wins - self.losses
 
 
-def _eval_vs_opp(my: ThreeChi, opp: ThreeChi) -> _EvalInfo:
-    total = score_money_vs_opp(my, opp)
+def _eval_vs_opp(my: ThreeChi, opp: ThreeChi, *, allow_special_13: bool = True) -> _EvalInfo:
+    total = score_money_vs_opp(my, opp, allow_special_13=allow_special_13)
     c1 = _base_cmp_no_bonus(my.chi1, opp.chi1, 1)
     c2 = _base_cmp_no_bonus(my.chi2, opp.chi2, 2)
     c3 = _base_cmp_no_bonus(my.chi3, opp.chi3, 3)

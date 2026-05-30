@@ -179,6 +179,37 @@ class GameController:
     def click_exit_room(self, profile_id: str) -> None:
         """Backward-compatible alias: dùng THOÁT PHÒNG #1."""
         self.click_exit_room_1(profile_id)
+
+    def click_binh(self, profile_id: str) -> None:
+        """Click nút Báo binh sau khi game đã nhận hình bài đặc biệt."""
+        cfg = load_config()
+        game_ui = cfg.get("game_ui", {}) or {}
+        profile_map = game_ui.get("binh_button_profile") or {}
+        pos = profile_map.get(profile_id)
+        if not isinstance(pos, dict):
+            raise RuntimeError(
+                f"Chưa cấu hình nút Báo binh cho profile {profile_id} trong config.json"
+            )
+        self._client(profile_id).mouse_click(
+            int(pos.get("x", 0)),
+            int(pos.get("y", 0)),
+        )
+
+    def click_done(self, profile_id: str) -> None:
+        """Click nút Xong sau khi game đã nhận hình bài xếp thường."""
+        cfg = load_config()
+        game_ui = cfg.get("game_ui", {}) or {}
+        profile_map = game_ui.get("done_button_profile") or {}
+        pos = profile_map.get(profile_id)
+        if not isinstance(pos, dict):
+            raise RuntimeError(
+                f"Chưa cấu hình nút Xong cho profile {profile_id} trong config.json"
+            )
+        self._client(profile_id).mouse_click(
+            int(pos.get("x", 0)),
+            int(pos.get("y", 0)),
+        )
+
     def click_taixiu_bet(self, profile_id: str, bet: int) -> None:
         """
         Click chip cược dùng riêng cho Tài/Xỉu.

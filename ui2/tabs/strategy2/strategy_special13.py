@@ -581,6 +581,17 @@ def build_special_split(cards13: List[Card], special_name: str) -> Optional[Tupl
 
     name = (special_name or "").strip().lower()
 
+    def fallback_valid_split() -> Optional[Tuple[List[Card], List[Card], List[Card]]]:
+        # Reporting a special hand still needs a concrete non-foul 5-5-3 layout.
+        # Reuse the stable arranger when a shape-specific builder cannot place
+        # all 13 cards, notably six-pairs hands with only one natural kicker.
+        try:
+            from engine.arranger import arrange_13_cards
+            items = arrange_13_cards(cards13, max_candidates=1)
+            return items[0] if items else None
+        except Exception:
+            return None
+
     if "sảnh rồng" in name:
         # handles both "sảnh rồng" and "sảnh rồng đồng hoa"
         sp = _build_dragon_split(cards13)
@@ -596,15 +607,15 @@ def build_special_split(cards13: List[Card], special_name: str) -> Optional[Tupl
         return (_sort_cards_high(cards13)[:5], _sort_cards_high(cards13)[5:10], _sort_cards_high(cards13)[10:13])
 
     if "3 thùng" in name:
-        return _build_three_flushes_split(cards13)
+        return _build_three_flushes_split(cards13) or fallback_valid_split()
 
     if "3 sảnh" in name:
-        return _build_three_straights_split(cards13)
+        return _build_three_straights_split(cards13) or fallback_valid_split()
 
     if "6 đôi" in name:
-        return _build_pairs_trips_split(cards13, need_pairs=6, need_trips=0)
+        return _build_pairs_trips_split(cards13, need_pairs=6, need_trips=0) or fallback_valid_split()
 
     if "5 đôi 1 xám" in name:
-        return _build_pairs_trips_split(cards13, need_pairs=5, need_trips=1)
+        return _build_pairs_trips_split(cards13, need_pairs=5, need_trips=1) or fallback_valid_split()
 
     return None

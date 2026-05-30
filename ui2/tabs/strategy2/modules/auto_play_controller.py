@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple
 
 from ui2.tabs.strategy2.strategy_anti_sap import _codes_to_threechi, _eval_vs_opp
 from ui2.tabs.strategy2.strategy_combo_sap_lang import find_sap_lang_combo, SapLangCombo
+from engine.money_scoring import score_money_vs_opp
 
 
 PROFILES = ("P1", "P2", "P3")
@@ -20,6 +21,7 @@ class AutoPlayPlan:
     combo: Optional[SapLangCombo] = None
     delay_each_profile: bool = False
     partial: bool = False
+    report_binh_pids: Tuple[str, ...] = ()
 
 
 def _is_playable(tab, s: Optional[dict]) -> bool:
@@ -37,14 +39,19 @@ def _is_playable(tab, s: Optional[dict]) -> bool:
     )
 
 
-def _score_suggestion_vs_opp(s: dict, opp: dict) -> Tuple[int, int, int, int]:
+def _score_suggestion_vs_opp(
+    s: dict,
+    opp: dict,
+    *,
+    allow_special_13: bool = False,
+) -> Tuple[int, int, int, int]:
     my_three = _codes_to_threechi(s)
     opp_three = _codes_to_threechi(opp)
     if my_three is None or opp_three is None:
         return (-9999, -9999, -9999, -9999)
-    info = _eval_vs_opp(my_three, opp_three)
+    info = _eval_vs_opp(my_three, opp_three, allow_special_13=allow_special_13)
     return (
-        int(info.total_money),
+        int(score_money_vs_opp(my_three, opp_three, allow_special_13=allow_special_13)),
         int(info.wins),
         -int(info.losses),
         int(info.draws),
@@ -64,10 +71,48 @@ def _best_normal_for_pid(tab, pid: str, opp: dict) -> Optional[Tuple[int, dict, 
     for idx, sug in enumerate(rendered):
         if not _is_playable(tab, sug):
             continue
-        score = _score_suggestion_vs_opp(sug, opp)
+        score = _score_suggestion_vs_opp(sug, opp, allow_special_13=False)
         if best is None or score > best[2]:
             best = (idx, dict(sug), score)
     return best
+
+
+def _best_special_for_pid(tab, pid: str, opp: dict) -> Optional[Tuple[int, dict, Tuple[int, int, int, int]]]:
+    """Return the reportable special row if its worker-built 5-5-3 split exists."""
+    base_suggs = list(tab._suggestions.get(pid) or [])
+    for idx, sug in enumerate(base_suggs):
+        try:
+            is_special = tab._is_special_row(sug)
+        except Exception:
+            is_special = bool(sug.get("_is_special_row"))
+        if not is_special:
+            continue
+        if not (
+            len(list(sug.get("chi1_codes") or [])) == 5
+            and len(list(sug.get("chi2_codes") or [])) == 5
+            and len(list(sug.get("chi3_codes") or [])) == 3
+        ):
+            continue
+        score = _score_suggestion_vs_opp(sug, opp, allow_special_13=True)
+        try:
+            # Worker detector is the UI/game contract for Báo binh. Prefer its
+            # explicit award over re-detecting through a second legacy engine.
+            chi_points = int(sug.get("special_chi_points"))
+            score = (chi_points, score[1], score[2], score[3])
+        except Exception:
+            pass
+        return idx, dict(sug), score
+    return None
+
+
+def _best_response_for_pid(tab, pid: str, opp: dict) -> Optional[Tuple[int, dict, Tuple[int, int, int, int], bool]]:
+    normal = _best_normal_for_pid(tab, pid, opp)
+    special = _best_special_for_pid(tab, pid, opp)
+    if special is not None and (normal is None or special[2] > normal[2]):
+        return special[0], special[1], special[2], True
+    if normal is not None:
+        return normal[0], normal[1], normal[2], False
+    return None
 
 
 def _sum_scores(items: List[Tuple[int, int, int, int]]) -> Tuple[int, int, int, int]:
@@ -83,15 +128,18 @@ def build_best_plan_for_opp(tab, opp_index: int, opp: dict) -> Optional[AutoPlay
     selected_index: Dict[str, int] = {}
     normal_suggestions: Dict[str, dict] = {}
     normal_scores: List[Tuple[int, int, int, int]] = []
+    report_binh_pids: List[str] = []
 
     for pid in PROFILES:
-        picked = _best_normal_for_pid(tab, pid, opp)
+        picked = _best_response_for_pid(tab, pid, opp)
         if picked is None:
             return None
-        idx, sug, score = picked
+        idx, sug, score, report_binh = picked
         selected_index[pid] = int(idx)
         normal_suggestions[pid] = sug
         normal_scores.append(score)
+        if report_binh:
+            report_binh_pids.append(pid)
 
     normal_plan = AutoPlayPlan(
         kind="normal",
@@ -99,6 +147,7 @@ def build_best_plan_for_opp(tab, opp_index: int, opp: dict) -> Optional[AutoPlay
         score=_sum_scores(normal_scores),
         selected_index=selected_index,
         suggestions=normal_suggestions,
+        report_binh_pids=tuple(report_binh_pids),
     )
 
     combo = find_sap_lang_combo(
@@ -135,6 +184,7 @@ def build_partial_plan_for_opp(tab, opp_index: int, opp: dict) -> Optional[AutoP
     selected_index: Dict[str, int] = {}
     normal_suggestions: Dict[str, dict] = {}
     normal_scores: List[Tuple[int, int, int, int]] = []
+    report_binh_pids: List[str] = []
     applied_keys = getattr(tab, "_auto_play_applied_profile_keys", set()) or set()
 
     for pid in PROFILES:
@@ -146,13 +196,15 @@ def build_partial_plan_for_opp(tab, opp_index: int, opp: dict) -> Optional[AutoP
                     continue
             except Exception:
                 pass
-        picked = _best_normal_for_pid(tab, pid, opp)
+        picked = _best_response_for_pid(tab, pid, opp)
         if picked is None:
             continue
-        idx, sug, score = picked
+        idx, sug, score, report_binh = picked
         selected_index[pid] = int(idx)
         normal_suggestions[pid] = sug
         normal_scores.append(score)
+        if report_binh:
+            report_binh_pids.append(pid)
 
     if not normal_suggestions:
         return None
@@ -164,6 +216,7 @@ def build_partial_plan_for_opp(tab, opp_index: int, opp: dict) -> Optional[AutoP
         selected_index=selected_index,
         suggestions=normal_suggestions,
         partial=True,
+        report_binh_pids=tuple(report_binh_pids),
     )
 
 

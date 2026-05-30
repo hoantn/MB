@@ -60,7 +60,7 @@ from ui2.tabs.players_tab import PlayersTab
 from ui2.tabs.poker_tab import PokerTab
 
 ENABLE_WS_TEST_TAB = True
-ENABLE_CAPTURE_TAB = False
+ENABLE_CAPTURE_TAB = True
 ENABLE_TAIXIU = True
 
 # Hard flags for keeping the tool light.
@@ -384,8 +384,8 @@ class MainWindow(QMainWindow, WebSocketGateway):
             config=self.browser_manager.config,
         )
 
-        # Fix tọa độ is disabled by default. Do not initialize its manager/tab when off,
-        # because the old capture UI can still leave side effects on the top tab bar.
+        # Fix tọa độ is guarded by a hard flag. It is currently enabled so the
+        # user can configure Fix Binh; disabling it skips manager/tab creation.
         needs_capture_manager = ENABLE_CAPTURE_TAB or (
             ENABLE_TAIXIU and ENABLE_TAIXIU_LEGACY_TOOLS
         )
@@ -572,7 +572,6 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Auto Play Mậu Binh")
-        dlg.setAttribute(Qt.WA_DeleteOnClose)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -581,21 +580,24 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
         dlg.resize(520, 420)
         self._auto_play_window = dlg
-
-        def _on_closed(_result: int = 0, self_ref=self) -> None:
-            self_ref._auto_play_window = None
-
-        dlg.finished.connect(_on_closed)
         dlg.show()
         dlg.raise_()
         dlg.activateWindow()
+
+    def _toggle_auto_play_window(self) -> None:
+        """Toggle the reusable Auto Play floating window from the top menu tab."""
+        dlg = self._auto_play_window
+        if dlg is not None and dlg.isVisible():
+            dlg.close()
+            return
+        self._show_auto_play_window()
 
     def _on_main_tab_changed(self, index: int) -> None:
         try:
             if self.tab_widget is None:
                 return
             if self.tab_widget.tabText(index) == "Auto Play":
-                self._show_auto_play_window()
+                self._toggle_auto_play_window()
                 strategy_idx = self.tab_widget.indexOf(self.strategy_room_splitter)
                 if strategy_idx >= 0:
                     QTimer.singleShot(0, lambda: self.tab_widget.setCurrentIndex(strategy_idx))
