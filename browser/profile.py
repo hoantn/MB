@@ -18,6 +18,7 @@ class WindowConfig:
 class ProfileConfig:
     name: str
     chrome_path: str
+    target_url: str
     user_data_dir: str
     proxy: ProxyConfig
     window: WindowConfig
@@ -29,6 +30,7 @@ class ProfileConfig:
         return cls(
             name=d.get("name", ""),
             chrome_path=d.get("chrome_path", ""),
+            target_url=str(d.get("target_url", "") or "").strip(),
             user_data_dir=d.get("user_data_dir", ""),
             proxy=ProxyConfig(
                 host=proxy.get("host", ""),

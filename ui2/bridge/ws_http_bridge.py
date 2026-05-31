@@ -74,12 +74,6 @@ class _WSBridgeHandler(BaseHTTPRequestHandler):
 
         try:
             WS_EVENT_QUEUE.put_nowait(data)
-            if logger:
-                logger.info(
-                    "WS bridge recv event: kind=%s profile=%s",
-                    data.get("kind"),
-                    data.get("profile_id"),
-                )
         except queue.Full:
             if logger:
                 logger.warning("WS bridge event queue full, bỏ event: %s", data)

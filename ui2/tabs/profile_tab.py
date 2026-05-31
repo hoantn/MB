@@ -46,6 +46,7 @@ class ProfileTab(QWidget):
         # Fields
         self.name_edit = QLineEdit()
         self.chrome_path_edit = QLineEdit()
+        self.target_url_edit = QLineEdit()
         self.user_data_dir_edit = QLineEdit()
 
         self.win_width_spin = QSpinBox()
@@ -106,6 +107,7 @@ class ProfileTab(QWidget):
         prof_form = QFormLayout(prof_group)
         prof_form.addRow("Tên hiển thị:", self.name_edit)
         prof_form.addRow("Chrome path:", self.chrome_path_edit)
+        prof_form.addRow("URL đích:", self.target_url_edit)
         prof_form.addRow("User data dir:", self.user_data_dir_edit)
 
         # Window config
@@ -175,6 +177,7 @@ class ProfileTab(QWidget):
                 cfg["profiles"][pid] = {
                     "name": f"Profile {pid[-1]}",
                     "chrome_path": "",
+                    "target_url": "",
                     "user_data_dir": "",
                     "proxy": {
                         "host": "",
@@ -196,6 +199,7 @@ class ProfileTab(QWidget):
                 }
             else:
                 prof = cfg["profiles"][pid]
+                prof.setdefault("target_url", "")
 
                 # Proxy
                 if "proxy" not in prof or not isinstance(prof["proxy"], dict):
@@ -281,6 +285,7 @@ class ProfileTab(QWidget):
         # Thông tin cơ bản
         self.name_edit.setText(str(prof.get("name", "")))
         self.chrome_path_edit.setText(str(prof.get("chrome_path", "")))
+        self.target_url_edit.setText(str(prof.get("target_url", "")))
         self.user_data_dir_edit.setText(str(prof.get("user_data_dir", "")))
 
         # Cửa sổ
@@ -385,6 +390,7 @@ class ProfileTab(QWidget):
         prof = cfg["profiles"][pid]
         prof["name"] = self.name_edit.text().strip()
         prof["chrome_path"] = self.chrome_path_edit.text().strip()
+        prof["target_url"] = self.target_url_edit.text().strip()
         # Legacy field kept in config for compatibility only.
         # Browser runtime/user-data is now managed automatically under tool/runtime/P?.
         prof["user_data_dir"] = ""

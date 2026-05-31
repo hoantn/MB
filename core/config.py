@@ -18,6 +18,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "P1": {
             "name": "Profile 1",
             "chrome_path": "",
+            "target_url": "",
             "user_data_dir": "",
             "proxy": {"host": "", "port": 0, "username": "", "password": ""},
             "window": {"width": 1280, "height": 720, "scale_percent": 100},
@@ -25,6 +26,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "P2": {
             "name": "Profile 2",
             "chrome_path": "",
+            "target_url": "",
             "user_data_dir": "",
             "proxy": {"host": "", "port": 0, "username": "", "password": ""},
             "window": {"width": 1280, "height": 720, "scale_percent": 100},
@@ -32,6 +34,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "P3": {
             "name": "Profile 3",
             "chrome_path": "",
+            "target_url": "",
             "user_data_dir": "",
             "proxy": {"host": "", "port": 0, "username": "", "password": ""},
             "window": {"width": 1280, "height": 720, "scale_percent": 100},
