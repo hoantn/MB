@@ -1507,13 +1507,19 @@ class MainWindow(QMainWindow, WebSocketGateway):
             # KHÔNG return ở đây: để RoomEngine vẫn xử lý snapshot như cũ
         # --- NEW: self info (cmd=100) ---
         if isinstance(payload, dict) and cmd == 100:
-            # Mini-game sockets also emit cmd=100 with id=1. Ignore those
-            # before they can overwrite table identity in any subsystem.
+            # Mini-game sockets also emit cmd=100 with id=1.
+            # Rule: chỉ bỏ qua id≠0 khi profile đã CÓ UID rồi (tránh overwrite).
+            # Nếu profile chưa biết UID → cho phép qua dù id=1 để đăng ký lần đầu.
             msg_id = payload.get("id")
             if msg_id is not None:
                 try:
                     if int(msg_id) != 0:
-                        return
+                        already_known = (
+                            self.room_engine is not None
+                            and bool(self.room_engine.get_self_uid(profile_id))
+                        )
+                        if already_known:
+                            return
                 except Exception:
                     return
             # payload ví dụ: {"cmd":100,"uid":"1_...","dn":"...","As":{"gold":...}}
