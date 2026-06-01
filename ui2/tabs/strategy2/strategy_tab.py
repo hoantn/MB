@@ -39,6 +39,7 @@ from .modules.staged_scheduler import StagedScheduler
 from .modules.apply_controller import ApplyController
 from .modules.auto_play_controller import (
     build_auto_play_plan,
+    build_internal_balance_plan,
     build_money_fallback_plan,
     classify_auto_room_context,
 )
@@ -1007,16 +1008,24 @@ class StrategyTab(QWidget):
             room_engine = getattr(owner, "room_engine", None)
             room_context = classify_auto_room_context(room_engine)
             allow_opp_plan = room_context.kind == "external_opp"
+            is_internal = room_context.kind in ("internal_3p", "internal_2p")
 
             if allow_opp_plan and not has_auto_opp and self._auto_is_waiting_for_ngu_suggestions():
                 self._auto_play_log("Đang chờ gợi ý Money của OPP để xếp combo 3P.")
                 QTimer.singleShot(250, self._maybe_run_auto_play)
                 return
-            plan = (
-                build_auto_play_plan(self, max_opp=3)
-                if allow_opp_plan and has_auto_opp
-                else build_money_fallback_plan(self)
-            )
+
+            # ── Chọn plan theo bối cảnh bàn ──────────────────────────────
+            if allow_opp_plan and has_auto_opp:
+                plan = build_auto_play_plan(self, max_opp=3)
+            elif is_internal:
+                plan = build_internal_balance_plan(self, room_context)
+                if plan is None:
+                    # Fallback: gold bằng nhau / thiếu data → Money độc lập
+                    plan = build_money_fallback_plan(self)
+            else:
+                plan = build_money_fallback_plan(self)
+
             if plan is None:
                 if allow_opp_plan and not has_auto_opp:
                     self._auto_play_log("Bỏ qua: đang chờ gợi ý Money cho P sẵn sàng.")
@@ -1024,6 +1033,7 @@ class StrategyTab(QWidget):
                 self._auto_play_log("Bỏ qua: chưa có P nào đủ bài/gợi ý hợp lệ để Auto Play.")
                 return
 
+            # Loại bỏ các pid đã apply trong ván này
             plan.suggestions = {
                 pid: dict(sug)
                 for pid, sug in (plan.suggestions or {}).items()
@@ -1041,20 +1051,40 @@ class StrategyTab(QWidget):
                 return
 
             self._auto_play_hand_key = hand_key
-            if plan.kind != "money_fallback":
+
+            # OPP selection chỉ cập nhật khi có external OPP
+            if plan.kind not in ("money_fallback", "internal_balance"):
                 self._ngu_clicked_once = True
                 self._ngu_selected_index = int(plan.opp_index)
 
+            # ── Apply theo từng loại plan ─────────────────────────────────
             if plan.kind == "sap_lang" and plan.combo is not None:
                 self._auto_play_log(
                     f"Chọn OPP #{plan.opp_index + 1} | dùng Bẻ Sập Làng | score={plan.score}"
                 )
                 self._auto_apply_suggestions_random(plan.suggestions)
+
+            elif plan.kind == "internal_balance":
+                ready_pids = list((plan.suggestions or {}).keys())
+                binh_text = f" | báo binh {','.join(plan.report_binh_pids)}" if plan.report_binh_pids else ""
+                gold_map = room_context.gold_by_pid
+                gold_info = " | vàng " + " > ".join(
+                    f"{p}={gold_map.get(p)}"
+                    for p in sorted(ready_pids, key=lambda x: (gold_map.get(x) or 0))
+                )
+                self._auto_play_log(
+                    f"Tối ưu nội bộ {room_context.kind}: {','.join(ready_pids)}{gold_info}{binh_text}"
+                )
+                self._auto_apply_suggestions_random(
+                    plan.suggestions,
+                    report_binh_pids=set(plan.report_binh_pids or ()),
+                )
+
             elif plan.kind == "money_fallback":
                 ready_pids = list((plan.suggestions or {}).keys())
                 binh_text = f" | báo binh {','.join(plan.report_binh_pids)}" if plan.report_binh_pids else ""
-                if room_context.kind == "internal_only":
-                    fallback_reason = f"bàn nội bộ {','.join(room_context.controlled_pids)}"
+                if room_context.kind in ("internal_3p", "internal_2p"):
+                    fallback_reason = f"gold bằng nhau / thiếu data ({room_context.kind})"
                 else:
                     fallback_reason = room_context.reason or "chưa đủ combo 3P"
                 self._auto_play_log(
@@ -1064,7 +1094,9 @@ class StrategyTab(QWidget):
                     plan.suggestions,
                     report_binh_pids=set(plan.report_binh_pids or ()),
                 )
+
             else:
+                # External OPP: normal / partial
                 ready_pids = list((plan.suggestions or {}).keys())
                 binh_text = f" | báo binh {','.join(plan.report_binh_pids)}" if plan.report_binh_pids else ""
                 self._auto_play_log(

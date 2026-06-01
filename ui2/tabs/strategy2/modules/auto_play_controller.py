@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from ui2.tabs.strategy2.strategy_anti_sap import _codes_to_threechi, _eval_vs_opp
@@ -29,9 +29,11 @@ class AutoRoomContext:
     """
     Closed room classification for Auto Play.
 
-    OPP planning is allowed only when all three controlled profiles report the
-    same live roster and that roster contains an external UID. Internal-only
-    tables deliberately fall back to each profile's independent Money split.
+    kind values:
+      - "external_opp" : 3P cùng bàn + có UID ngoài → tối ưu vs OPP
+      - "internal_3p"  : đúng 3P cùng bàn, không có UID ngoài → cân vàng nội bộ 3P
+      - "internal_2p"  : đúng 2P cùng bàn, không có UID ngoài → cân vàng nội bộ 2P
+      - "unknown"      : thiếu dữ liệu → fallback Money độc lập
     """
 
     kind: str
@@ -39,6 +41,8 @@ class AutoRoomContext:
     controlled_pids: Tuple[str, ...] = ()
     external_uids: Tuple[str, ...] = ()
     reason: str = ""
+    # gold_by_pid: chỉ chứa các pid trong controlled_pids, None nếu chưa có data
+    gold_by_pid: Dict[str, Optional[int]] = field(default_factory=dict)
 
 
 def classify_auto_room_context(room_engine) -> AutoRoomContext:
@@ -48,15 +52,21 @@ def classify_auto_room_context(room_engine) -> AutoRoomContext:
 
     controlled_uid_by_pid: Dict[str, str] = {}
     roster_by_pid: Dict[str, Tuple[str, ...]] = {}
+    gold_by_pid: Dict[str, Optional[int]] = {}
+
     for pid in PROFILES:
         try:
             state = room_engine.get_room_monitor_state(pid) or {}
         except Exception:
             return AutoRoomContext(kind="unknown", reason=f"không đọc được roster {pid}")
 
-        profiles = state.get("profiles") or {}
-        own = profiles.get(pid) or {}
+        profiles_info = state.get("profiles") or {}
+        own = profiles_info.get(pid) or {}
         uid = str(own.get("uid") or "").strip()
+        # gold từ cmd=205 (on_room_balance_205 đã update _gold_by_uid)
+        gold_raw = own.get("gold")
+        gold_by_pid[pid] = int(gold_raw) if gold_raw is not None else None
+
         roster = tuple(sorted(str(x).strip() for x in (state.get("room_uids") or []) if str(x).strip()))
         if uid:
             controlled_uid_by_pid[pid] = uid
@@ -66,8 +76,7 @@ def classify_auto_room_context(room_engine) -> AutoRoomContext:
     if not roster_by_pid:
         return AutoRoomContext(kind="unknown", reason="chưa xác định được UID đang ngồi bàn")
 
-    # Prefer the largest agreement group. A 3P OPP plan requires all profiles
-    # to agree exactly; a 2P internal table is still safe to classify.
+    # Prefer the largest agreement group.
     grouped: Dict[Tuple[str, ...], List[str]] = {}
     for pid, roster in roster_by_pid.items():
         grouped.setdefault(roster, []).append(pid)
@@ -80,23 +89,28 @@ def classify_auto_room_context(room_engine) -> AutoRoomContext:
     )
     external_uids = tuple(uid for uid in roster if uid not in controlled_uid_set)
 
+    # External OPP: đủ 3P đồng thuận + có UID ngoài
     if len(reporting_pids) == 3 and len(controlled_pids) == 3 and external_uids:
         return AutoRoomContext(
             kind="external_opp",
             roster=roster,
             controlled_pids=controlled_pids,
             external_uids=external_uids,
+            gold_by_pid=gold_by_pid,
         )
 
+    # Internal: không có UID ngoài, 2 hoặc 3P cùng bàn và đồng thuận
     if (
         not external_uids
         and len(controlled_pids) in (2, 3)
         and set(reporting_pids) == set(controlled_pids)
     ):
+        kind = "internal_3p" if len(controlled_pids) == 3 else "internal_2p"
         return AutoRoomContext(
-            kind="internal_only",
+            kind=kind,
             roster=roster,
             controlled_pids=controlled_pids,
+            gold_by_pid=gold_by_pid,
         )
 
     return AutoRoomContext(
@@ -105,8 +119,208 @@ def classify_auto_room_context(room_engine) -> AutoRoomContext:
         controlled_pids=controlled_pids,
         external_uids=external_uids,
         reason="roster chưa đủ đồng thuận để suy OPP",
+        gold_by_pid=gold_by_pid,
     )
 
+
+# ===========================================================================
+# Internal balance helpers
+# ===========================================================================
+
+def _get_money_split(tab, pid: str) -> Optional[Tuple[int, dict]]:
+    """
+    Trả về (index, suggestion) của split _auto_profile_money cho pid.
+    Fallback về split playable đầu tiên nếu không tìm thấy money split.
+    """
+    rows = list(tab._suggestions.get(pid) or [])
+    for idx, s in enumerate(rows):
+        if s.get("_auto_profile_money") and _is_playable(tab, s):
+            return idx, dict(s)
+    for idx, s in enumerate(rows):
+        if _is_playable(tab, s):
+            return idx, dict(s)
+    return None
+
+
+def _pick_best_win(tab, pid: str, vs_sug: dict) -> Optional[Tuple[int, dict]]:
+    """
+    Từ _suggestions[pid], chọn split có số chi thắng vs vs_sug cao nhất.
+    Tiebreak: money cao nhất (bài tự nhiên nhất).
+    Dùng cho P_less (2P) và P_mid (3P).
+    """
+    best: Optional[Tuple[int, dict]] = None
+    best_key: Optional[Tuple[int, int]] = None
+    for idx, s in enumerate(tab._suggestions.get(pid) or []):
+        if not _is_playable(tab, s):
+            continue
+        money, wins, _neg_losses, _draws = _score_suggestion_vs_opp(s, vs_sug)
+        key = (wins, money)
+        if best_key is None or key > best_key:
+            best_key = key
+            best = (idx, dict(s))
+    return best
+
+
+def _pick_natural_lose(tab, pid: str, vs_sug: dict) -> Optional[Tuple[int, dict]]:
+    """
+    Từ _suggestions[pid], chọn split thua vs_sug nhiều nhất nhưng tự nhiên:
+      1. Ưu tiên wins >= 1 (tránh sập hầm × 2)
+      2. Minimize wins (thua nhiều chi nhất có thể)
+      3. Maximize money (bài tự nhiên nhất, không ép thế yếu)
+    Dùng cho P_more (2P) và P_max (3P).
+    """
+    best: Optional[Tuple[int, dict]] = None
+    best_key: Optional[Tuple[int, int, int]] = None
+    for idx, s in enumerate(tab._suggestions.get(pid) or []):
+        if not _is_playable(tab, s):
+            continue
+        money, wins, _neg_losses, _draws = _score_suggestion_vs_opp(s, vs_sug)
+        not_swept = 1 if wins >= 1 else 0
+        key = (not_swept, -wins, money)
+        if best_key is None or key > best_key:
+            best_key = key
+            best = (idx, dict(s))
+    return best
+
+
+def _build_3p_balance(tab, sorted_pids: List[str]) -> Optional[AutoPlayPlan]:
+    """
+    Tối ưu nội bộ 3P:
+      sorted_pids = [P_min, P_mid, P_max] theo gold tăng dần
+
+    Bước 1 — P_min: dùng Money split tốt nhất (được chơi tự do).
+    Bước 2 — P_max: thua tự nhiên nhất vs P_min (tránh sập hầm).
+    Bước 3 — P_mid: thắng nhiều nhất vs P_max (trung gian).
+    """
+    p_min, p_mid, p_max = sorted_pids
+
+    # Bước 1
+    min_result = _get_money_split(tab, p_min)
+    if min_result is None:
+        return None
+    min_idx, min_sug = min_result
+
+    # Bước 2
+    max_result = _pick_natural_lose(tab, p_max, min_sug)
+    if max_result is None:
+        return None
+    max_idx, max_sug = max_result
+
+    # Bước 3
+    mid_result = _pick_best_win(tab, p_mid, max_sug)
+    if mid_result is None:
+        return None
+    mid_idx, mid_sug = mid_result
+
+    return AutoPlayPlan(
+        kind="internal_balance",
+        opp_index=-1,
+        score=(0, 0, 0, 0),
+        selected_index={p_min: min_idx, p_mid: mid_idx, p_max: max_idx},
+        suggestions={p_min: min_sug, p_mid: mid_sug, p_max: max_sug},
+    )
+
+
+def _build_2p_balance(tab, sorted_pids: List[str], third_pids: List[str]) -> Optional[AutoPlayPlan]:
+    """
+    Tối ưu nội bộ 2P:
+      sorted_pids = [P_less, P_more] theo gold tăng dần
+      third_pids  = P không cùng bàn → dùng Money split độc lập
+
+    Bước 1 — P_less: thắng nhiều nhất vs Money split của P_more.
+    Bước 2 — P_more: thua tự nhiên nhất vs split P_less đã chọn (tránh sập hầm).
+    P_third: Money split riêng.
+    """
+    p_less, p_more = sorted_pids
+
+    more_money = _get_money_split(tab, p_more)
+    if more_money is None:
+        return None
+    _, more_money_sug = more_money
+
+    # Bước 1
+    less_result = _pick_best_win(tab, p_less, more_money_sug)
+    if less_result is None:
+        return None
+    less_idx, less_sug = less_result
+
+    # Bước 2
+    more_result = _pick_natural_lose(tab, p_more, less_sug)
+    if more_result is None:
+        return None
+    more_idx, more_sug = more_result
+
+    selected_index: Dict[str, int] = {p_less: less_idx, p_more: more_idx}
+    suggestions: Dict[str, dict] = {p_less: less_sug, p_more: more_sug}
+
+    # P_third dùng Money độc lập
+    for pid in third_pids:
+        result = _get_money_split(tab, pid)
+        if result is not None:
+            t_idx, t_sug = result
+            selected_index[pid] = t_idx
+            suggestions[pid] = t_sug
+
+    return AutoPlayPlan(
+        kind="internal_balance",
+        opp_index=-1,
+        score=(0, 0, 0, 0),
+        selected_index=selected_index,
+        suggestions=suggestions,
+    )
+
+
+def build_internal_balance_plan(tab, context: AutoRoomContext) -> Optional[AutoPlayPlan]:
+    """
+    Tối ưu nội bộ khi bàn chỉ có P của tool (không có UID ngoài).
+
+    Điều kiện fire:
+      - Tất cả gold khác nhau (nếu có bất kỳ cặp gold bằng nhau → fallback Money)
+      - Không có gold None trong controlled_pids
+      - _suggestions[pid] đủ cho tất cả controlled_pids
+
+    Thuật toán:
+      3P: [P_min → chơi tốt nhất] [P_max → thua tự nhiên nhất] [P_mid → thắng P_max]
+      2P: [P_less → thắng P_more] [P_more → thua tự nhiên nhất] [P_third → Money riêng]
+    """
+    controlled = list(context.controlled_pids)
+    if len(controlled) < 2:
+        return None
+
+    gold_map = context.gold_by_pid
+
+    # Nếu bất kỳ pid nào thiếu gold → fallback
+    for pid in controlled:
+        if gold_map.get(pid) is None:
+            return None
+
+    # Nếu tất cả gold bằng nhau → không cần cân, fallback Money
+    unique_golds = {gold_map[pid] for pid in controlled}
+    if len(unique_golds) <= 1:
+        return None
+
+    # Kiểm tra suggestions đủ
+    for pid in controlled:
+        if not (tab._suggestions.get(pid) or []):
+            return None
+
+    # Sort theo gold tăng dần; tie-break theo thứ tự PROFILES
+    profile_order = {p: i for i, p in enumerate(PROFILES)}
+    sorted_pids = sorted(controlled, key=lambda p: (gold_map[p], profile_order.get(p, 99)))
+
+    if context.kind == "internal_3p":
+        return _build_3p_balance(tab, sorted_pids)
+
+    if context.kind == "internal_2p":
+        third_pids = [p for p in PROFILES if p not in set(controlled)]
+        return _build_2p_balance(tab, sorted_pids, third_pids)
+
+    return None
+
+
+# ===========================================================================
+# Existing helpers (unchanged)
+# ===========================================================================
 
 def _is_playable(tab, s: Optional[dict]) -> bool:
     if not s:
