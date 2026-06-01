@@ -24,6 +24,90 @@ class AutoPlayPlan:
     report_binh_pids: Tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class AutoRoomContext:
+    """
+    Closed room classification for Auto Play.
+
+    OPP planning is allowed only when all three controlled profiles report the
+    same live roster and that roster contains an external UID. Internal-only
+    tables deliberately fall back to each profile's independent Money split.
+    """
+
+    kind: str
+    roster: Tuple[str, ...] = ()
+    controlled_pids: Tuple[str, ...] = ()
+    external_uids: Tuple[str, ...] = ()
+    reason: str = ""
+
+
+def classify_auto_room_context(room_engine) -> AutoRoomContext:
+    """Classify the live table conservatively; uncertainty always falls back."""
+    if room_engine is None or not hasattr(room_engine, "get_room_monitor_state"):
+        return AutoRoomContext(kind="unknown", reason="chưa có RoomEngine realtime")
+
+    controlled_uid_by_pid: Dict[str, str] = {}
+    roster_by_pid: Dict[str, Tuple[str, ...]] = {}
+    for pid in PROFILES:
+        try:
+            state = room_engine.get_room_monitor_state(pid) or {}
+        except Exception:
+            return AutoRoomContext(kind="unknown", reason=f"không đọc được roster {pid}")
+
+        profiles = state.get("profiles") or {}
+        own = profiles.get(pid) or {}
+        uid = str(own.get("uid") or "").strip()
+        roster = tuple(sorted(str(x).strip() for x in (state.get("room_uids") or []) if str(x).strip()))
+        if uid:
+            controlled_uid_by_pid[pid] = uid
+        if uid and uid in roster:
+            roster_by_pid[pid] = roster
+
+    if not roster_by_pid:
+        return AutoRoomContext(kind="unknown", reason="chưa xác định được UID đang ngồi bàn")
+
+    # Prefer the largest agreement group. A 3P OPP plan requires all profiles
+    # to agree exactly; a 2P internal table is still safe to classify.
+    grouped: Dict[Tuple[str, ...], List[str]] = {}
+    for pid, roster in roster_by_pid.items():
+        grouped.setdefault(roster, []).append(pid)
+    roster, reporting_pids = max(grouped.items(), key=lambda item: (len(item[1]), len(item[0])))
+
+    controlled_uid_set = set(controlled_uid_by_pid.values())
+    controlled_pids = tuple(
+        pid for pid in PROFILES
+        if controlled_uid_by_pid.get(pid) in set(roster)
+    )
+    external_uids = tuple(uid for uid in roster if uid not in controlled_uid_set)
+
+    if len(reporting_pids) == 3 and len(controlled_pids) == 3 and external_uids:
+        return AutoRoomContext(
+            kind="external_opp",
+            roster=roster,
+            controlled_pids=controlled_pids,
+            external_uids=external_uids,
+        )
+
+    if (
+        not external_uids
+        and len(controlled_pids) in (2, 3)
+        and set(reporting_pids) == set(controlled_pids)
+    ):
+        return AutoRoomContext(
+            kind="internal_only",
+            roster=roster,
+            controlled_pids=controlled_pids,
+        )
+
+    return AutoRoomContext(
+        kind="unknown",
+        roster=roster,
+        controlled_pids=controlled_pids,
+        external_uids=external_uids,
+        reason="roster chưa đủ đồng thuận để suy OPP",
+    )
+
+
 def _is_playable(tab, s: Optional[dict]) -> bool:
     if not s:
         return False

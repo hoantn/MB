@@ -37,7 +37,11 @@ from .modules.special_row import (
 from .modules.render_controller import RenderController
 from .modules.staged_scheduler import StagedScheduler
 from .modules.apply_controller import ApplyController
-from .modules.auto_play_controller import build_auto_play_plan, build_money_fallback_plan
+from .modules.auto_play_controller import (
+    build_auto_play_plan,
+    build_money_fallback_plan,
+    classify_auto_room_context,
+)
 
 from engine.card import Card
 
@@ -999,17 +1003,22 @@ class StrategyTab(QWidget):
             return
         try:
             has_auto_opp = any(s.get("_auto_opp_money") for s in self._ngu_suggestions)
-            if not has_auto_opp and self._auto_is_waiting_for_ngu_suggestions():
+            owner = self.window()
+            room_engine = getattr(owner, "room_engine", None)
+            room_context = classify_auto_room_context(room_engine)
+            allow_opp_plan = room_context.kind == "external_opp"
+
+            if allow_opp_plan and not has_auto_opp and self._auto_is_waiting_for_ngu_suggestions():
                 self._auto_play_log("Đang chờ gợi ý Money của OPP để xếp combo 3P.")
                 QTimer.singleShot(250, self._maybe_run_auto_play)
                 return
             plan = (
                 build_auto_play_plan(self, max_opp=3)
-                if has_auto_opp
+                if allow_opp_plan and has_auto_opp
                 else build_money_fallback_plan(self)
             )
             if plan is None:
-                if not has_auto_opp:
+                if allow_opp_plan and not has_auto_opp:
                     self._auto_play_log("Bỏ qua: đang chờ gợi ý Money cho P sẵn sàng.")
                     return
                 self._auto_play_log("Bỏ qua: chưa có P nào đủ bài/gợi ý hợp lệ để Auto Play.")
@@ -1044,8 +1053,12 @@ class StrategyTab(QWidget):
             elif plan.kind == "money_fallback":
                 ready_pids = list((plan.suggestions or {}).keys())
                 binh_text = f" | báo binh {','.join(plan.report_binh_pids)}" if plan.report_binh_pids else ""
+                if room_context.kind == "internal_only":
+                    fallback_reason = f"bàn nội bộ {','.join(room_context.controlled_pids)}"
+                else:
+                    fallback_reason = room_context.reason or "chưa đủ combo 3P"
                 self._auto_play_log(
-                    f"Fallback Money độc lập: {','.join(ready_pids)} vì chưa đủ combo 3P{binh_text}"
+                    f"Fallback Money độc lập: {','.join(ready_pids)} vì {fallback_reason}{binh_text}"
                 )
                 self._auto_apply_suggestions_random(
                     plan.suggestions,
