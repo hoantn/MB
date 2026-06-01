@@ -1739,6 +1739,11 @@ class MainWindow(QMainWindow, WebSocketGateway):
                             "[ROOM_SNAP] %s: inferred my_uid=%s from fi.ps subtraction",
                             profile_id, my_uid,
                         )
+                        # Đăng ký vào room_engine để classify_auto_room_context nhận diện được
+                        try:
+                            self.room_engine.register_profile_uid_from_snapshot(profile_id, my_uid)
+                        except Exception:
+                            pass
             except Exception:
                 pass
             # Fallback: use cmd=100-registered UID or first player (legacy, unreliable)

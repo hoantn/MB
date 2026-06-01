@@ -167,6 +167,25 @@ class RoomEngine(QObject):
     # ======================================================================
     # UI -> Engine
     # ======================================================================
+
+    def register_profile_uid_from_snapshot(self, profile_id: str, uid: str) -> None:
+        """
+        Đăng ký UID của profile từ room snapshot (cmd=202) khi cmd=100 chưa đến.
+        Chỉ set nếu profile chưa có UID — không override UID đã biết từ cmd=100.
+        Không gọi _purge_uid_from_snapshots để tránh xóa nhầm data phòng.
+        """
+        uid = str(uid or "").strip()
+        if not uid:
+            return
+        if self._self_uid_by_profile.get(profile_id):
+            return  # cmd=100 đã set rồi, không cần override
+        self._self_uid_by_profile[profile_id] = uid
+        self._self_uid_all.add(uid)
+        log.info(
+            "[SELF_UID_SNAP] %s uid=%s (inferred from room snapshot, pending cmd=100)",
+            profile_id, uid,
+        )
+
     def on_self_info_100(self, profile_id: str, payload: dict) -> None:
         """
         cmd=100: thông tin của CHÍNH profile này.
