@@ -99,6 +99,13 @@ class RoomEngine(QObject):
         # thông tin chính mình
         self._self_uid_by_profile: dict[str, str] = {}
         self._self_uid_all: set[str] = set()
+        # Monitoring cache stays independent from UI filtering.
+        self._gold_by_uid: dict[str, int] = {}
+        self._room_uids_by_profile: Dict[str, set[str]] = {
+            "P1": set(),
+            "P2": set(),
+            "P3": set(),
+        }
 
         self.tac_vu: Dict[str, TacVuProfile] = {
             "P1": TacVuProfile(),
@@ -166,12 +173,26 @@ class RoomEngine(QObject):
         payload ví dụ: {"uid":"1_565...", "dn":"...", "As":{"gold":20884}, "cmd":100, ...}
         """
         try:
+            # Mini-game sockets also emit cmd=100, but id=1 is not the table
+            # identity. Accept legacy payloads without id and table payloads
+            # with id=0 only, so a mini socket cannot overwrite P1/P2/P3 UID.
+            msg_id = payload.get("id")
+            if msg_id is not None:
+                try:
+                    if int(msg_id) != 0:
+                        return
+                except Exception:
+                    return
+
             uid = payload.get("uid") or payload.get("u")
             if not uid:
                 return
 
             uid = str(uid)
+            old_uid = self._self_uid_by_profile.get(profile_id)
             self._self_uid_by_profile[profile_id] = uid
+            if old_uid and old_uid != uid and old_uid not in self._self_uid_by_profile.values():
+                self._self_uid_all.discard(old_uid)
             self._self_uid_all.add(uid)
             # NEW: nếu trước đó UID này từng bị ghi nhầm là "khách" (do 3P vào lần lượt),
             # thì purge lại để DB/UI nhất quán.
@@ -186,6 +207,8 @@ class RoomEngine(QObject):
                 gold = int(((payload.get("As") or {}).get("gold")))
             except Exception:
                 gold = None
+            if gold is not None:
+                self._gold_by_uid[uid] = gold
 
             # log nhẹ, không spam
             log.info("[SELF_INFO] %s uid=%s dn=%s gold=%s", profile_id, uid, dn, gold)
@@ -490,6 +513,7 @@ class RoomEngine(QObject):
     def _accept_room_task_snapshot(self, profile_id: str, trang_thai: TrangThaiPhong) -> None:
         self._last_room_key[profile_id] = self._make_room_key(trang_thai)
         self._last_snapshot[profile_id] = trang_thai
+        self._sync_room_monitor_snapshot(profile_id, trang_thai)
         self._schedule_room_ui(profile_id)
 
     def _handle_room_task_snapshot(self, profile_id: str, trang_thai: TrangThaiPhong) -> None:
@@ -587,6 +611,7 @@ class RoomEngine(QObject):
             room_key = self._make_room_key(trang_thai)
             self._last_room_key[profile_id] = room_key
             self._last_snapshot[profile_id] = trang_thai
+            self._sync_room_monitor_snapshot(profile_id, trang_thai)
             self._schedule_room_ui(profile_id)
 
             if self._refresh_waiting.get(profile_id):
@@ -604,6 +629,136 @@ class RoomEngine(QObject):
     # Realtime: cmd=200 (join/leave) -> cập nhật snapshot cache + push UI
     # ======================================================================
 
+    def get_self_uid(self, profile_id: str) -> Optional[str]:
+        """Return the authoritative profile UID learned from cmd=100."""
+        return self._self_uid_by_profile.get(str(profile_id or ""))
+
+    def _sync_room_monitor_snapshot(self, profile_id: str, st: TrangThaiPhong) -> None:
+        room_uids: set[str] = set()
+        for player in (st.nguoi_choi or []):
+            uid = str(getattr(player, "uid", "") or "").strip()
+            if not uid:
+                continue
+            room_uids.add(uid)
+            gold = getattr(player, "vang", None)
+            try:
+                if gold is not None:
+                    self._gold_by_uid[uid] = int(gold)
+            except Exception:
+                pass
+        self._room_uids_by_profile[profile_id] = room_uids
+
+    def get_room_monitor_state(self, profile_id: str) -> Dict[str, Any]:
+        """Return a read-only monitoring snapshot for UI/debug consumers."""
+        pid = str(profile_id or "")
+        room_uids = set(self._room_uids_by_profile.get(pid) or set())
+        profiles: Dict[str, Dict[str, Any]] = {}
+        for profile, uid in sorted(self._self_uid_by_profile.items()):
+            profiles[profile] = {
+                "uid": uid,
+                "gold": self._gold_by_uid.get(uid),
+                "in_room": uid in room_uids,
+            }
+        external_uids = sorted(uid for uid in room_uids if uid not in self._self_uid_all)
+        return {
+            "profile_id": pid,
+            "room_uids": sorted(room_uids),
+            "profiles": profiles,
+            "external_uids": external_uids,
+            "has_external_uid": bool(external_uids),
+        }
+
+    def on_room_roster(self, profile_id: str, uids: List[Any]) -> None:
+        """Update lightweight room membership from a realtime roster."""
+        if not isinstance(uids, list):
+            return
+        room_uids = {str(uid).strip() for uid in uids if str(uid or "").strip()}
+        if room_uids:
+            self._room_uids_by_profile[profile_id] = room_uids
+
+    def on_room_balance_205(self, profile_id: str, payload: Dict[str, Any]) -> None:
+        """
+        Update realtime table balances without refreshing rooms or triggering gameplay.
+
+        Expected payload: {"cmd":205,"ps":[{"uid":"...","m":123}]}.
+        """
+        try:
+            if not isinstance(payload, dict):
+                return
+            try:
+                if int(payload.get("cmd")) != 205:
+                    return
+            except Exception:
+                return
+            players = payload.get("ps")
+            if not isinstance(players, list):
+                return
+
+            realtime_players: Dict[str, int] = {}
+            changed_uids: set[str] = set()
+            for player in players:
+                if not isinstance(player, dict):
+                    continue
+                uid = str(player.get("uid") or "").strip()
+                if not uid or "m" not in player:
+                    continue
+                try:
+                    gold = int(player.get("m"))
+                except Exception:
+                    continue
+                realtime_players[uid] = gold
+                if self._gold_by_uid.get(uid) != gold:
+                    self._gold_by_uid[uid] = gold
+                    changed_uids.add(uid)
+
+            if not realtime_players:
+                return
+
+            # cmd=205 is authoritative for the live table roster after a hand.
+            # Keep monitoring state independent from UI and gameplay logic.
+            realtime_uids = set(realtime_players)
+            roster_changed = realtime_uids != self._room_uids_by_profile.get(profile_id, set())
+            self._room_uids_by_profile[profile_id] = realtime_uids
+
+            for pid, st in list(self._last_snapshot.items()):
+                if st is None:
+                    continue
+                changed = False
+                for player in (st.nguoi_choi or []):
+                    uid = str(getattr(player, "uid", "") or "").strip()
+                    if uid not in changed_uids:
+                        continue
+                    gold = self._gold_by_uid.get(uid)
+                    if getattr(player, "vang", None) != gold:
+                        player.vang = gold
+                        changed = True
+
+                # Only mutate roster for the profile that emitted cmd=205.
+                # Other profiles may currently be sitting at different tables.
+                if pid == profile_id:
+                    current_players = {
+                        str(getattr(player, "uid", "") or "").strip(): player
+                        for player in (st.nguoi_choi or [])
+                        if str(getattr(player, "uid", "") or "").strip()
+                    }
+                    synced_players = []
+                    for uid in realtime_players:
+                        player = current_players.get(uid)
+                        if player is None:
+                            player = NguoiChoiPhong(ghe=0, uid=uid, ten="Unknown", vang=realtime_players[uid])
+                        synced_players.append(player)
+                    if set(current_players) != realtime_uids:
+                        st.nguoi_choi = synced_players
+                        st.so_nguoi_hien_tai = len(synced_players)
+                        changed = True
+                if changed:
+                    self._schedule_room_ui(pid)
+
+            if roster_changed:
+                log.debug("[ROOM_MONITOR] %s roster=%s", profile_id, sorted(realtime_uids))
+        except Exception:
+            log.exception("RoomEngine.on_room_balance_205 failed: pid=%s payload=%s", profile_id, payload)
+
     def _parse_player_from_200(self, payload: Dict[str, Any]) -> Optional[NguoiChoiPhong]:
         try:
             p = (payload or {}).get("p") or {}
@@ -617,15 +772,17 @@ class RoomEngine(QObject):
             ten = str(p.get("dn") or p.get("a") or "Unknown").strip()
 
             vang: Optional[int] = None
-            As = p.get("As") or {}
-            if isinstance(As, dict) and "gold" in As:
-                try:
-                    vang = int(As.get("gold") or 0)
-                except Exception:
-                    vang = 0
-            elif "m" in p:
+            if "m" in p:
                 try:
                     vang = int(p.get("m") or 0)
+                except Exception:
+                    vang = 0
+            else:
+                As = p.get("As") or {}
+                if not isinstance(As, dict) or "gold" not in As:
+                    As = {}
+                try:
+                    vang = int(As.get("gold") or 0) if As else None
                 except Exception:
                     vang = 0
 
@@ -725,6 +882,14 @@ class RoomEngine(QObject):
             player = self._parse_player_from_200(payload)
             if player is None:
                 return
+
+            # Monitor membership even when cmd=200 races ahead of cmd=202.
+            if t == 1 or t is None:
+                self._room_uids_by_profile.setdefault(profile_id, set()).add(player.uid)
+                if player.vang is not None:
+                    self._gold_by_uid[player.uid] = int(player.vang)
+            elif t in (2, 0, -1):
+                self._room_uids_by_profile.setdefault(profile_id, set()).discard(player.uid)
 
             st = self._last_snapshot.get(profile_id)
 

@@ -220,16 +220,94 @@ def build_partial_plan_for_opp(tab, opp_index: int, opp: dict) -> Optional[AutoP
     )
 
 
+def build_money_fallback_plan(tab) -> Optional[AutoPlayPlan]:
+    """
+    Build an OPP-free safety plan for every ready profile.
+
+    Prefer a reportable special hand. Otherwise use the exact Money split
+    captured during that profile's normal arranger scan.
+    """
+    selected_index: Dict[str, int] = {}
+    suggestions: Dict[str, dict] = {}
+    report_binh_pids: List[str] = []
+    applied_keys = getattr(tab, "_auto_play_applied_profile_keys", set()) or set()
+
+    for pid in PROFILES:
+        if len(list(tab._codes_slot_order.get(pid) or [])) != 13:
+            continue
+        if hasattr(tab, "_auto_profile_apply_key"):
+            try:
+                if tab._auto_profile_apply_key(pid) in applied_keys:
+                    continue
+            except Exception:
+                pass
+
+        rows = list(tab._suggestions.get(pid) or [])
+        picked = None
+        report_binh = False
+        for idx, sug in enumerate(rows):
+            try:
+                is_special = tab._is_special_row(sug)
+            except Exception:
+                is_special = bool(sug.get("_is_special_row"))
+            if is_special and _has_553_split(sug):
+                picked = (idx, dict(sug))
+                report_binh = True
+                break
+
+        if picked is None:
+            for idx, sug in enumerate(rows):
+                if sug.get("_auto_profile_money") and _is_playable(tab, sug):
+                    picked = (idx, dict(sug))
+                    break
+
+        if picked is None:
+            continue
+        idx, sug = picked
+        selected_index[pid] = int(idx)
+        suggestions[pid] = sug
+        if report_binh:
+            report_binh_pids.append(pid)
+
+    if not suggestions:
+        return None
+    return AutoPlayPlan(
+        kind="money_fallback",
+        opp_index=-1,
+        score=(0, 0, 0, 0),
+        selected_index=selected_index,
+        suggestions=suggestions,
+        partial=True,
+        report_binh_pids=tuple(report_binh_pids),
+    )
+
+
+def _has_553_split(s: Optional[dict]) -> bool:
+    if not s:
+        return False
+    return (
+        len(list(s.get("chi1_codes") or [])) == 5
+        and len(list(s.get("chi2_codes") or [])) == 5
+        and len(list(s.get("chi3_codes") or [])) == 3
+    )
+
+
 def build_auto_play_plan(tab, max_opp: int = 3) -> Optional[AutoPlayPlan]:
-    """Pick worst-case OPP, then return the best available response."""
-    opp_candidates: List[Tuple[int, dict]] = []
+    """Use the protected OPP Auto Money suggestion, then return the best response."""
+    # Keep max_opp in the public signature for compatibility with the existing
+    # StrategyTab caller. Auto Play now intentionally benchmarks one Money row.
+    del max_opp
+    opp_candidate: Optional[Tuple[int, dict]] = None
     for idx, opp in enumerate(list(tab._ngu_suggestions or [])):
+        if not opp.get("_auto_opp_money"):
+            continue
         if _is_playable(tab, opp):
-            opp_candidates.append((idx, dict(opp)))
-        if len(opp_candidates) >= int(max_opp):
+            opp_candidate = (idx, dict(opp))
             break
 
-    plans: List[AutoPlayPlan] = []
+    if opp_candidate is None:
+        return None
+
     applied_keys = getattr(tab, "_auto_play_applied_profile_keys", set()) or set()
     full_has_no_prior_apply = True
     if hasattr(tab, "_auto_profile_apply_key"):
@@ -246,16 +324,7 @@ def build_auto_play_plan(tab, max_opp: int = 3) -> Optional[AutoPlayPlan]:
         and bool(tab._suggestions.get(pid) or [])
         for pid in PROFILES
     )
-    for idx, opp in opp_candidates:
-        if full_ready:
-            plan = build_best_plan_for_opp(tab, idx, opp)
-        else:
-            plan = build_partial_plan_for_opp(tab, idx, opp)
-        if plan is not None:
-            plans.append(plan)
-
-    if not plans:
-        return None
-
-    # Reverse thinking: assume OPP chooses the line that gives 3P the worst result.
-    return min(plans, key=lambda p: p.score)
+    idx, opp = opp_candidate
+    if full_ready:
+        return build_best_plan_for_opp(tab, idx, opp)
+    return build_partial_plan_for_opp(tab, idx, opp)

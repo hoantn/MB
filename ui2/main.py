@@ -604,7 +604,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         except Exception:
             log.exception("Auto Play tab switch failed")
 
-    def _on_auto_play_changed(self, enabled: bool, rounds: int, delay_min_ms: int = 2000, delay_max_ms: int = 5000) -> None:
+    def _on_auto_play_changed(self, enabled: bool, rounds: int, delay_min_ms: int = 5000, delay_max_ms: int = 20000) -> None:
         try:
             if self.strategy_tab is not None:
                 self.strategy_tab.set_auto_play(enabled, rounds, delay_min_ms, delay_max_ms)
@@ -1136,7 +1136,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
         # Chỉ chặn các event cần RoomEngine khi RoomEngine chưa sẵn sàng.
         # Các event độc lập (poker/phom/self/cards) vẫn cho chạy để UI realtime.
-        if self.room_engine is None and kind in ("room_list", "room_snapshot", "room_event"):
+        if self.room_engine is None and kind in ("room_list", "room_snapshot", "room_event", "room_balance"):
             return
 
         profile_id = str(evt.get("profile_id") or "P1")
@@ -1476,6 +1476,13 @@ class MainWindow(QMainWindow, WebSocketGateway):
             except Exception:
                 log.exception("Lỗi khi cập nhật bài từ WS cho profile %s, cs=%s", profile_id, cs)
                 
+        # Keep room membership current even when no room snapshot is refreshed.
+        try:
+            if cmd == 600 and self.room_engine is not None and isinstance(payload, dict):
+                self.room_engine.on_room_roster(profile_id, payload.get("lpi") or [])
+        except Exception:
+            log.exception("room roster update failed: pid=%s payload=%s", profile_id, payload)
+
         # --- POKER: cmd 750 (phân vai) ---
         if kind == "poker_roles":
             try:
@@ -1500,6 +1507,15 @@ class MainWindow(QMainWindow, WebSocketGateway):
             # KHÔNG return ở đây: để RoomEngine vẫn xử lý snapshot như cũ
         # --- NEW: self info (cmd=100) ---
         if isinstance(payload, dict) and cmd == 100:
+            # Mini-game sockets also emit cmd=100 with id=1. Ignore those
+            # before they can overwrite table identity in any subsystem.
+            msg_id = payload.get("id")
+            if msg_id is not None:
+                try:
+                    if int(msg_id) != 0:
+                        return
+                except Exception:
+                    return
             # payload ví dụ: {"cmd":100,"uid":"1_...","dn":"...","As":{"gold":...}}
             # 1) Update PHỎM store để UI Phỏm hiển thị Tên/Tiền/UID theo đúng profile
             try:
@@ -1544,6 +1560,11 @@ class MainWindow(QMainWindow, WebSocketGateway):
             except Exception:
                 log.exception("poker on_room_event_200 failed: pid=%s payload=%s", profile_id, payload)
 
+            return
+
+        if isinstance(payload, dict) and (cmd == 205 or kind == "room_balance"):
+            if self.room_engine is not None:
+                self.room_engine.on_room_balance_205(profile_id, payload)
             return
 
         if kind == "room_list":
@@ -1685,17 +1706,22 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
         ds_nguoi_choi: List[NguoiChoiPhong] = []
         for p in ps:
+            table_gold = p.get("m")
+            if table_gold is None:
+                table_gold = (p.get("As") or {}).get("gold")
             ds_nguoi_choi.append(
                 NguoiChoiPhong(
                     ghe=int(p.get("sit", -1) or -1),
                     uid=str(p.get("uid", "")),
                     ten=str(p.get("dn", "")),
-                    vang=(p.get("As") or {}).get("gold"),
+                    vang=table_gold,
                 )
             )
 
-        my_uid = None
-        if ds_nguoi_choi:
+        my_uid = self.room_engine.get_self_uid(profile_id)
+        if not my_uid and ds_nguoi_choi:
+            # cmd=100 normally arrives first. Keep the legacy fallback only for
+            # early snapshots so room automation does not stall during startup.
             my_uid = ds_nguoi_choi[0].uid
 
         trang_thai = TrangThaiPhong(

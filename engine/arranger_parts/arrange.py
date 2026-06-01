@@ -11,6 +11,7 @@ from enum import Enum
 from engine.card import Card
 from engine.rules import evaluate_5cards
 from engine.scorer import evaluate_3cards
+from engine.arranger_parts.money_score import _score_max_money
 from core.constants import RANK_ORDER
 
 
@@ -26,6 +27,7 @@ class ArrangeStrategy(Enum):
 
 _ARRANGE_LRU_MAX = 256  # tăng/giảm theo RAM (256 ván là rất đủ cho UI)
 _arrange_lru: "OrderedDict[Tuple[Tuple[Tuple[int, int], ...], str], List[Tuple[Tuple[int, int, int, int, int], Tuple[int, int, int, int, int], Tuple[int, int, int]]]]" = OrderedDict()
+_arrange_money_lru = OrderedDict()
 _arrange_lock = RLock()
 
 _arrange_cache_hits = 0
@@ -57,7 +59,22 @@ def _arrange_cache_set(key, value):
         _arrange_lru.move_to_end(key)
         # enforce maxsize
         while len(_arrange_lru) > _ARRANGE_LRU_MAX:
-            _arrange_lru.popitem(last=False)
+            old_key, _ = _arrange_lru.popitem(last=False)
+            _arrange_money_lru.pop(old_key, None)
+
+
+def _arrange_money_cache_get(key):
+    with _arrange_lock:
+        return _arrange_money_lru.get(key)
+
+
+def _arrange_money_cache_set(key, value):
+    with _arrange_lock:
+        if value is None:
+            _arrange_money_lru.pop(key, None)
+            return
+        _arrange_money_lru[key] = value
+        _arrange_money_lru.move_to_end(key)
 
 
 def arrange_cache_clear():
@@ -65,6 +82,7 @@ def arrange_cache_clear():
     global _arrange_cache_hits, _arrange_cache_misses
     with _arrange_lock:
         _arrange_lru.clear()
+        _arrange_money_lru.clear()
         _arrange_cache_hits = 0
         _arrange_cache_misses = 0
 
@@ -74,6 +92,7 @@ def arrange_cache_stats() -> Dict[str, int]:
     with _arrange_lock:
         return {
             "size": len(_arrange_lru),
+            "money_size": len(_arrange_money_lru),
             "max": _ARRANGE_LRU_MAX,
             "hits": _arrange_cache_hits,
             "misses": _arrange_cache_misses,
@@ -428,6 +447,8 @@ def arrange_13_cards(
             Tuple[int, int, int],            # idx3
         ],
     ] = {}
+    best_money_key = None
+    best_money_idx = None
 
     # Lưu thêm score tuple để sort sau: [t1]+d1+[t2]+d2+[t3m]+d3padded
     # score dùng list[int] để so lexicographic rẻ.
@@ -614,6 +635,14 @@ def arrange_13_cards(
                 # QUAN TRỌNG: style phải dùng v_idx2 (variant), KHÔNG dùng idx2 gốc
                 st = _style_tuple(idx1, v_idx2, idx3)
 
+                # Capture the best self-money split inside the existing scan.
+                # Auto Play can reuse it without starting another 72k pass.
+                money_e3 = (_map_3_to_5_scale(e3[0]), e3[1])
+                money_key = (float(_score_max_money(e1, e2, money_e3)), tuple(st), tuple(sc))
+                if best_money_key is None or money_key > best_money_key:
+                    best_money_key = money_key
+                    best_money_idx = (idx1, v_idx2, idx3)
+
                 prev = best_by_struct.get(struct_key)
                 if prev is None:
                     # QUAN TRỌNG: lưu v_idx2 vào best_by_struct
@@ -697,6 +726,7 @@ def arrange_13_cards(
         (idx1, idx2, idx3) for _e1, _e2, _e3, _sc, _st, idx1, idx2, idx3 in reps
     ]
     _arrange_cache_set(cache_key, reps_idx_full)
+    _arrange_money_cache_set(cache_key, best_money_idx)
 
     if max_candidates and max_candidates > 0:
         reps = reps[: int(max_candidates)]
@@ -709,6 +739,31 @@ def arrange_13_cards(
 
         out.append((c1, c2, c3))
     return out
+
+
+def arrange_cached_money_split(
+    cards: List[Card],
+    *,
+    strategy: ArrangeStrategy = ArrangeStrategy.STYLE_BRUTEFORCE_ALL,
+) -> Optional[Tuple[List[Card], List[Card], List[Card]]]:
+    """
+    Return the money-optimal split captured by arrange_13_cards().
+
+    This helper never starts a scan. Call arrange_13_cards() first so Auto Play
+    reuses the same 72k pass already required for normal suggestions.
+    """
+    if not cards or len(cards) != 13:
+        return None
+    cached = _arrange_money_cache_get(_arrange_cache_key(cards, strategy))
+    if cached is None:
+        return None
+    idx1, idx2, idx3 = cached
+    return (
+        [cards[i] for i in idx1],
+        [cards[i] for i in idx2],
+        [cards[i] for i in idx3],
+    )
+
 
 def arrange_cards(
     cards: List[Card],

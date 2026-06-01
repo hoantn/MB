@@ -237,16 +237,19 @@ class RenderController:
 
             # 1) Tách special rows và gợi ý thường
             special_rows: List[dict] = []
+            auto_rows: List[dict] = []
             normals: List[dict] = []
             for s in suggs:
                 if tab._is_special_row(s):
                     special_rows.append(s)
+                elif s.get("_auto_opp_money"):
+                    auto_rows.append(s)
                 else:
                     normals.append(s)
 
             if not normals:
                 # Chỉ có special rows -> trả nguyên
-                return special_rows
+                return special_rows + auto_rows
 
             # 1.b) ÁP DỤNG LUẬT DỒN RÁC CHO TOÀN BỘ GỢI Ý THƯỜNG
             # for s in normals:
@@ -317,7 +320,7 @@ class RenderController:
                 result_normals = [base_s] + [s for (s, _tpl) in others_sorted]
 
             # 5) Trả về: special_rows + toàn bộ gợi ý đại diện theo template
-            return special_rows + result_normals
+            return special_rows + auto_rows + result_normals
 
         except Exception:
             # Tuyệt đối không để lỗi filter làm chết render
@@ -570,11 +573,14 @@ class RenderController:
         #        đè cả 3 chi (>= ở mọi chi và > ở ít nhất 1 chi).
         if suggs:
             specials: List[dict] = []
+            auto_rows: List[dict] = []
             normals: List[dict] = []
             for s in suggs:
                 try:
                     if tab._is_special_row(s):
                         specials.append(s)
+                    elif s.get("_auto_opp_money"):
+                        auto_rows.append(s)
                     else:
                         normals.append(s)
                 except Exception:
@@ -647,7 +653,7 @@ class RenderController:
                     if not dominated:
                         frontier.append(s)
 
-                suggs = specials + frontier
+                suggs = specials + auto_rows + frontier
             except Exception:
                 # Không để lỗi frontier chặn render OPP
                 pass

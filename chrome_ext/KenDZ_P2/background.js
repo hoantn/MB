@@ -166,9 +166,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if ((t === 1 || t === 2) && uid) {
             sendEventToPython({ kind: "room_event", payload });
           }
-        // 100: thông tin chính mình (uid, dn, gold...)
+        // 100: table identity only. Mini-game sockets also emit cmd=100 with id=1.
         } else if (cmd === 100) {
-          sendEventToPython({ kind: "self_info", payload });
+          const isGameSelfInfo = payload?.id === 0 || (activeGameWsUrl && url === activeGameWsUrl);
+          if (isGameSelfInfo) {
+            sendEventToPython({ kind: "self_info", payload });
+          }
+        // 205: realtime table balances (uid -> gold)
+        } else if (cmd === 205) {
+          sendEventToPython({ kind: "room_balance", payload });
         // 202: snapshot phòng hiện tại
         } else if (cmd === 202) {
           sendEventToPython({ kind: "room_snapshot", payload });
@@ -190,6 +196,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             payload: {
               cmd: 600,
               cs: payload.cs,
+              lpi: Array.isArray(payload.lpi) ? payload.lpi : [],
             },
           });
         }

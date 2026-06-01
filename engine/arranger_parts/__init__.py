@@ -1,5 +1,5 @@
 from .strategies import ArrangeStrategy
-from .arrange import arrange_cards, arrange_13_cards, arrange_vs_opp
+from .arrange import arrange_cards, arrange_13_cards, arrange_cached_money_split, arrange_vs_opp
 
 # Re-export internal helpers for backward compatibility (if any internal imports exist)
 from .eval_utils import _rank_val, _eval_5, _eval_3, _map_eval_top_to_5scale
@@ -15,7 +15,7 @@ from .special13 import (
 
 __all__ = [
     "ArrangeStrategy",
-    "arrange_cards", "arrange_13_cards", "arrange_vs_opp",
+    "arrange_cards", "arrange_13_cards", "arrange_cached_money_split", "arrange_vs_opp",
     "_rank_val", "_eval_5", "_eval_3", "_map_eval_top_to_5scale",
     "_score_max_money",
     "_major_rank_5", "_major_rank_top", "_top_kickers_eval5", "_top_kickers_eval3", "_secondary_balance_key",

@@ -37,7 +37,7 @@ from .modules.special_row import (
 from .modules.render_controller import RenderController
 from .modules.staged_scheduler import StagedScheduler
 from .modules.apply_controller import ApplyController
-from .modules.auto_play_controller import build_auto_play_plan
+from .modules.auto_play_controller import build_auto_play_plan, build_money_fallback_plan
 
 from engine.card import Card
 
@@ -166,8 +166,8 @@ class StrategyTab(QWidget):
         self._sap_lang_combo: Optional[SapLangCombo] = None
         self._auto_play_enabled: bool = False
         self._auto_play_remaining: int = 0
-        self._auto_play_delay_min_ms: int = 2000
-        self._auto_play_delay_max_ms: int = 5000
+        self._auto_play_delay_min_ms: int = 5000
+        self._auto_play_delay_max_ms: int = 20000
         self._auto_play_hand_key: Optional[str] = None
         self._auto_play_pending_key: Optional[str] = None
         self._auto_play_applied_profile_keys = set()
@@ -882,7 +882,7 @@ class StrategyTab(QWidget):
     def set_auto_play_log_sink(self, sink) -> None:
         self._auto_play_log_sink = sink
 
-    def set_auto_play(self, enabled: bool, rounds: int = 0, delay_min_ms: int = 2000, delay_max_ms: int = 5000) -> None:
+    def set_auto_play(self, enabled: bool, rounds: int = 0, delay_min_ms: int = 5000, delay_max_ms: int = 20000) -> None:
         self._auto_play_enabled = bool(enabled)
         self._auto_play_remaining = max(0, int(rounds or 0)) if enabled else 0
         a = max(0, int(delay_min_ms or 0))
@@ -918,8 +918,6 @@ class StrategyTab(QWidget):
                 pass
 
     def _current_auto_play_hand_key(self) -> Optional[str]:
-        if not self._ngu_suggestions:
-            return None
         cards_ready = {
             pid
             for pid in self.profiles
@@ -954,7 +952,8 @@ class StrategyTab(QWidget):
 
     def _auto_profile_apply_key(self, pid: str) -> str:
         codes = list(self._codes_slot_order.get(pid) or [])
-        return f"NGU:{self._ngu_key or '-'}|{pid}:{','.join(map(str, codes))}"
+        # A profile hand must be applied at most once even if NGU appears later.
+        return f"{pid}:{','.join(map(str, codes))}"
 
     def _auto_should_decrement_round(self) -> bool:
         cards_pids = [
@@ -967,6 +966,20 @@ class StrategyTab(QWidget):
         return all(
             self._auto_profile_apply_key(pid) in self._auto_play_applied_profile_keys
             for pid in cards_pids
+        )
+
+    def _auto_is_waiting_for_ngu_suggestions(self) -> bool:
+        """Keep the full 3P path alive while the derived OPP job is still pending."""
+        if not self._ngu_key or len(list(self._ngu_base_codes or [])) != 13:
+            return False
+        scheduler = getattr(self, "_scheduler", None)
+        if scheduler is None:
+            return False
+        if bool(getattr(scheduler, "job_running", False)):
+            return True
+        return any(
+            job and job[0] == "NGU"
+            for job in list(getattr(scheduler, "job_q", ()) or ())
         )
 
     def _maybe_run_auto_play(self) -> None:
@@ -984,12 +997,21 @@ class StrategyTab(QWidget):
             self._auto_play_log(f"Đủ bài/gợi ý, random delay {delay_ms}ms trước khi xếp.")
             QTimer.singleShot(delay_ms, self._maybe_run_auto_play)
             return
-        if not self._ngu_suggestions:
-            return
-
         try:
-            plan = build_auto_play_plan(self, max_opp=3)
+            has_auto_opp = any(s.get("_auto_opp_money") for s in self._ngu_suggestions)
+            if not has_auto_opp and self._auto_is_waiting_for_ngu_suggestions():
+                self._auto_play_log("Đang chờ gợi ý Money của OPP để xếp combo 3P.")
+                QTimer.singleShot(250, self._maybe_run_auto_play)
+                return
+            plan = (
+                build_auto_play_plan(self, max_opp=3)
+                if has_auto_opp
+                else build_money_fallback_plan(self)
+            )
             if plan is None:
+                if not has_auto_opp:
+                    self._auto_play_log("Bỏ qua: đang chờ gợi ý Money cho P sẵn sàng.")
+                    return
                 self._auto_play_log("Bỏ qua: chưa có P nào đủ bài/gợi ý hợp lệ để Auto Play.")
                 return
 
@@ -1010,14 +1032,25 @@ class StrategyTab(QWidget):
                 return
 
             self._auto_play_hand_key = hand_key
-            self._ngu_clicked_once = True
-            self._ngu_selected_index = int(plan.opp_index)
+            if plan.kind != "money_fallback":
+                self._ngu_clicked_once = True
+                self._ngu_selected_index = int(plan.opp_index)
 
             if plan.kind == "sap_lang" and plan.combo is not None:
                 self._auto_play_log(
                     f"Chọn OPP #{plan.opp_index + 1} | dùng Bẻ Sập Làng | score={plan.score}"
                 )
                 self._auto_apply_suggestions_random(plan.suggestions)
+            elif plan.kind == "money_fallback":
+                ready_pids = list((plan.suggestions or {}).keys())
+                binh_text = f" | báo binh {','.join(plan.report_binh_pids)}" if plan.report_binh_pids else ""
+                self._auto_play_log(
+                    f"Fallback Money độc lập: {','.join(ready_pids)} vì chưa đủ combo 3P{binh_text}"
+                )
+                self._auto_apply_suggestions_random(
+                    plan.suggestions,
+                    report_binh_pids=set(plan.report_binh_pids or ()),
+                )
             else:
                 ready_pids = list((plan.suggestions or {}).keys())
                 binh_text = f" | báo binh {','.join(plan.report_binh_pids)}" if plan.report_binh_pids else ""

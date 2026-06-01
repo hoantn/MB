@@ -237,7 +237,6 @@ class Labeling:
         seg1 = f'<span style="color:{c1}; font-weight:900;">{ic1}{n1}</span>'
         seg2 = f'<span style="color:{c2}; font-weight:900;">{ic2}{n2}</span>'
         seg3 = f'<span style="color:{c3}; font-weight:900;">{ic3}{n3}</span>'
-
         if not opp:
             return f"{seg1} {seg2} {seg3}"
 
@@ -330,6 +329,11 @@ class Labeling:
         seg1 = f'<span style="color:{c1}; font-weight:900;">{ic1}{n1}</span>'
         seg2 = f'<span style="color:{c2}; font-weight:900;">{ic2}{n2}</span>'
         seg3 = f'<span style="color:{c3}; font-weight:900;">{ic3}{n3}</span>'
+        auto_prefix = (
+            '<span style="color:#fbbf24; font-weight:900;">[Auto]</span> '
+            if ngu_s.get("_auto_opp_money")
+            else ""
+        )
 
         d1 = d2 = d3 = 0
         any_seen = False
@@ -382,7 +386,7 @@ class Labeling:
             pair_sweeps.append((wins, losses, ties, base_total))
 
         if not any_seen:
-            return f"{seg1} {seg2} {seg3}"
+            return f"{auto_prefix}{seg1} {seg2} {seg3}"
 
         # ---- Global sập làng (4 nhà): chỉ khi đủ sweep ở TẤT CẢ cặp và KHÔNG hoà ----
         # 3P sập làng NGU: mọi cặp đều wins==3 & ties==0
@@ -413,4 +417,4 @@ class Labeling:
                     eff = bt * 2
             total_eff += eff
 
-        return f"{seg1} {seg2} {seg3} {self.fmt_total(int(total_eff))}"
+        return f"{auto_prefix}{seg1} {seg2} {seg3} {self.fmt_total(int(total_eff))}"
