@@ -1720,9 +1720,30 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
         my_uid = self.room_engine.get_self_uid(profile_id)
         if not my_uid and ds_nguoi_choi:
-            # cmd=100 normally arrives first. Keep the legacy fallback only for
-            # early snapshots so room automation does not stall during startup.
-            my_uid = ds_nguoi_choi[0].uid
+            # fi.ps = opponent data (with cards). Own player = UID in ps but NOT in fi.ps.
+            # This is reliable: the server sends fi.ps as opponents, top-level ps as all players.
+            try:
+                fi_ps_uids = {
+                    str(p.get("uid", ""))
+                    for p in ((payload.get("fi") or {}).get("ps") or [])
+                    if p.get("uid")
+                }
+                if fi_ps_uids:
+                    own_candidates = [
+                        p for p in ds_nguoi_choi
+                        if str(p.uid or "") not in fi_ps_uids
+                    ]
+                    if len(own_candidates) == 1:
+                        my_uid = own_candidates[0].uid
+                        log.info(
+                            "[ROOM_SNAP] %s: inferred my_uid=%s from fi.ps subtraction",
+                            profile_id, my_uid,
+                        )
+            except Exception:
+                pass
+            # Fallback: use cmd=100-registered UID or first player (legacy, unreliable)
+            if not my_uid:
+                my_uid = ds_nguoi_choi[0].uid
 
         trang_thai = TrangThaiPhong(
             room_id=payload.get("rid"),
