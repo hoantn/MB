@@ -129,7 +129,10 @@ def classify_auto_room_context(room_engine) -> AutoRoomContext:
 
 def _get_money_split(tab, pid: str) -> Optional[Tuple[int, dict]]:
     """
-    Trả về (index, suggestion) của split _auto_profile_money cho pid.
+    Trả về (index, suggestion) của split Money tốt nhất cho pid.
+    Dùng cho P_min (3P) và P_less (2P): cho phép chơi thế bài tự nhiên tốt nhất.
+
+    Ưu tiên lấy split có flag _auto_profile_money (do worker arranger đánh dấu).
     Fallback về split playable đầu tiên nếu không tìm thấy money split.
     """
     rows = list(tab._suggestions.get(pid) or [])
@@ -146,7 +149,8 @@ def _pick_best_win(tab, pid: str, vs_sug: dict) -> Optional[Tuple[int, dict]]:
     """
     Từ _suggestions[pid], chọn split có số chi thắng vs vs_sug cao nhất.
     Tiebreak: money cao nhất (bài tự nhiên nhất).
-    Dùng cho P_less (2P) và P_mid (3P).
+
+    [Hiện không dùng trong internal balance — giữ lại để dùng cho các module khác nếu cần]
     """
     best: Optional[Tuple[int, dict]] = None
     best_key: Optional[Tuple[int, int]] = None
@@ -163,10 +167,13 @@ def _pick_best_win(tab, pid: str, vs_sug: dict) -> Optional[Tuple[int, dict]]:
 
 def _pick_natural_lose(tab, pid: str, vs_sug: dict) -> Optional[Tuple[int, dict]]:
     """
-    Từ _suggestions[pid], chọn split thua vs_sug nhiều nhất nhưng tự nhiên:
-      1. Ưu tiên wins >= 1 (tránh sập hầm × 2)
-      2. Minimize wins (thua nhiều chi nhất có thể)
-      3. Maximize money (bài tự nhiên nhất, không ép thế yếu)
+    Từ _suggestions[pid], chọn split thua vs_sug nhiều nhất nhưng tự nhiên.
+    Dùng cho P_mid (thua P_min) và P_more/P_max 2P (thua P_less).
+
+    Ưu tiên:
+      1. wins >= 1 → tránh sập hầm (thua 0-3 nhân đôi tiền)
+      2. Minimize wins → thua nhiều chi nhất có thể
+      3. Maximize money → bài tự nhiên, không ép thế quá yếu
     """
     best: Optional[Tuple[int, dict]] = None
     best_key: Optional[Tuple[int, int, int]] = None
@@ -187,11 +194,13 @@ def _pick_natural_lose_vs_both(
 ) -> Optional[Tuple[int, dict]]:
     """
     Từ _suggestions[pid], chọn split thua tự nhiên nhất vs CẢ HAI đối thủ.
-    Dùng cho P_max (3P): phải thua cả P_min lẫn P_mid.
+    Dùng cho P_max (3P): phải thua P_min và P_mid để đảm bảo cả hai đều thắng P_max.
 
-      1. Ưu tiên wins >= 1 vs mỗi người (tránh sập hầm × 2 với từng người)
-      2. Minimize tổng wins (wins_vs_1 + wins_vs_2)
-      3. Maximize money (bài tự nhiên nhất)
+    Ưu tiên:
+      1. not_swept_1 + not_swept_2 → ưu tiên wins >= 1 vs mỗi người
+         (tránh sập hầm × 2 với từng đối thủ riêng lẻ)
+      2. Minimize tổng wins (wins_vs_1 + wins_vs_2) → thua nhiều nhất có thể
+      3. Maximize money vs vs_sug1 → bài tự nhiên nhất trong số các thế thua
     """
     best: Optional[Tuple[int, dict]] = None
     best_key: Optional[Tuple[int, int, int]] = None
@@ -299,13 +308,24 @@ def build_internal_balance_plan(tab, context: AutoRoomContext) -> Optional[AutoP
     Tối ưu nội bộ khi bàn chỉ có P của tool (không có UID ngoài).
 
     Điều kiện fire:
-      - Tất cả gold khác nhau (nếu có bất kỳ cặp gold bằng nhau → fallback Money)
-      - Không có gold None trong controlled_pids
+      - Tất cả gold khác nhau hoàn toàn (nếu bất kỳ cặp nào bằng nhau → fallback Money)
+      - Không có gold=None trong controlled_pids (cần đủ dữ liệu để xếp thứ tự)
       - _suggestions[pid] đủ cho tất cả controlled_pids
 
-    Thuật toán:
-      3P: [P_min → chơi tốt nhất] [P_max → thua tự nhiên nhất] [P_mid → thắng P_max]
-      2P: [P_less → thắng P_more] [P_more → thua tự nhiên nhất] [P_third → Money riêng]
+    Thuật toán 3P — sorted = [P_min, P_mid, P_max] theo gold tăng dần:
+      Bước 1 — P_min : _get_money_split        → bài mạnh nhất (P ít vàng được thắng)
+      Bước 2 — P_mid : _pick_natural_lose(vs P_min) → thua P_min, đảm bảo P_min > P_mid
+      Bước 3 — P_max : _pick_natural_lose_vs_both(vs P_min, vs P_mid)
+                       → thua cả hai, đảm bảo P_mid > P_max và P_min > P_max
+      Kết quả: P_min > P_mid > P_max (vàng chuyển từ nhiều → ít)
+
+    Thuật toán 2P — sorted = [P_less, P_more] theo gold tăng dần:
+      Bước 1 — P_less : _get_money_split           → bài mạnh nhất
+      Bước 2 — P_more : _pick_natural_lose(vs P_less) → thua P_less tự nhiên
+      P_third (không cùng bàn): Money split độc lập
+      Kết quả: P_less > P_more (vàng chuyển từ nhiều → ít)
+
+    Fallback → None: caller dùng build_money_fallback_plan.
     """
     import logging as _log
     _logger = _log.getLogger("MauBinhTool")
@@ -346,9 +366,12 @@ def build_internal_balance_plan(tab, context: AutoRoomContext) -> Optional[AutoP
     # Sort theo gold tăng dần; tie-break theo thứ tự PROFILES
     profile_order = {p: i for i, p in enumerate(PROFILES)}
     sorted_pids = sorted(controlled, key=lambda p: (gold_map[p], profile_order.get(p, 99)))
+    # sorted_pids: P_min (ít vàng, được thắng) → P_max (nhiều vàng, phải thua)
     _logger.info(
-        "[INTERNAL-BALANCE] thu tu can vang: %s",
-        " > ".join(f"{p}={gold_map[p]}" for p in sorted_pids)
+        "[INTERNAL-BALANCE] thu tu chien thuat: %s",
+        " > ".join(
+            f"{p}(vang={gold_map[p]})" for p in reversed(sorted_pids)
+        ) + f"  [P_min={sorted_pids[0]}, P_max={sorted_pids[-1]}]"
     )
 
     if context.kind == "internal_3p":
