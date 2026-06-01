@@ -294,9 +294,10 @@ def build_internal_balance_plan(tab, context: AutoRoomContext) -> Optional[AutoP
         if gold_map.get(pid) is None:
             return None
 
-    # Nếu tất cả gold bằng nhau → không cần cân, fallback Money
+    # Nếu bất kỳ 2 pid nào có gold bằng nhau → thứ tự không rõ, fallback Money
+    # (chỉ cân vàng khi TẤT CẢ gold đều khác nhau hoàn toàn)
     unique_golds = {gold_map[pid] for pid in controlled}
-    if len(unique_golds) <= 1:
+    if len(unique_golds) < len(controlled):
         return None
 
     # Kiểm tra suggestions đủ
