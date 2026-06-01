@@ -167,7 +167,6 @@ def _pick_natural_lose(tab, pid: str, vs_sug: dict) -> Optional[Tuple[int, dict]
       1. Ưu tiên wins >= 1 (tránh sập hầm × 2)
       2. Minimize wins (thua nhiều chi nhất có thể)
       3. Maximize money (bài tự nhiên nhất, không ép thế yếu)
-    Dùng cho P_more (2P) và P_max (3P).
     """
     best: Optional[Tuple[int, dict]] = None
     best_key: Optional[Tuple[int, int, int]] = None
@@ -183,34 +182,64 @@ def _pick_natural_lose(tab, pid: str, vs_sug: dict) -> Optional[Tuple[int, dict]
     return best
 
 
+def _pick_natural_lose_vs_both(
+    tab, pid: str, vs_sug1: dict, vs_sug2: dict
+) -> Optional[Tuple[int, dict]]:
+    """
+    Từ _suggestions[pid], chọn split thua tự nhiên nhất vs CẢ HAI đối thủ.
+    Dùng cho P_max (3P): phải thua cả P_min lẫn P_mid.
+
+      1. Ưu tiên wins >= 1 vs mỗi người (tránh sập hầm × 2 với từng người)
+      2. Minimize tổng wins (wins_vs_1 + wins_vs_2)
+      3. Maximize money (bài tự nhiên nhất)
+    """
+    best: Optional[Tuple[int, dict]] = None
+    best_key: Optional[Tuple[int, int, int]] = None
+    for idx, s in enumerate(tab._suggestions.get(pid) or []):
+        if not _is_playable(tab, s):
+            continue
+        money1, wins1, _, _ = _score_suggestion_vs_opp(s, vs_sug1)
+        _money2, wins2, _, _ = _score_suggestion_vs_opp(s, vs_sug2)
+        not_swept1 = 1 if wins1 >= 1 else 0
+        not_swept2 = 1 if wins2 >= 1 else 0
+        total_wins = wins1 + wins2
+        key = (not_swept1 + not_swept2, -total_wins, money1)
+        if best_key is None or key > best_key:
+            best_key = key
+            best = (idx, dict(s))
+    return best
+
+
 def _build_3p_balance(tab, sorted_pids: List[str]) -> Optional[AutoPlayPlan]:
     """
     Tối ưu nội bộ 3P:
       sorted_pids = [P_min, P_mid, P_max] theo gold tăng dần
 
-    Bước 1 — P_min: dùng Money split tốt nhất (được chơi tự do).
-    Bước 2 — P_max: thua tự nhiên nhất vs P_min (tránh sập hầm).
-    Bước 3 — P_mid: thắng nhiều nhất vs P_max (trung gian).
+    Bước 1 — P_min: Money split mạnh nhất.
+    Bước 2 — P_mid: thua tự nhiên nhất vs P_min → đảm bảo P_min > P_mid.
+    Bước 3 — P_max: thua tự nhiên nhất vs CẢ HAI → đảm bảo P_min > P_max và P_mid > P_max.
+
+    Kết quả: P_min > P_mid > P_max (gold transfer đúng hướng).
     """
     p_min, p_mid, p_max = sorted_pids
 
-    # Bước 1
+    # Bước 1: P_min chơi tốt nhất
     min_result = _get_money_split(tab, p_min)
     if min_result is None:
         return None
     min_idx, min_sug = min_result
 
-    # Bước 2
-    max_result = _pick_natural_lose(tab, p_max, min_sug)
-    if max_result is None:
-        return None
-    max_idx, max_sug = max_result
-
-    # Bước 3
-    mid_result = _pick_best_win(tab, p_mid, max_sug)
+    # Bước 2: P_mid thua P_min tự nhiên
+    mid_result = _pick_natural_lose(tab, p_mid, min_sug)
     if mid_result is None:
         return None
     mid_idx, mid_sug = mid_result
+
+    # Bước 3: P_max thua cả P_min và P_mid
+    max_result = _pick_natural_lose_vs_both(tab, p_max, min_sug, mid_sug)
+    if max_result is None:
+        return None
+    max_idx, max_sug = max_result
 
     return AutoPlayPlan(
         kind="internal_balance",
@@ -227,24 +256,19 @@ def _build_2p_balance(tab, sorted_pids: List[str], third_pids: List[str]) -> Opt
       sorted_pids = [P_less, P_more] theo gold tăng dần
       third_pids  = P không cùng bàn → dùng Money split độc lập
 
-    Bước 1 — P_less: thắng nhiều nhất vs Money split của P_more.
-    Bước 2 — P_more: thua tự nhiên nhất vs split P_less đã chọn (tránh sập hầm).
+    Bước 1 — P_less: Money split mạnh nhất.
+    Bước 2 — P_more: thua tự nhiên nhất vs P_less → đảm bảo P_less > P_more.
     P_third: Money split riêng.
     """
     p_less, p_more = sorted_pids
 
-    more_money = _get_money_split(tab, p_more)
-    if more_money is None:
-        return None
-    _, more_money_sug = more_money
-
-    # Bước 1
-    less_result = _pick_best_win(tab, p_less, more_money_sug)
+    # Bước 1: P_less chơi tốt nhất
+    less_result = _get_money_split(tab, p_less)
     if less_result is None:
         return None
     less_idx, less_sug = less_result
 
-    # Bước 2
+    # Bước 2: P_more thua P_less tự nhiên
     more_result = _pick_natural_lose(tab, p_more, less_sug)
     if more_result is None:
         return None
