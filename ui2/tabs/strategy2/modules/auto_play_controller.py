@@ -283,31 +283,49 @@ def build_internal_balance_plan(tab, context: AutoRoomContext) -> Optional[AutoP
       3P: [P_min → chơi tốt nhất] [P_max → thua tự nhiên nhất] [P_mid → thắng P_max]
       2P: [P_less → thắng P_more] [P_more → thua tự nhiên nhất] [P_third → Money riêng]
     """
+    import logging as _log
+    _logger = _log.getLogger("MauBinhTool")
+
     controlled = list(context.controlled_pids)
     if len(controlled) < 2:
+        _logger.info("[INTERNAL-BALANCE] skip: controlled_pids < 2 (%s)", controlled)
         return None
 
     gold_map = context.gold_by_pid
+    _logger.info(
+        "[INTERNAL-BALANCE] kind=%s controlled=%s gold=%s",
+        context.kind, controlled, {p: gold_map.get(p) for p in controlled}
+    )
 
     # Nếu bất kỳ pid nào thiếu gold → fallback
-    for pid in controlled:
-        if gold_map.get(pid) is None:
-            return None
+    none_pids = [pid for pid in controlled if gold_map.get(pid) is None]
+    if none_pids:
+        _logger.info("[INTERNAL-BALANCE] skip: gold=None cho %s", none_pids)
+        return None
 
     # Nếu bất kỳ 2 pid nào có gold bằng nhau → thứ tự không rõ, fallback Money
     # (chỉ cân vàng khi TẤT CẢ gold đều khác nhau hoàn toàn)
     unique_golds = {gold_map[pid] for pid in controlled}
     if len(unique_golds) < len(controlled):
+        _logger.info(
+            "[INTERNAL-BALANCE] skip: gold co cap bang nhau %s",
+            {p: gold_map.get(p) for p in controlled}
+        )
         return None
 
     # Kiểm tra suggestions đủ
-    for pid in controlled:
-        if not (tab._suggestions.get(pid) or []):
-            return None
+    empty_pids = [pid for pid in controlled if not (tab._suggestions.get(pid) or [])]
+    if empty_pids:
+        _logger.info("[INTERNAL-BALANCE] skip: suggestions rong cho %s", empty_pids)
+        return None
 
     # Sort theo gold tăng dần; tie-break theo thứ tự PROFILES
     profile_order = {p: i for i, p in enumerate(PROFILES)}
     sorted_pids = sorted(controlled, key=lambda p: (gold_map[p], profile_order.get(p, 99)))
+    _logger.info(
+        "[INTERNAL-BALANCE] thu tu can vang: %s",
+        " > ".join(f"{p}={gold_map[p]}" for p in sorted_pids)
+    )
 
     if context.kind == "internal_3p":
         return _build_3p_balance(tab, sorted_pids)

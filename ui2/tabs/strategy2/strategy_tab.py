@@ -1009,6 +1009,12 @@ class StrategyTab(QWidget):
             room_context = classify_auto_room_context(room_engine)
             allow_opp_plan = room_context.kind == "external_opp"
             is_internal = room_context.kind in ("internal_3p", "internal_2p")
+            self._auto_play_log(
+                f"[ROOM] kind={room_context.kind} controlled={list(room_context.controlled_pids)}"
+                f" external={list(room_context.external_uids)}"
+                f" gold={dict(room_context.gold_by_pid)}"
+                + (f" reason={room_context.reason}" if room_context.reason else "")
+            )
 
             if allow_opp_plan and not has_auto_opp and self._auto_is_waiting_for_ngu_suggestions():
                 self._auto_play_log("Đang chờ gợi ý Money của OPP để xếp combo 3P.")
