@@ -56,7 +56,8 @@ def apply_suggestion_dashboard_style(
     ws_codes: List[str],
     suggestion: dict,
     on_complete: Optional[Callable[[], None]] = None,
-) -> None:
+    on_finished: Optional[Callable[[], None]] = None,
+) -> bool:
     """
     Apply gợi ý theo phong cách Dashboard, nhưng đảm bảo:
     - Dùng đúng 13 lá hiện tại (verify 13 trước khi kéo – đã làm ở ApplyController).
@@ -80,12 +81,12 @@ def apply_suggestion_dashboard_style(
         chi3 = [Card.from_code(c) for c in chi3_codes]
     except Exception as e:
         QMessageBox.warning(tab, "HÚP", f"{pid}: Lỗi parse Card: {e}")
-        return
+        return False
 
     # 5+5+3 = 13 lá
     if not (len(chi1) == 5 and len(chi2) == 5 and len(chi3) == 3):
         QMessageBox.warning(tab, "HÚP", f"{pid}: Chi không hợp lệ (không phải 5-5-3).")
-        return
+        return False
     # Layout mục tiêu theo thứ tự slot (3 + 5 + 5)
     expected_layout = list(chi3_codes) + list(chi2_codes) + list(chi1_codes)
 
@@ -100,7 +101,7 @@ def apply_suggestion_dashboard_style(
     ws_codes = list(ws_codes or [])
     if len(ws_codes) != 13:
         QMessageBox.warning(tab, "HÚP", f"{pid}: WS không đủ 13 lá, không thể Apply.")
-        return
+        return False
 
     try:
         cached = tab._layout_codes.get(pid)
@@ -128,7 +129,7 @@ def apply_suggestion_dashboard_style(
     if bm is None or not hasattr(bm, "get_active_tab"):
         log.error("[Strategy2] INVALID browser_manager type=%s value=%s", type(bm), bm)
         QMessageBox.warning(tab, "HÚP", f"{pid}: BrowserManager không hợp lệ.")
-        return
+        return False
 
     # ------------------------------------------------------------------
     # 4) Guard: tránh apply đè nếu đang chạy
@@ -143,7 +144,7 @@ def apply_suggestion_dashboard_style(
 
     if t_old is not None and getattr(t_old, "is_alive", lambda: False)():
         # đang apply -> im lặng, không hiển thị popup
-        return
+        return False
 
     # ------------------------------------------------------------------
     # 5) Đặt nút Apply sang trạng thái "busy" (UI thread)
@@ -365,6 +366,8 @@ def apply_suggestion_dashboard_style(
             # the realtime scan have completed. Manual apply keeps this unset.
             if callable(on_complete):
                 _ui_call(tab, on_complete, delay_ms=0)
+            if callable(on_finished):
+                _ui_call(tab, on_finished, delay_ms=0)
 
         except Exception as e:
             err_msg = str(e)
@@ -407,3 +410,4 @@ def apply_suggestion_dashboard_style(
     t = threading.Thread(target=_worker_apply, name=f"MB-Strategy2-Apply-{pid}", daemon=True)
     tab._apply_threads[pid] = t
     t.start()
+    return True

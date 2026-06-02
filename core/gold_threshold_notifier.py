@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -23,6 +24,7 @@ class GoldThresholdConfig:
     max_enabled: bool = False
     max_threshold: int = 0
     intentional_foul_enabled: bool = False
+    missing_3p_enabled: bool = False
 
 
 class GoldThresholdNotifier:
@@ -40,6 +42,8 @@ class GoldThresholdNotifier:
         self._above_by_pid: Dict[str, bool] = {pid: False for pid in PROFILE_IDS}
         self._last_gold_by_pid: Dict[str, int] = {}
         self._sap_lang_alerted_keys: Dict[str, None] = {}
+        self._missing_3p_alerted_keys: Dict[str, None] = {}
+        self._missing_3p_last_sent_at: float = 0.0
         self._queue: "queue.Queue[Optional[tuple[str, str, str]]]" = queue.Queue(maxsize=32)
         self._stop_event = threading.Event()
         self._worker = threading.Thread(
@@ -60,6 +64,7 @@ class GoldThresholdNotifier:
             min_alert = alerts.get("gold_threshold") or {}
         max_alert = alerts.get("gold_max_threshold") or {}
         intentional_foul = alerts.get("opp_sap_lang_intentional_foul") or {}
+        missing_3p = alerts.get("missing_3p") or {}
 
         def _threshold(alert: Dict[str, Any]) -> int:
             try:
@@ -75,6 +80,7 @@ class GoldThresholdNotifier:
             max_enabled=bool(max_alert.get("enabled", False)),
             max_threshold=_threshold(max_alert),
             intentional_foul_enabled=bool(intentional_foul.get("enabled", False)),
+            missing_3p_enabled=bool(missing_3p.get("enabled", False)),
         )
 
     def update_config(self, config: GoldThresholdConfig) -> None:
@@ -152,6 +158,37 @@ class GoldThresholdNotifier:
             log.warning("[GOLD-ALERT] skip bị sập làng: thiếu token hoặc chat_id")
             return False
         return self._enqueue(cfg.bot_token, cfg.chat_id, f"[BỊ SẬP LÀNG] {get_tool_name()}")
+
+    def is_missing_3p_enabled(self) -> bool:
+        """Return the cached toggle for the new-hand room integrity alert."""
+        return bool(self._config.missing_3p_enabled)
+
+    def send_missing_3p(self, hand_key: str) -> bool:
+        """Queue at most one missing-3P alert for a WS hand burst."""
+        cfg = self._config
+        key = str(hand_key or "").strip()
+        if not cfg.missing_3p_enabled or not key:
+            return False
+        if key in self._missing_3p_alerted_keys:
+            return False
+
+        # P1/P2/P3 WS snapshots may arrive in nearby polls. Coalesce that burst
+        # without starting a timer thread or touching the database.
+        now = time.monotonic()
+        if (now - self._missing_3p_last_sent_at) < 2.0:
+            return False
+
+        self._missing_3p_alerted_keys[key] = None
+        if len(self._missing_3p_alerted_keys) > 128:
+            oldest = next(iter(self._missing_3p_alerted_keys))
+            self._missing_3p_alerted_keys.pop(oldest, None)
+        if not cfg.bot_token or not cfg.chat_id:
+            log.warning("[GOLD-ALERT] skip thiếu 3P: thiếu token hoặc chat_id")
+            return False
+        queued = self._enqueue(cfg.bot_token, cfg.chat_id, f"[THIẾU 3P] {get_tool_name()}")
+        if queued:
+            self._missing_3p_last_sent_at = now
+        return queued
 
     def stop(self) -> None:
         if self._stop_event.is_set():

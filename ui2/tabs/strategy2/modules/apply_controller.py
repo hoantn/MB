@@ -24,6 +24,26 @@ class ApplyController:
     def __init__(self) -> None:
         pass
 
+    @staticmethod
+    def _prepare_manual_apply(tab, profile_ids) -> bool:
+        """Let StrategyTab cancel delayed Auto callbacks before a manual drag."""
+        hook = getattr(tab, "_prepare_manual_apply", None)
+        if callable(hook):
+            return bool(hook(profile_ids))
+        return True
+
+    @staticmethod
+    def _is_current_snapshot(tab, ctx: dict) -> bool:
+        """Reject a delayed manual callback if WS already moved to another hand."""
+        pid = str(ctx.get("pid") or "")
+        expected = list(ctx.get("ws_codes") or [])
+        current = list((getattr(tab, "_codes_slot_order", {}) or {}).get(pid) or [])
+        return (
+            len(expected) == 13
+            and len(current) == 13
+            and Counter(map(str, expected)) == Counter(map(str, current))
+        )
+
     def on_apply_combo(self, tab, suggestions_by_pid: dict) -> None:
         """Apply an explicit global combo suggestion for P1/P2/P3."""
         try:
@@ -53,9 +73,15 @@ class ApplyController:
                 QMessageBox.warning(tab, "Bẻ Sập Làng", "Combo không đủ 3P hợp lệ để xếp.")
                 return
 
+            if not self._prepare_manual_apply(tab, [ctx["pid"] for ctx in contexts]):
+                return
+
             def _apply_context(ctx: dict) -> None:
                 pid = str(ctx.get("pid") or "")
                 try:
+                    if not self._is_current_snapshot(tab, ctx):
+                        log.warning("[Strategy2] Skip stale manual combo snapshot pid=%s", pid)
+                        return
                     apply_suggestion_dashboard_style(
                         tab=tab,
                         profile_id=pid,
@@ -131,6 +157,9 @@ class ApplyController:
             except Exception:
                 pass
 
+            if not self._prepare_manual_apply(tab, [pid]):
+                return
+
             apply_suggestion_dashboard_style(
                 tab=tab,
                 profile_id=pid,
@@ -191,9 +220,15 @@ class ApplyController:
             if not contexts:
                 return
 
+            if not self._prepare_manual_apply(tab, [ctx["pid"] for ctx in contexts]):
+                return
+
             def _apply_context(ctx: dict) -> None:
                 pid = str(ctx.get("pid") or "")
                 try:
+                    if not self._is_current_snapshot(tab, ctx):
+                        log.warning("[Strategy2] Skip stale manual ALL snapshot pid=%s", pid)
+                        return
                     apply_suggestion_dashboard_style(
                         tab=tab,
                         profile_id=pid,

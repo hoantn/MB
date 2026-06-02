@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 from typing import Optional, Dict, List, Literal, Tuple, Any
 
 from PySide6.QtCore import QObject, QTimer, Signal
@@ -108,6 +109,18 @@ class RoomEngine(QObject):
             "P1": set(),
             "P2": set(),
             "P3": set(),
+        }
+        # Keep the latest explicit roster snapshot. Card cmd=600 packets often
+        # omit lpi, so an empty lpi must not erase a valid table membership.
+        self._room_roster_updated_at: Dict[str, float] = {
+            "P1": 0.0,
+            "P2": 0.0,
+            "P3": 0.0,
+        }
+        self._room_roster_reliable: Dict[str, bool] = {
+            "P1": False,
+            "P2": False,
+            "P3": False,
         }
 
         self.tac_vu: Dict[str, TacVuProfile] = {
@@ -669,6 +682,8 @@ class RoomEngine(QObject):
             except Exception:
                 pass
         self._room_uids_by_profile[profile_id] = room_uids
+        self._room_roster_updated_at[profile_id] = time.monotonic()
+        self._room_roster_reliable[profile_id] = bool(room_uids)
         if room_uids:
             self._emit_gold_monitor_changed(profile_id)
 
@@ -681,6 +696,9 @@ class RoomEngine(QObject):
         """Return a read-only monitoring snapshot for UI/debug consumers."""
         pid = str(profile_id or "")
         room_uids = set(self._room_uids_by_profile.get(pid) or set())
+        updated_at = float(self._room_roster_updated_at.get(pid, 0.0) or 0.0)
+        roster_age_s = max(0.0, time.monotonic() - updated_at) if updated_at else None
+        roster_fresh = bool(self._room_roster_reliable.get(pid, False))
         profiles: Dict[str, Dict[str, Any]] = {}
         for profile, uid in sorted(self._self_uid_by_profile.items()):
             profiles[profile] = {
@@ -695,6 +713,8 @@ class RoomEngine(QObject):
             "profiles": profiles,
             "external_uids": external_uids,
             "has_external_uid": bool(external_uids),
+            "roster_fresh": roster_fresh,
+            "roster_age_s": roster_age_s,
         }
 
     def on_room_roster(self, profile_id: str, uids: List[Any]) -> None:
@@ -703,7 +723,9 @@ class RoomEngine(QObject):
             return
         room_uids = {str(uid).strip() for uid in uids if str(uid or "").strip()}
         if room_uids:
+            self._room_roster_updated_at[profile_id] = time.monotonic()
             self._room_uids_by_profile[profile_id] = room_uids
+            self._room_roster_reliable[profile_id] = True
 
     def on_room_balance_205(self, profile_id: str, payload: Dict[str, Any]) -> None:
         """
@@ -748,6 +770,8 @@ class RoomEngine(QObject):
             realtime_uids = set(realtime_players)
             roster_changed = realtime_uids != self._room_uids_by_profile.get(profile_id, set())
             self._room_uids_by_profile[profile_id] = realtime_uids
+            self._room_roster_updated_at[profile_id] = time.monotonic()
+            self._room_roster_reliable[profile_id] = bool(realtime_uids)
 
             for pid, st in list(self._last_snapshot.items()):
                 if st is None:
@@ -917,10 +941,12 @@ class RoomEngine(QObject):
             # Monitor membership even when cmd=200 races ahead of cmd=202.
             if t == 1 or t is None:
                 self._room_uids_by_profile.setdefault(profile_id, set()).add(player.uid)
+                self._room_roster_updated_at[profile_id] = time.monotonic()
                 if player.vang is not None:
                     self._gold_by_uid[player.uid] = int(player.vang)
             elif t in (2, 0, -1):
                 self._room_uids_by_profile.setdefault(profile_id, set()).discard(player.uid)
+                self._room_roster_updated_at[profile_id] = time.monotonic()
 
             st = self._last_snapshot.get(profile_id)
 

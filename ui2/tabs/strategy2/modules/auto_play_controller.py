@@ -24,6 +24,7 @@ class AutoPlayPlan:
     delay_each_profile: bool = False
     partial: bool = False
     report_binh_pids: Tuple[str, ...] = ()
+    dependency_groups: Tuple[Tuple[str, ...], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,10 @@ def classify_auto_room_context(room_engine) -> AutoRoomContext:
         roster = tuple(sorted(str(x).strip() for x in (state.get("room_uids") or []) if str(x).strip()))
         if uid:
             controlled_uid_by_pid[pid] = uid
-        if uid and uid in roster:
+        # Runtime snapshots mark empty or aged membership as unsafe. Mocks from
+        # older tests omit the flag, so they remain compatible by default.
+        roster_fresh = bool(state.get("roster_fresh", True))
+        if uid and uid in roster and roster_fresh:
             roster_by_pid[pid] = roster
 
     if not roster_by_pid:
@@ -263,18 +267,16 @@ def _build_3p_balance(tab, sorted_pids: List[str]) -> Optional[AutoPlayPlan]:
         score=(0, 0, 0, 0),
         selected_index={p_min: min_idx, p_mid: mid_idx, p_max: max_idx},
         suggestions={p_min: min_sug, p_mid: mid_sug, p_max: max_sug},
+        dependency_groups=(tuple(sorted_pids),),
     )
 
 
-def _build_2p_balance(tab, sorted_pids: List[str], third_pids: List[str]) -> Optional[AutoPlayPlan]:
+def _build_2p_balance(tab, sorted_pids: List[str]) -> Optional[AutoPlayPlan]:
     """
-    Tối ưu nội bộ 2P:
-      sorted_pids = [P_less, P_more] theo gold tăng dần
-      third_pids  = P không cùng bàn → dùng Money split độc lập
+    Build the coordinated plan for the two profiles sharing one table.
 
-    Bước 1 — P_less: Money split mạnh nhất.
-    Bước 2 — P_more: thua tự nhiên nhất vs P_less → đảm bảo P_less > P_more.
-    P_third: Money split riêng.
+    The profile on another table is intentionally excluded here. StrategyTab
+    schedules its Money fallback as a separate dependency group.
     """
     p_less, p_more = sorted_pids
 
@@ -293,20 +295,13 @@ def _build_2p_balance(tab, sorted_pids: List[str], third_pids: List[str]) -> Opt
     selected_index: Dict[str, int] = {p_less: less_idx, p_more: more_idx}
     suggestions: Dict[str, dict] = {p_less: less_sug, p_more: more_sug}
 
-    # P_third dùng Money độc lập
-    for pid in third_pids:
-        result = _get_money_split(tab, pid)
-        if result is not None:
-            t_idx, t_sug = result
-            selected_index[pid] = t_idx
-            suggestions[pid] = t_sug
-
     return AutoPlayPlan(
         kind="internal_balance",
         opp_index=-1,
         score=(0, 0, 0, 0),
         selected_index=selected_index,
         suggestions=suggestions,
+        dependency_groups=(tuple(sorted_pids),),
     )
 
 
@@ -329,7 +324,7 @@ def build_internal_balance_plan(tab, context: AutoRoomContext) -> Optional[AutoP
     Thuật toán 2P — sorted = [P_less, P_more] theo gold tăng dần:
       Bước 1 — P_less : _get_money_split           → bài mạnh nhất
       Bước 2 — P_more : _pick_natural_lose(vs P_less) → thua P_less tự nhiên
-      P_third (không cùng bàn): Money split độc lập
+      P_third (không cùng bàn): StrategyTab lập lịch Money độc lập
       Kết quả: P_less > P_more (vàng chuyển từ nhiều → ít)
 
     Fallback → None: caller dùng build_money_fallback_plan.
@@ -385,8 +380,7 @@ def build_internal_balance_plan(tab, context: AutoRoomContext) -> Optional[AutoP
         return _build_3p_balance(tab, sorted_pids)
 
     if context.kind == "internal_2p":
-        third_pids = [p for p in PROFILES if p not in set(controlled)]
-        return _build_2p_balance(tab, sorted_pids, third_pids)
+        return _build_2p_balance(tab, sorted_pids)
 
     return None
 
@@ -574,6 +568,7 @@ def _build_intentional_foul_plan(
         score=normal_plan.score,
         selected_index={},
         suggestions=foul_suggestions,
+        dependency_groups=(PROFILES,),
     )
 
 
@@ -607,6 +602,7 @@ def build_best_plan_for_opp(
         selected_index=selected_index,
         suggestions=normal_suggestions,
         report_binh_pids=tuple(report_binh_pids),
+        dependency_groups=(PROFILES,),
     )
 
     combo = find_sap_lang_combo(
@@ -627,6 +623,7 @@ def build_best_plan_for_opp(
             selected_index={},
             suggestions={pid: dict(s) for pid, s in combo.suggestions.items()},
             combo=combo,
+            dependency_groups=(PROFILES,),
         )
         if combo_plan.score > normal_plan.score:
             best_plan = combo_plan
@@ -686,10 +683,11 @@ def build_partial_plan_for_opp(tab, opp_index: int, opp: dict) -> Optional[AutoP
         suggestions=normal_suggestions,
         partial=True,
         report_binh_pids=tuple(report_binh_pids),
+        dependency_groups=(PROFILES,),
     )
 
 
-def build_money_fallback_plan(tab) -> Optional[AutoPlayPlan]:
+def build_money_fallback_plan(tab, profile_ids=None) -> Optional[AutoPlayPlan]:
     """
     Build an OPP-free safety plan for every ready profile.
 
@@ -701,7 +699,9 @@ def build_money_fallback_plan(tab) -> Optional[AutoPlayPlan]:
     report_binh_pids: List[str] = []
     applied_keys = getattr(tab, "_auto_play_applied_profile_keys", set()) or set()
 
-    for pid in PROFILES:
+    source_profiles = PROFILES if profile_ids is None else profile_ids
+    scoped_profiles = tuple(pid for pid in source_profiles if pid in PROFILES)
+    for pid in scoped_profiles:
         if len(list(tab._codes_slot_order.get(pid) or [])) != 13:
             continue
         if hasattr(tab, "_auto_profile_apply_key"):
@@ -748,6 +748,7 @@ def build_money_fallback_plan(tab) -> Optional[AutoPlayPlan]:
         suggestions=suggestions,
         partial=True,
         report_binh_pids=tuple(report_binh_pids),
+        dependency_groups=tuple((pid,) for pid in suggestions),
     )
 
 

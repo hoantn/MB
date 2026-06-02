@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import configparser
 import os
 import subprocess
 import shutil
@@ -214,6 +215,30 @@ class BrowserManager:
 
     def _get_runtime_profile_dir(self, profile_id: str) -> str:
         return os.path.join(RUNTIME_BROWSER_DIR, str(profile_id or "P1"))
+
+    def _ensure_portable_runtime_settings(self, profile_id: str, runtime_dir: str, runtime_exe: str) -> None:
+        """Keep Portable Chrome cache inside its per-profile runtime tree."""
+        if os.path.basename(runtime_exe).lower() != "googlechromeportable.exe":
+            return
+
+        settings_path = os.path.join(runtime_dir, "GoogleChromePortable.ini")
+        parser = configparser.ConfigParser()
+        if os.path.isfile(settings_path):
+            parser.read(settings_path, encoding="utf-8-sig")
+
+        section = "GoogleChromePortable"
+        if not parser.has_section(section):
+            parser.add_section(section)
+
+        if parser.get(section, "CacheInTemp", fallback="").strip().lower() == "false":
+            return
+
+        # PortableApps otherwise injects one shared Temp cache path for every P.
+        # Preserve all existing custom settings and change only cache placement.
+        parser.set(section, "CacheInTemp", "false")
+        with open(settings_path, "w", encoding="utf-8", newline="\n") as f:
+            parser.write(f)
+        log.info("Browser[%s] Portable cache isolated in runtime: %s", profile_id, settings_path)
 
     def _terminate_process_tree(self, proc: subprocess.Popen, profile_id: str) -> None:
         """Terminate launcher + child chrome.exe processes for this profile."""
@@ -465,6 +490,7 @@ class BrowserManager:
         if not runtime_exe or not os.path.isfile(runtime_exe):
             raise FileNotFoundError(f"Không tìm thấy file exe trong runtime browser: {runtime_dir}")
 
+        self._ensure_portable_runtime_settings(profile_id, runtime_dir, runtime_exe)
         return runtime_dir, runtime_exe
 
     # luôn load lại config mới nhất trước khi xử lý
@@ -820,6 +846,7 @@ chrome.webRequest.onAuthRequired.addListener(
                 "--disable-renderer-backgrounding",
 
                 "--disable-dev-shm-usage",
+                "--mute-audio",
                 "--no-first-run",
                 "--no-default-browser-check",
                 f"--window-size={win_w},{win_h}",

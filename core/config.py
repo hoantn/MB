@@ -129,6 +129,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "opp_sap_lang_intentional_foul": {
                 "enabled": False,
             },
+            "missing_3p": {
+                "enabled": False,
+            },
         },
     },
 }

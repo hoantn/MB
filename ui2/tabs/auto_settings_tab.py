@@ -70,6 +70,8 @@ class AutoSettingsTab(QWidget):
         mau_binh_form = QFormLayout(mau_binh_box)
         self.chk_intentional_foul = QCheckBox("Tự binh lủng khi bị sập làng (kèm báo Telegram)")
         mau_binh_form.addRow(self.chk_intentional_foul)
+        self.chk_missing_3p = QCheckBox("Báo khi không đủ 3P")
+        mau_binh_form.addRow(self.chk_missing_3p)
         root.addWidget(mau_binh_box)
 
         actions = QHBoxLayout()
@@ -92,6 +94,7 @@ class AutoSettingsTab(QWidget):
         self.chk_gold_max_threshold.setChecked(config.max_enabled)
         self.spn_gold_max_threshold.setValue(config.max_threshold)
         self.chk_intentional_foul.setChecked(config.intentional_foul_enabled)
+        self.chk_missing_3p.setChecked(config.missing_3p_enabled)
 
     @staticmethod
     def _read_form_config(raw_config: dict) -> GoldThresholdConfig:
@@ -106,6 +109,7 @@ class AutoSettingsTab(QWidget):
             max_enabled=self.chk_gold_max_threshold.isChecked(),
             max_threshold=int(self.spn_gold_max_threshold.value()),
             intentional_foul_enabled=self.chk_intentional_foul.isChecked(),
+            missing_3p_enabled=self.chk_missing_3p.isChecked(),
         )
 
     def _validate_config(self, config: GoldThresholdConfig) -> bool:
@@ -131,6 +135,7 @@ class AutoSettingsTab(QWidget):
         min_threshold = alerts.setdefault("gold_min_threshold", {})
         max_threshold = alerts.setdefault("gold_max_threshold", {})
         intentional_foul = alerts.setdefault("opp_sap_lang_intentional_foul", {})
+        missing_3p = alerts.setdefault("missing_3p", {})
         alerts.pop("gold_threshold", None)
         telegram["bot_token"] = config.bot_token
         telegram["chat_id"] = config.chat_id
@@ -139,6 +144,7 @@ class AutoSettingsTab(QWidget):
         max_threshold["enabled"] = config.max_enabled
         max_threshold["threshold"] = config.max_threshold
         intentional_foul["enabled"] = config.intentional_foul_enabled
+        missing_3p["enabled"] = config.missing_3p_enabled
         save_config(raw)
         self.config_saved.emit(config)
         QMessageBox.information(self, "Thành công", "Đã lưu cấu hình Auto")

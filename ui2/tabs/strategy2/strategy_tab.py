@@ -176,8 +176,19 @@ class StrategyTab(QWidget):
         self._auto_play_hand_key: Optional[str] = None
         self._auto_play_pending_key: Optional[str] = None
         self._auto_play_applied_profile_keys = set()
+        self._auto_play_reservations: Dict[str, str] = {}
+        self._auto_play_counted_round_keys = set()
+        # Internal balance cycle: after 3 completed internal rounds, run one
+        # independent Money round before allowing internal balance again.
+        self._auto_play_internal_streak: int = 0
+        self._auto_play_round_modes: Dict[str, str] = {}
+        self._auto_play_session: int = 0
         self._auto_play_log_sink = None
         self._auto_settings_notifier = None
+        self._missing_3p_alert_timer = QTimer(self)
+        self._missing_3p_alert_timer.setSingleShot(True)
+        self._missing_3p_alert_timer.setInterval(100)
+        self._missing_3p_alert_timer.timeout.connect(self._check_missing_3p_alert)
         # Đánh dấu đã từng click chọn 1 gợi ý OPP/NGU hay chưa
         self._ngu_clicked_once: bool = False
 
@@ -628,6 +639,7 @@ class StrategyTab(QWidget):
         if codes and isinstance(codes, list) and len(codes) == 13:
             # áp dụng lại như một WS update "force"
             self._force_reset_pid_state(pid)
+            self._last_hand_hash[pid] = self._hand_hash(codes)
             self._codes_slot_order[pid] = list(codes)
             self._layout_codes[pid] = list(codes)
             if pid == self.active_profile:
@@ -636,6 +648,7 @@ class StrategyTab(QWidget):
             # trigger staged scheduler
             self._batch_debounce.stop()
             self._batch_debounce.start()
+            self._schedule_missing_3p_alert()
     def _apply_pending_ws_samehand_if_any(self, pid: str) -> None:
         try:
             codes = (getattr(self, "_pending_ws_samehand", {}) or {}).pop(pid, None)
@@ -716,6 +729,7 @@ class StrategyTab(QWidget):
             if up.is_new_hand:
                 log.warning("[WS FORCE RESET] pid=%s first3=%s", pid, codes[:3])
                 self._force_reset_pid_state(pid)
+                self._last_hand_hash[pid] = up.hand_hash
 
                 self._codes_slot_order[pid] = list(codes)
                 self._layout_codes[pid] = list(codes)
@@ -741,6 +755,7 @@ class StrategyTab(QWidget):
 
         if any_new_hand:
             self._refresh_ngu_from_3p(force=True)
+            self._schedule_missing_3p_alert()
 
     # =================== NEW: staged sequential scheduler ===================
     @property
@@ -885,6 +900,46 @@ class StrategyTab(QWidget):
         except Exception:
             log.exception("[ALL] on_apply_all failed")
 
+    def _prepare_manual_apply(self, profile_ids) -> bool:
+        """Give a manual action ownership of the visible hand before it starts.
+
+        Auto Play may still have delayed callbacks for the same cards. Invalidate
+        those callbacks as one session and suppress re-planning until a new hand
+        arrives. A running drag is never interrupted because stopping it halfway
+        would leave the game layout in an undefined state.
+        """
+        requested = {str(pid) for pid in (profile_ids or ()) if str(pid) in self.profiles}
+        if not requested:
+            return False
+
+        running = [
+            str(pid)
+            for pid, worker in (getattr(self, "_apply_threads", {}) or {}).items()
+            if worker is not None and getattr(worker, "is_alive", lambda: False)()
+        ]
+        if running:
+            self._auto_play_log(
+                f"Bỏ thao tác tay vì đang xếp: {','.join(sorted(running))}."
+            )
+            return False
+
+        if self._auto_play_enabled or self._auto_play_reservations:
+            self._auto_play_session += 1
+            self._auto_play_hand_key = None
+            self._auto_play_pending_key = None
+            self._auto_reset_internal_cycle()
+            for key, state in list(self._auto_play_reservations.items()):
+                if state == "pending":
+                    self._auto_play_reservations[key] = "cancelled"
+            for pid in self.profiles:
+                codes = list(self._codes_slot_order.get(pid) or [])
+                if len(codes) == 13:
+                    self._auto_play_applied_profile_keys.add(self._auto_profile_apply_key(pid))
+            self._auto_play_log(
+                f"Thao tác tay nhận quyền ván hiện tại: {','.join(sorted(requested))}."
+            )
+        return True
+
     def set_auto_play_log_sink(self, sink) -> None:
         self._auto_play_log_sink = sink
 
@@ -892,7 +947,53 @@ class StrategyTab(QWidget):
         """Attach the cached Auto settings/notifier service owned by MainWindow."""
         self._auto_settings_notifier = notifier
 
+    def _schedule_missing_3p_alert(self) -> None:
+        """Debounce WS hand bursts before checking whether all 3P share one table."""
+        notifier = getattr(self, "_auto_settings_notifier", None)
+        if (
+            not self._auto_play_enabled
+            or self._auto_play_remaining <= 0
+            or notifier is None
+            or not notifier.is_missing_3p_enabled()
+        ):
+            return
+        self._missing_3p_alert_timer.stop()
+        self._missing_3p_alert_timer.start()
+
+    def _current_missing_3p_hand_key(self) -> Optional[str]:
+        """Build an order-insensitive key so drag updates cannot duplicate alerts."""
+        parts = []
+        for pid in self.profiles:
+            codes = list(self._codes_slot_order.get(pid) or [])
+            if len(codes) == 13:
+                parts.append(f"{pid}:{','.join(sorted(map(str, codes)))}")
+        return "|".join(parts) or None
+
+    def _check_missing_3p_alert(self) -> None:
+        """Alert only when realtime roster proves that fewer than 3P share a table."""
+        try:
+            notifier = getattr(self, "_auto_settings_notifier", None)
+            if (
+                not self._auto_play_enabled
+                or self._auto_play_remaining <= 0
+                or notifier is None
+                or not notifier.is_missing_3p_enabled()
+            ):
+                return
+            owner = self.window()
+            room_engine = getattr(owner, "room_engine", None)
+            context = classify_auto_room_context(room_engine)
+            controlled_count = len(context.controlled_pids)
+            if controlled_count <= 0 or controlled_count >= len(self.profiles):
+                return
+            hand_key = self._current_missing_3p_hand_key()
+            if hand_key:
+                notifier.send_missing_3p(hand_key)
+        except Exception:
+            log.exception("[AUTO-PLAY] missing 3P alert check failed")
+
     def set_auto_play(self, enabled: bool, rounds: int = 0, delay_min_ms: int = 5000, delay_max_ms: int = 20000) -> None:
+        self._auto_play_session += 1
         self._auto_play_enabled = bool(enabled)
         self._auto_play_remaining = max(0, int(rounds or 0)) if enabled else 0
         a = max(0, int(delay_min_ms or 0))
@@ -902,6 +1003,11 @@ class StrategyTab(QWidget):
         self._auto_play_hand_key = None
         self._auto_play_pending_key = None
         self._auto_play_applied_profile_keys = set()
+        self._auto_play_reservations = {}
+        self._auto_play_counted_round_keys = set()
+        self._auto_reset_internal_cycle()
+        if not self._auto_play_enabled:
+            self._missing_3p_alert_timer.stop()
         self._auto_play_log(
             f"Auto Play {'bật' if self._auto_play_enabled else 'tắt'} | còn {self._auto_play_remaining} ván | delay={self._auto_play_delay_min_ms}-{self._auto_play_delay_max_ms}ms"
         )
@@ -955,15 +1061,28 @@ class StrategyTab(QWidget):
                 and pkey not in self._auto_play_applied_profile_keys
             ):
                 ready_count += 1
-                parts.append(f"{pid}:{','.join(map(str, codes))}")
+                parts.append(pkey)
         if ready_count <= 0:
             return None
         return f"NGU:{self._ngu_key or '-'}|" + "|".join(parts)
 
     def _auto_profile_apply_key(self, pid: str) -> str:
         codes = list(self._codes_slot_order.get(pid) or [])
-        # A profile hand must be applied at most once even if NGU appears later.
-        return f"{pid}:{','.join(map(str, codes))}"
+        # A profile hand must be applied at most once even if NGU appears later
+        # or the game reports the same 13 cards again in a different slot order.
+        return f"{pid}:{','.join(sorted(map(str, codes)))}"
+
+    @staticmethod
+    def _auto_room_context_key(context) -> str:
+        """Stable roster signature used to reject delayed plans after a table move."""
+        return "|".join(
+            [
+                str(getattr(context, "kind", "") or ""),
+                ",".join(sorted(map(str, getattr(context, "controlled_pids", ()) or ()))),
+                ",".join(sorted(map(str, getattr(context, "roster", ()) or ()))),
+                ",".join(sorted(map(str, getattr(context, "external_uids", ()) or ()))),
+            ]
+        )
 
     def _auto_should_decrement_round(self) -> bool:
         cards_pids = [
@@ -974,9 +1093,83 @@ class StrategyTab(QWidget):
         if not cards_pids:
             return True
         return all(
-            self._auto_profile_apply_key(pid) in self._auto_play_applied_profile_keys
+            self._auto_play_reservations.get(self._auto_profile_apply_key(pid)) == "done"
             for pid in cards_pids
         )
+
+    def _auto_current_round_key(self) -> str:
+        """Stable key for the currently visible hands, independent from slot order."""
+        return "|".join(
+            self._auto_profile_apply_key(pid)
+            for pid in self.profiles
+            if len(list(self._codes_slot_order.get(pid) or [])) == 13
+        )
+
+    def _auto_reset_internal_cycle(self) -> None:
+        """Reset transient internal-balance cycle state."""
+        self._auto_play_internal_streak = 0
+        self._auto_play_round_modes = {}
+
+    def _auto_register_round_mode(self, mode: str) -> None:
+        """Remember how a scheduled round must affect the internal cycle."""
+        round_key = self._auto_current_round_key()
+        if round_key:
+            self._auto_play_round_modes.setdefault(round_key, str(mode or "other"))
+
+    def _auto_commit_round_mode(self, round_key: str) -> None:
+        """Update the cycle only after every visible profile finished applying."""
+        mode = self._auto_play_round_modes.pop(round_key, "other")
+        if mode == "internal_balance":
+            self._auto_play_internal_streak = min(3, self._auto_play_internal_streak + 1)
+            self._auto_play_log(
+                f"Chu ky noi bo: {self._auto_play_internal_streak}/3 van lien tiep."
+            )
+            return
+        if mode == "internal_cycle_money":
+            self._auto_play_internal_streak = 0
+            self._auto_play_log("Chu ky noi bo: da xep Money rieng, reset ve 0/3.")
+            return
+        self._auto_play_internal_streak = 0
+
+    def _auto_finish_round_if_ready(self) -> None:
+        """Consume one Auto round only after every visible profile has finished apply."""
+        if not self._auto_should_decrement_round():
+            return
+        round_key = self._auto_current_round_key()
+        if not round_key or round_key in self._auto_play_counted_round_keys:
+            return
+        self._auto_play_counted_round_keys.add(round_key)
+        self._auto_commit_round_mode(round_key)
+        self._auto_play_remaining -= 1
+        if self._auto_play_remaining <= 0:
+            self._auto_play_enabled = False
+            self._missing_3p_alert_timer.stop()
+            self._auto_play_log("Auto Play hoàn tất số ván, đã tắt.")
+        self._sync_auto_play_sink_state()
+
+    def _auto_release_pending_group(self, expected_group_keys: Dict[str, str]) -> None:
+        """Release only callbacks that have not started dragging, then allow re-plan."""
+        has_started = any(
+            self._auto_play_reservations.get(key) in ("applied", "done", "failed")
+            for key in expected_group_keys.values()
+        )
+        for key in expected_group_keys.values():
+            if self._auto_play_reservations.get(key) == "pending":
+                if has_started:
+                    self._auto_play_reservations[key] = "cancelled"
+                else:
+                    self._auto_play_reservations.pop(key, None)
+                    self._auto_play_applied_profile_keys.discard(key)
+        self._auto_play_hand_key = None
+        self._auto_play_pending_key = None
+        if not has_started and self._auto_play_enabled and self._auto_play_remaining > 0:
+            session = self._auto_play_session
+            QTimer.singleShot(0, lambda s=session: self._maybe_run_auto_play(s))
+
+    def _auto_mark_profile_done(self, profile_key: str) -> None:
+        if self._auto_play_reservations.get(profile_key) == "applied":
+            self._auto_play_reservations[profile_key] = "done"
+        self._auto_finish_round_if_ready()
 
     def _auto_is_waiting_for_ngu_suggestions(self) -> bool:
         """Keep the full 3P path alive while the derived OPP job is still pending."""
@@ -992,7 +1185,9 @@ class StrategyTab(QWidget):
             for job in list(getattr(scheduler, "job_q", ()) or ())
         )
 
-    def _maybe_run_auto_play(self) -> None:
+    def _maybe_run_auto_play(self, expected_session: Optional[int] = None) -> None:
+        if expected_session is not None and expected_session != self._auto_play_session:
+            return
         if not self._auto_play_enabled or self._auto_play_remaining <= 0:
             return
 
@@ -1005,7 +1200,8 @@ class StrategyTab(QWidget):
             dmax = max(dmin, int(getattr(self, "_auto_play_delay_max_ms", dmin) or dmin))
             delay_ms = random.randint(dmin, dmax) if dmax > dmin else dmin
             self._auto_play_log(f"Đủ bài/gợi ý, random delay {delay_ms}ms trước khi xếp.")
-            QTimer.singleShot(delay_ms, self._maybe_run_auto_play)
+            session = self._auto_play_session
+            QTimer.singleShot(delay_ms, lambda s=session: self._maybe_run_auto_play(s))
             return
         try:
             has_auto_opp = any(s.get("_auto_opp_money") for s in self._ngu_suggestions)
@@ -1031,10 +1227,12 @@ class StrategyTab(QWidget):
 
             if allow_opp_plan and not has_auto_opp and self._auto_is_waiting_for_ngu_suggestions():
                 self._auto_play_log("Đang chờ gợi ý Money của OPP để xếp combo 3P.")
-                QTimer.singleShot(250, self._maybe_run_auto_play)
+                session = self._auto_play_session
+                QTimer.singleShot(250, lambda s=session: self._maybe_run_auto_play(s))
                 return
 
             # ── Chọn plan theo bối cảnh bàn ──────────────────────────────
+            internal_cycle_money = bool(is_internal and self._auto_play_internal_streak >= 3)
             if allow_opp_plan and has_auto_opp:
                 plan = build_auto_play_plan(
                     self,
@@ -1042,7 +1240,11 @@ class StrategyTab(QWidget):
                     allow_intentional_foul=allow_intentional_foul,
                 )
             elif is_internal:
-                plan = build_internal_balance_plan(self, room_context)
+                plan = (
+                    build_money_fallback_plan(self)
+                    if internal_cycle_money
+                    else build_internal_balance_plan(self, room_context)
+                )
                 if plan is None:
                     # Fallback: gold bằng nhau / thiếu data → Money độc lập
                     plan = build_money_fallback_plan(self)
@@ -1055,6 +1257,14 @@ class StrategyTab(QWidget):
                     return
                 self._auto_play_log("Bỏ qua: chưa có P nào đủ bài/gợi ý hợp lệ để Auto Play.")
                 return
+
+            separate_plan = None
+            if room_context.kind == "internal_2p" and plan.kind == "internal_balance":
+                pair_pids = set(room_context.controlled_pids)
+                separate_plan = build_money_fallback_plan(
+                    self,
+                    profile_ids=[pid for pid in self.profiles if pid not in pair_pids],
+                )
 
             # Loại bỏ các pid đã apply trong ván này
             plan.suggestions = {
@@ -1071,9 +1281,26 @@ class StrategyTab(QWidget):
                 pid for pid in (plan.report_binh_pids or ()) if pid in plan.suggestions
             )
             if not plan.suggestions:
+                if separate_plan is not None:
+                    separate_pids = list((separate_plan.suggestions or {}).keys())
+                    self._auto_play_hand_key = hand_key
+                    self._auto_register_round_mode("internal_balance")
+                    self._auto_play_log(f"Money ban rieng: {','.join(separate_pids)}")
+                    self._auto_apply_suggestions_random(
+                        separate_plan.suggestions,
+                        report_binh_pids=set(separate_plan.report_binh_pids or ()),
+                        dependency_groups=separate_plan.dependency_groups,
+                    )
                 return
 
             self._auto_play_hand_key = hand_key
+            if plan.kind == "internal_balance":
+                self._auto_register_round_mode("internal_balance")
+            elif internal_cycle_money:
+                self._auto_register_round_mode("internal_cycle_money")
+                self._auto_play_log("Chu ky noi bo: van thu 4 dung Money rieng cho tung P.")
+            else:
+                self._auto_register_round_mode("other")
 
             # OPP selection chỉ cập nhật khi có external OPP
             if plan.kind not in ("money_fallback", "internal_balance"):
@@ -1085,11 +1312,19 @@ class StrategyTab(QWidget):
                 self._auto_play_log(
                     f"Chọn OPP #{plan.opp_index + 1} | dùng Bẻ Sập Làng | score={plan.score}"
                 )
-                self._auto_apply_suggestions_random(plan.suggestions)
+                self._auto_apply_suggestions_random(
+                    plan.suggestions,
+                    dependency_groups=plan.dependency_groups,
+                    expected_room_context_key=self._auto_room_context_key(room_context),
+                )
 
             elif plan.kind == "intentional_foul":
                 self._auto_play_log("OPP ăn sập làng không thể chạy | dùng Binh Lủng 3P.")
-                self._auto_apply_intentional_foul_random(plan.suggestions, hand_key)
+                self._auto_apply_intentional_foul_random(
+                    plan.suggestions,
+                    hand_key,
+                    expected_room_context_key=self._auto_room_context_key(room_context),
+                )
 
             elif plan.kind == "internal_balance":
                 ready_pids = list((plan.suggestions or {}).keys())
@@ -1105,7 +1340,18 @@ class StrategyTab(QWidget):
                 self._auto_apply_suggestions_random(
                     plan.suggestions,
                     report_binh_pids=set(plan.report_binh_pids or ()),
+                    dependency_groups=plan.dependency_groups,
+                    expected_room_context_key=self._auto_room_context_key(room_context),
                 )
+                if room_context.kind == "internal_2p":
+                    if separate_plan is not None:
+                        separate_pids = list((separate_plan.suggestions or {}).keys())
+                        self._auto_play_log(f"Money ban rieng: {','.join(separate_pids)}")
+                        self._auto_apply_suggestions_random(
+                            separate_plan.suggestions,
+                            report_binh_pids=set(separate_plan.report_binh_pids or ()),
+                            dependency_groups=separate_plan.dependency_groups,
+                        )
 
             elif plan.kind == "money_fallback":
                 ready_pids = list((plan.suggestions or {}).keys())
@@ -1120,6 +1366,7 @@ class StrategyTab(QWidget):
                 self._auto_apply_suggestions_random(
                     plan.suggestions,
                     report_binh_pids=set(plan.report_binh_pids or ()),
+                    dependency_groups=plan.dependency_groups,
                 )
 
             else:
@@ -1139,13 +1386,10 @@ class StrategyTab(QWidget):
                 self._auto_apply_suggestions_random(
                     plan.suggestions,
                     report_binh_pids=set(plan.report_binh_pids or ()),
+                    dependency_groups=plan.dependency_groups,
+                    expected_room_context_key=self._auto_room_context_key(room_context),
                 )
 
-            if self._auto_should_decrement_round():
-                self._auto_play_remaining -= 1
-                if self._auto_play_remaining <= 0:
-                    self._auto_play_enabled = False
-                    self._auto_play_log("Auto Play hoàn tất số ván, đã tắt.")
             self._sync_auto_play_sink_state()
         except Exception as e:
             self._auto_play_log(f"Lỗi Auto Play: {e}")
@@ -1156,12 +1400,25 @@ class StrategyTab(QWidget):
         dmax = max(dmin, int(getattr(self, "_auto_play_delay_max_ms", dmin) or dmin))
         return random.randint(dmin, dmax) if dmax > dmin else dmin
 
-    def _auto_schedule_click_binh(self, pid: str) -> None:
+    def _auto_schedule_click_binh(
+        self,
+        pid: str,
+        expected_profile_key: Optional[str] = None,
+        expected_auto_session: Optional[int] = None,
+    ) -> None:
         """Wait for the game to show Báo binh after special layout, then click it."""
         self._auto_play_log(f"{pid}: đã xếp hình binh, chờ 2000ms để click Báo binh.")
 
         def _click() -> None:
             try:
+                if (
+                    expected_auto_session is not None
+                    and expected_auto_session != self._auto_play_session
+                ):
+                    return
+                if expected_profile_key and self._auto_profile_apply_key(pid) != expected_profile_key:
+                    self._auto_play_log(f"{pid}: bỏ click Báo binh vì bài đã đổi.")
+                    return
                 owner = self.window()
                 controller = getattr(owner, "game_controller", None)
                 if controller is None or not hasattr(controller, "click_binh"):
@@ -1174,12 +1431,25 @@ class StrategyTab(QWidget):
 
         QTimer.singleShot(2000, _click)
 
-    def _auto_schedule_click_done(self, pid: str) -> None:
+    def _auto_schedule_click_done(
+        self,
+        pid: str,
+        expected_profile_key: Optional[str] = None,
+        expected_auto_session: Optional[int] = None,
+    ) -> None:
         """Wait for the game to enable Xong after a normal layout, then click it."""
         self._auto_play_log(f"{pid}: đã xếp bài, chờ 1000ms để click Xong.")
 
         def _click() -> None:
             try:
+                if (
+                    expected_auto_session is not None
+                    and expected_auto_session != self._auto_play_session
+                ):
+                    return
+                if expected_profile_key and self._auto_profile_apply_key(pid) != expected_profile_key:
+                    self._auto_play_log(f"{pid}: bỏ click Xong vì bài đã đổi.")
+                    return
                 owner = self.window()
                 controller = getattr(owner, "game_controller", None)
                 if controller is None or not hasattr(controller, "click_done"):
@@ -1199,6 +1469,9 @@ class StrategyTab(QWidget):
         no_complete_pids=None,
         expected_profile_keys=None,
         on_apply_started=None,
+        expected_auto_session=None,
+        dependency_groups=None,
+        expected_room_context_key=None,
     ) -> None:
         """Apply Auto Play profile-by-profile with an independent random delay per P."""
         from ui2.tabs.strategy2.strategy_suggest import apply_suggestion_dashboard_style
@@ -1206,6 +1479,19 @@ class StrategyTab(QWidget):
         report_binh_pids = set(report_binh_pids or ())
         no_complete_pids = set(no_complete_pids or ())
         expected_profile_keys = dict(expected_profile_keys or {})
+        groups = [tuple(group) for group in (dependency_groups or ()) if group]
+        if not groups:
+            groups = [(pid,) for pid in self.profiles if (suggestions_by_pid or {}).get(pid)]
+        group_keys_by_pid: Dict[str, Dict[str, str]] = {}
+        for group in groups:
+            keys = {pid: self._auto_profile_apply_key(pid) for pid in group}
+            for pid in group:
+                group_keys_by_pid[pid] = keys
+        if expected_profile_keys:
+            for pid in expected_profile_keys:
+                group_keys_by_pid[pid] = dict(expected_profile_keys)
+        if expected_auto_session is None:
+            expected_auto_session = self._auto_play_session
         for pid in self.profiles:
             sug = dict((suggestions_by_pid or {}).get(pid) or {})
             ws_codes = list(self._codes_slot_order.get(pid) or [])
@@ -1214,41 +1500,76 @@ class StrategyTab(QWidget):
 
             delay_ms = self._auto_random_delay_ms()
             self._auto_play_log(f"{pid}: chờ random {delay_ms}ms rồi xếp.")
-            self._auto_play_applied_profile_keys.add(self._auto_profile_apply_key(pid))
+            profile_key = self._auto_profile_apply_key(pid)
+            self._auto_play_applied_profile_keys.add(profile_key)
+            self._auto_play_reservations[profile_key] = "pending"
 
             def _apply_one(
                 profile_id=pid,
                 cards=list(ws_codes),
                 suggestion=dict(sug),
-                expected_key=expected_profile_keys.get(pid),
+                expected_key=profile_key,
+                expected_group_keys=dict(group_keys_by_pid.get(pid) or {pid: profile_key}),
+                auto_session=expected_auto_session,
+                room_context_key=expected_room_context_key,
             ) -> None:
                 try:
+                    if auto_session != self._auto_play_session:
+                        self._auto_play_log(f"{profile_id}: bỏ xếp vì phiên Auto đã đổi.")
+                        return
+                    if room_context_key:
+                        owner = self.window()
+                        current_context = classify_auto_room_context(
+                            getattr(owner, "room_engine", None)
+                        )
+                        if self._auto_room_context_key(current_context) != room_context_key:
+                            self._auto_play_log(f"{profile_id}: bo xep vi nhom ban da doi.")
+                            self._auto_release_pending_group(expected_group_keys)
+                            return
                     if expected_key and any(
                         self._auto_profile_apply_key(pid) != key
-                        for pid, key in expected_profile_keys.items()
+                        for pid, key in expected_group_keys.items()
                     ):
-                        self._auto_play_log(f"{profile_id}: bỏ Binh Lủng vì bài đã đổi.")
+                        self._auto_play_log(f"{profile_id}: bỏ xếp vì bài đã đổi.")
+                        self._auto_release_pending_group(expected_group_keys)
                         return
+                    self._auto_play_reservations[expected_key] = "applied"
                     if callable(on_apply_started):
                         on_apply_started(profile_id)
-                    apply_suggestion_dashboard_style(
+                    spawned = apply_suggestion_dashboard_style(
                         tab=self,
                         profile_id=profile_id,
                         ws_codes=list(cards),
                         suggestion=dict(suggestion),
                         on_complete=None if profile_id in no_complete_pids else (
-                            (lambda p=profile_id: self._auto_schedule_click_binh(p))
+                            (
+                                lambda p=profile_id, key=expected_key, session=auto_session:
+                                self._auto_schedule_click_binh(p, key, session)
+                            )
                             if profile_id in report_binh_pids
-                            else (lambda p=profile_id: self._auto_schedule_click_done(p))
+                            else (
+                                lambda p=profile_id, key=expected_key, session=auto_session:
+                                self._auto_schedule_click_done(p, key, session)
+                            )
                         ),
+                        on_finished=lambda key=expected_key: self._auto_mark_profile_done(key),
                     )
+                    if not spawned:
+                        self._auto_play_reservations[expected_key] = "pending"
+                        self._auto_release_pending_group(expected_group_keys)
                 except Exception as e:
+                    self._auto_play_reservations[expected_key] = "failed"
                     self._auto_play_log(f"{profile_id}: lỗi xếp auto: {e}")
                     log.exception("[AUTO-PLAY] apply profile failed pid=%s", profile_id)
 
             QTimer.singleShot(delay_ms, _apply_one)
 
-    def _auto_apply_intentional_foul_random(self, suggestions_by_pid: Dict[str, dict], hand_key: str) -> None:
+    def _auto_apply_intentional_foul_random(
+        self,
+        suggestions_by_pid: Dict[str, dict],
+        hand_key: str,
+        expected_room_context_key=None,
+    ) -> None:
         """Apply intentional foul layouts without clicking Xong or Báo binh."""
         expected = {pid: self._auto_profile_apply_key(pid) for pid in self.profiles}
         notifier = getattr(self, "_auto_settings_notifier", None)
@@ -1265,6 +1586,8 @@ class StrategyTab(QWidget):
             no_complete_pids=set(self.profiles),
             expected_profile_keys=expected,
             on_apply_started=_notify_once,
+            dependency_groups=(tuple(self.profiles),),
+            expected_room_context_key=expected_room_context_key,
         )
 
     def _get_selected_opp_suggestion(self) -> Optional[dict]:
