@@ -27,9 +27,11 @@ from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QSplitter,
+    QSplitterHandle,
+    QSizePolicy,
 )
-from PySide6.QtCore import Qt, QTimer, QSize
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtCore import Qt, QTimer, QSize, QRect, Signal
+from PySide6.QtGui import QIcon, QPixmap, QMouseEvent
 
 from core.logger import log
 from core.constants import LOG_DIR
@@ -56,12 +58,13 @@ from ui2.tabs.capture_tab import CaptureTab
 from ui2.tabs.xao_vang_tab import XaoVangTab
 from ui2.tabs.auto_play_tab import AutoPlayTab
 from ui2.tabs.auto_settings_tab import AutoSettingsTab
-from core.config import load_config
+from core.config import load_config, save_config
 from core.gold_threshold_notifier import GoldThresholdNotifier
 from ui2.tabs.players_tab import PlayersTab
 from ui2.tabs.poker_tab import PokerTab
 
-ENABLE_WS_TEST_TAB = True
+# Internal WS simulator popup. Keep disabled in normal runs; enable only while testing.
+ENABLE_WS_TEST_TAB = False
 ENABLE_CAPTURE_TAB = True
 ENABLE_TAIXIU = True
 
@@ -165,7 +168,30 @@ atexit.register(_on_process_exit)
 _setup_faulthandler()
 
 
+class _StrategyRoomSplitterHandle(QSplitterHandle):
+    """Notify the main window only after the user finishes dragging the divider."""
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        super().mouseReleaseEvent(event)
+        splitter = self.splitter()
+        if isinstance(splitter, _StrategyRoomSplitter):
+            splitter.handle_released.emit()
+
+
+class _StrategyRoomSplitter(QSplitter):
+    """Horizontal splitter that can snap to one readable pane on narrow windows."""
+
+    handle_released = Signal()
+
+    def createHandle(self) -> QSplitterHandle:
+        return _StrategyRoomSplitterHandle(self.orientation(), self)
+
+
 class MainWindow(QMainWindow, WebSocketGateway):
+    _ROOM_PANE_MIN_WIDTH = 610
+    _STRATEGY_PANE_MIN_WIDTH = 908
+    _STRATEGY_ROOM_HANDLE_WIDTH = 7
+
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Tập trung vào làm! Tài xỉu ít thôi.")
@@ -184,6 +210,9 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self._room_tab_float_window: Optional[QDialog] = None
         self._ws_test_window: Optional[QDialog] = None
         self._auto_play_window: Optional[QDialog] = None
+        self._strategy_room_layout_mode: Optional[str] = None
+        self._compact_strategy_room_pane = "strategy"
+        self._strategy_room_resize_sync_pending = False
 
         self.browser_manager = None
         self.game_controller = None
@@ -310,6 +339,12 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
     def _apply_startup_window_geometry(self) -> None:
         try:
+            saved = self._get_saved_tool_window_geometry()
+            if saved is not None:
+                x, y, width, height = saved
+                self.setGeometry(x, y, width, height)
+                return
+
             screen = QApplication.screenAt(self.frameGeometry().center()) or QApplication.primaryScreen()
             if screen is None:
                 return
@@ -323,27 +358,173 @@ class MainWindow(QMainWindow, WebSocketGateway):
         except Exception:
             pass
 
+    def _is_tool_window_geometry_visible(self, x: int, y: int, width: int, height: int) -> bool:
+        """Return True when a saved tool rectangle still intersects a usable screen."""
+        rect = QRect(int(x), int(y), max(1, int(width)), max(1, int(height)))
+        try:
+            return any(screen.availableGeometry().intersects(rect) for screen in QApplication.screens())
+        except Exception:
+            return False
+
+    def _get_saved_tool_window_geometry(self) -> Optional[tuple[int, int, int, int]]:
+        """Read the current tool instance geometry and reject stale monitor layouts."""
+        cfg = load_config()
+        ui = cfg.get("ui") or {}
+        if not isinstance(ui, dict):
+            return None
+        geometries = ui.get("tool_window_geometries") or {}
+        if not isinstance(geometries, dict):
+            return None
+        saved = geometries.get(f"tool{get_tool_index()}") or {}
+        if not isinstance(saved, dict):
+            return None
+        try:
+            x = int(saved["x"])
+            y = int(saved["y"])
+            width = max(self.minimumWidth(), int(saved["width"]))
+            height = max(self.minimumHeight(), int(saved["height"]))
+        except (KeyError, TypeError, ValueError):
+            return None
+        if not self._is_tool_window_geometry_visible(x, y, width, height):
+            log.warning("Tool window saved geometry is off-screen; use default layout")
+            return None
+        return x, y, width, height
+
+    def save_current_tool_window_geometry(self) -> tuple[bool, str]:
+        """Persist this tool instance position and size without affecting other tools."""
+        rect = self.geometry()
+        cfg = load_config()
+        ui = cfg.get("ui")
+        if not isinstance(ui, dict):
+            ui = {}
+            cfg["ui"] = ui
+        geometries = ui.get("tool_window_geometries")
+        if not isinstance(geometries, dict):
+            geometries = {}
+            ui["tool_window_geometries"] = geometries
+        tool_key = f"tool{get_tool_index()}"
+        geometries[tool_key] = {
+            "x": int(rect.x()),
+            "y": int(rect.y()),
+            "width": int(rect.width()),
+            "height": int(rect.height()),
+        }
+        save_config(cfg)
+        log.info(
+            "Saved %s window geometry: x=%s y=%s width=%s height=%s",
+            tool_key,
+            rect.x(),
+            rect.y(),
+            rect.width(),
+            rect.height(),
+        )
+        return True, (
+            f"Đã lưu vị trí và kích thước {get_tool_name()}: "
+            f"x={rect.x()}, y={rect.y()}, {rect.width()}x{rect.height()}."
+        )
+
+    def reset_tool_window_geometry(self) -> tuple[bool, str]:
+        """Remove only this tool instance saved geometry and restore the fallback layout."""
+        cfg = load_config()
+        ui = cfg.get("ui")
+        if not isinstance(ui, dict):
+            ui = {}
+            cfg["ui"] = ui
+        geometries = ui.get("tool_window_geometries")
+        if not isinstance(geometries, dict):
+            geometries = {}
+            ui["tool_window_geometries"] = geometries
+        tool_key = f"tool{get_tool_index()}"
+        geometries.pop(tool_key, None)
+        save_config(cfg)
+        self._apply_startup_window_geometry()
+        self._apply_strategy_room_splitter_layout()
+        log.info("Reset %s window geometry to default layout", tool_key)
+        return True, f"Đã khôi phục vị trí và kích thước mặc định cho {get_tool_name()}."
+
     def _apply_strategy_room_splitter_layout(self) -> None:
         splitter = getattr(self, "strategy_room_splitter", None)
         if splitter is None:
             return
 
         try:
-            total_width = max(820, self.width())
-            room_min = 610 if total_width >= 1280 else 560
-            strategy_min = 560 if total_width >= 1280 else 420
-
-            self.room_tab.setMinimumWidth(room_min)
-            self.strategy_tab.setMinimumWidth(strategy_min)
-            splitter.setHandleWidth(7)
-            splitter.setStretchFactor(0, 0)
-            splitter.setStretchFactor(1, 1)
-
-            room_width = min(830, max(room_min, int(total_width * 0.43)))
-            strategy_width = max(strategy_min, total_width - room_width)
-            splitter.setSizes([room_width, strategy_width])
+            self._sync_strategy_room_splitter_layout(force=True)
         except Exception:
             pass
+
+    def _strategy_room_splitter_width(self) -> int:
+        splitter = getattr(self, "strategy_room_splitter", None)
+        if splitter is None:
+            return 0
+        width = splitter.width()
+        return width if width > 100 else self.width()
+
+    def _sync_strategy_room_splitter_layout(self, *, force: bool = False) -> None:
+        """Keep both panes readable on wide screens and snap to one pane on narrow screens."""
+        splitter = getattr(self, "strategy_room_splitter", None)
+        if splitter is None:
+            return
+
+        total_width = self._strategy_room_splitter_width()
+        handle_width = self._STRATEGY_ROOM_HANDLE_WIDTH
+        wide_min_width = self._ROOM_PANE_MIN_WIDTH + self._STRATEGY_PANE_MIN_WIDTH + handle_width
+        mode = "wide" if total_width >= wide_min_width else "compact"
+        if not force and mode == self._strategy_room_layout_mode:
+            return
+
+        splitter.setHandleWidth(handle_width)
+        # Keep the panes collapsible in both modes. Hard minimum widths would
+        # prevent Qt from shrinking the main window far enough to enter compact mode.
+        splitter.setChildrenCollapsible(True)
+        self.room_tab.setMinimumWidth(0)
+        self.strategy_tab.setMinimumWidth(0)
+        pane_policy = QSizePolicy.Preferred if mode == "wide" else QSizePolicy.Ignored
+        for pane in (self.room_tab, self.strategy_tab):
+            size_policy = pane.sizePolicy()
+            size_policy.setHorizontalPolicy(pane_policy)
+            pane.setSizePolicy(size_policy)
+        if mode == "wide":
+            splitter.setStretchFactor(0, 0)
+            splitter.setStretchFactor(1, 1)
+            room_width = min(830, max(self._ROOM_PANE_MIN_WIDTH, int(total_width * 0.43)))
+            splitter.setSizes([room_width, max(self._STRATEGY_PANE_MIN_WIDTH, total_width - room_width)])
+        else:
+            self._snap_compact_strategy_room_splitter()
+
+        self._strategy_room_layout_mode = mode
+
+    def _snap_compact_strategy_room_splitter(self) -> None:
+        """Show exactly one pane after a compact-mode drag instead of leaving clipped panes."""
+        splitter = getattr(self, "strategy_room_splitter", None)
+        if splitter is None:
+            return
+        total_width = max(1, self._strategy_room_splitter_width())
+        if self._compact_strategy_room_pane == "room":
+            splitter.setSizes([total_width, 0])
+        else:
+            splitter.setSizes([0, total_width])
+
+    def _on_strategy_room_splitter_released(self) -> None:
+        splitter = getattr(self, "strategy_room_splitter", None)
+        if splitter is None or self._strategy_room_layout_mode != "compact":
+            return
+        sizes = splitter.sizes()
+        if len(sizes) != 2:
+            return
+        self._compact_strategy_room_pane = "room" if sizes[0] >= sizes[1] else "strategy"
+        self._snap_compact_strategy_room_splitter()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if not hasattr(self, "strategy_room_splitter") or self._strategy_room_resize_sync_pending:
+            return
+        self._strategy_room_resize_sync_pending = True
+
+        def sync_after_resize() -> None:
+            self._strategy_room_resize_sync_pending = False
+            self._sync_strategy_room_splitter_layout()
+
+        QTimer.singleShot(0, sync_after_resize)
 
     # ==========================================================
     # Boot-gate core
@@ -447,10 +628,11 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # self.poker_tab.yeu_cau_lam_moi_snapshot.connect(self._on_poker_request_refresh_snapshot)
         # self.ws_sim_tab = WSSimulatorTab(self)
 
-        self.strategy_room_splitter = QSplitter(Qt.Horizontal, self)
+        self.strategy_room_splitter = _StrategyRoomSplitter(Qt.Horizontal, self)
         self.strategy_room_splitter.setObjectName("strategy_room_splitter")
         self.strategy_room_splitter.addWidget(self.room_tab)
         self.strategy_room_splitter.addWidget(self.strategy_tab)
+        self.strategy_room_splitter.handle_released.connect(self._on_strategy_room_splitter_released)
         self.strategy_room_splitter.setStyleSheet(
             """
             QSplitter#strategy_room_splitter::handle {

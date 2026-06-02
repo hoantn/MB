@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QLabel,
     QFrame,
+    QScrollArea,
     QColorDialog, 
     QMessageBox,
 )
@@ -56,7 +57,22 @@ class ConfigTab(QWidget):
         QMessageBox.critical(self, "Lỗi", text)
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # Keep controls at their usable height when the main tool is compact.
+        # Scrolling is preferable to squeezing spin boxes and checkboxes flat.
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        outer.addWidget(self.scroll)
+
+        content = QWidget()
+        self.scroll.setWidget(content)
+        root = QVBoxLayout(content)
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(10)
 
@@ -158,6 +174,19 @@ class ConfigTab(QWidget):
         lay_theme.addWidget(self.btn_theme_colors)
         lay_theme.addStretch(1)
 
+        # ---- Group: Tool window geometry ----
+        grp_tool_window = QGroupBox("Cửa sổ Tool")
+        lay_tool_window = QHBoxLayout(grp_tool_window)
+
+        self.btn_save_tool_window_geometry = QPushButton("Đặt kích thước và vị trí hiện tại làm mặc định")
+        self.btn_reset_tool_window_geometry = QPushButton("Khôi phục mặc định")
+        self.btn_save_tool_window_geometry.setProperty("role", "primary")
+        self.btn_reset_tool_window_geometry.setProperty("role", "info")
+
+        lay_tool_window.addWidget(self.btn_save_tool_window_geometry)
+        lay_tool_window.addWidget(self.btn_reset_tool_window_geometry)
+        lay_tool_window.addStretch(1)
+
         # ---- Buttons ----
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
@@ -181,6 +210,7 @@ class ConfigTab(QWidget):
 
         root.addWidget(grp_notify)
         root.addWidget(grp_theme)
+        root.addWidget(grp_tool_window)
 
         root.addLayout(btn_row)
         root.addStretch(1)
@@ -191,6 +221,8 @@ class ConfigTab(QWidget):
         self.btn_save.clicked.connect(self._on_save_clicked)
         self.btn_reload.clicked.connect(self._load_from_config)
         self.btn_theme_colors.clicked.connect(self._open_theme_color_dialog)
+        self.btn_save_tool_window_geometry.clicked.connect(self._on_save_tool_window_geometry_clicked)
+        self.btn_reset_tool_window_geometry.clicked.connect(self._on_reset_tool_window_geometry_clicked)
 
     # ------------------------------------------------------------ LOAD/SAVE
 
@@ -304,6 +336,40 @@ class ConfigTab(QWidget):
         else:
             log.error("ConfigTab: %s", msg)
             self._show_error(msg)
+
+    def _on_save_tool_window_geometry_clicked(self) -> None:
+        """Persist the current MainWindow geometry for the active tool instance."""
+        owner = self.window()
+        if not hasattr(owner, "save_current_tool_window_geometry"):
+            self._show_error("Không tìm thấy chức năng lưu vị trí cửa sổ Tool.")
+            return
+        try:
+            ok, message = owner.save_current_tool_window_geometry()
+        except Exception as e:
+            log.exception("ConfigTab: save tool window geometry failed")
+            self._show_error(f"Không thể lưu vị trí cửa sổ Tool:\n{e}")
+            return
+        if ok:
+            self._show_success(message)
+        else:
+            self._show_error(message)
+
+    def _on_reset_tool_window_geometry_clicked(self) -> None:
+        """Remove the active tool instance override and apply the fallback layout."""
+        owner = self.window()
+        if not hasattr(owner, "reset_tool_window_geometry"):
+            self._show_error("Không tìm thấy chức năng khôi phục cửa sổ Tool.")
+            return
+        try:
+            ok, message = owner.reset_tool_window_geometry()
+        except Exception as e:
+            log.exception("ConfigTab: reset tool window geometry failed")
+            self._show_error(f"Không thể khôi phục cửa sổ Tool:\n{e}")
+            return
+        if ok:
+            self._show_success(message)
+        else:
+            self._show_error(message)
 
     # ------------------------------------------------------------ Theme color dialog
 

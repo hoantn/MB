@@ -381,11 +381,11 @@ class BrowserManager:
                 return remaining_pids
             time.sleep(0.25)
 
-    def _focus_browser_window_by_port(self, profile_id: str, port: int) -> bool:
-        """Bring the visible Windows browser window for this profile to front."""
+    def _find_visible_browser_window_by_port(self, port: int) -> Optional[int]:
+        """Return the visible top-level browser HWND owned by one DevTools port."""
         pids = self._get_browser_pids_by_port(port)
         if not pids or os.name != "nt":
-            return False
+            return None
 
         user32 = ctypes.windll.user32
         hwnds: list[int] = []
@@ -402,14 +402,117 @@ class BrowserManager:
 
         try:
             user32.EnumWindows(enum_proc, 0)
-            if not hwnds:
-                return False
+        except Exception:
+            return None
+        return hwnds[0] if hwnds else None
 
-            hwnd = hwnds[0]
+    @staticmethod
+    def _is_window_position_visible(x: int, y: int, win_w: int, win_h: int) -> bool:
+        """Keep saved coordinates only while their rectangle intersects a monitor."""
+        if os.name != "nt":
+            return True
+        rect = _WindowsRect(
+            int(x),
+            int(y),
+            int(x) + max(1, int(win_w)),
+            int(y) + max(1, int(win_h)),
+        )
+        try:
+            # MONITOR_DEFAULTTONULL: return 0 when the rectangle is fully off-screen.
+            return bool(ctypes.windll.user32.MonitorFromRect(ctypes.byref(rect), 0))
+        except Exception:
+            return False
+
+    def _get_saved_window_position(self, profile_id: str, win_w: int, win_h: int) -> Optional[tuple[int, int]]:
+        """Read a per-tool, per-profile launch position and reject stale monitor layouts."""
+        cfg = load_config()
+        ui = cfg.get("ui") or {}
+        if not isinstance(ui, dict):
+            return None
+        positions = ui.get("browser_window_positions") or {}
+        if not isinstance(positions, dict):
+            return None
+        tool_positions = positions.get(f"tool{get_tool_index()}") or {}
+        if not isinstance(tool_positions, dict):
+            return None
+        saved = tool_positions.get(str(profile_id or "P1")) or {}
+        if not isinstance(saved, dict):
+            return None
+        try:
+            x = int(saved["x"])
+            y = int(saved["y"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if not self._is_window_position_visible(x, y, win_w, win_h):
+            log.warning("Browser[%s] saved window position is off-screen; use default layout", profile_id)
+            return None
+        return x, y
+
+    def _get_launch_window_position(self, profile_id: str, win_w: int, win_h: int) -> tuple[int, int]:
+        """Prefer a saved position, otherwise keep the original left/center/right layout."""
+        return self._get_saved_window_position(profile_id, win_w, win_h) or get_profile_window_position(
+            profile_id,
+            win_w,
+        )
+
+    def save_current_browser_window_position(self, profile_id: str) -> tuple[bool, str]:
+        """Persist the current visible browser position for one tool/profile pair."""
+        pid = str(profile_id or "P1")
+        if os.name != "nt":
+            return False, "Chỉ hỗ trợ lưu vị trí cửa sổ trên Windows."
+
+        port = self._get_port(pid)
+        hwnd = self._find_visible_browser_window_by_port(port)
+        if not hwnd:
+            return False, f"Không tìm thấy cửa sổ trình duyệt đang mở của {pid}."
+
+        rect = _WindowsRect()
+        try:
+            if not ctypes.windll.user32.GetWindowRect(ctypes.c_void_p(hwnd), ctypes.byref(rect)):
+                return False, f"Không đọc được vị trí cửa sổ của {pid}."
+        except Exception as e:
+            log.warning("Browser[%s] cannot read window position: %s", pid, e)
+            return False, f"Không đọc được vị trí cửa sổ của {pid}."
+
+        cfg = load_config()
+        ui = cfg.get("ui")
+        if not isinstance(ui, dict):
+            ui = {}
+            cfg["ui"] = ui
+        positions = ui.get("browser_window_positions")
+        if not isinstance(positions, dict):
+            positions = {}
+            ui["browser_window_positions"] = positions
+        tool_key = f"tool{get_tool_index()}"
+        tool_positions = positions.get(tool_key)
+        if not isinstance(tool_positions, dict):
+            tool_positions = {}
+            positions[tool_key] = tool_positions
+        tool_positions[pid] = {"x": int(rect.left), "y": int(rect.top)}
+        save_config(cfg)
+        log.info(
+            "Browser[%s] saved window position for %s: x=%s y=%s",
+            pid,
+            tool_key,
+            rect.left,
+            rect.top,
+        )
+        return True, f"Đã lưu vị trí mở mặc định cho {pid}: x={rect.left}, y={rect.top}."
+
+    def _focus_browser_window_by_port(self, profile_id: str, port: int) -> bool:
+        """Bring the visible Windows browser window for this profile to front."""
+        hwnd = self._find_visible_browser_window_by_port(port)
+        if not hwnd or os.name != "nt":
+            return False
+
+        user32 = ctypes.windll.user32
+
+        try:
             SW_RESTORE = 9
-            user32.ShowWindow(hwnd, SW_RESTORE)
-            user32.BringWindowToTop(hwnd)
-            ok = bool(user32.SetForegroundWindow(hwnd))
+            hwnd_ptr = ctypes.c_void_p(hwnd)
+            user32.ShowWindow(hwnd_ptr, SW_RESTORE)
+            user32.BringWindowToTop(hwnd_ptr)
+            ok = bool(user32.SetForegroundWindow(hwnd_ptr))
             log.info("Browser[%s] focused existing window: hwnd=%s ok=%s", profile_id, hwnd, ok)
             return ok
         except Exception as e:
@@ -806,7 +909,7 @@ chrome.webRequest.onAuthRequired.addListener(
         scale = max(10, cfg.window.scale_percent) / 100.0  # tránh 0
         win_w = int(width * scale)
         win_h = int(height * scale)
-        win_x, win_y = get_profile_window_position(profile_id, win_w)
+        win_x, win_y = self._get_launch_window_position(profile_id, win_w, win_h)
 
         launched_new = False
         proc = self.processes.get(profile_id)

@@ -4,7 +4,7 @@ from collections import deque
 from datetime import datetime
 from typing import Deque, Dict, List, Optional
 
-from PySide6.QtCore import QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -49,6 +50,7 @@ class XaoVangTab(QWidget):
         self._summary_side_labels: Dict[str, QLabel] = {}
         self._summary_bet_labels: Dict[str, QLabel] = {}
         self._summary_chip_labels: Dict[str, QLabel] = {}
+        self._bet_grid_columns = 0
 
         self._build_ui()
         self._load_defaults()
@@ -56,7 +58,21 @@ class XaoVangTab(QWidget):
         self._refresh_selection()
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # Preserve usable control heights on a compact tool window.
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        outer.addWidget(self.scroll)
+
+        content = QWidget()
+        self.scroll.setWidget(content)
+        root = QVBoxLayout(content)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(10)
 
@@ -89,17 +105,16 @@ class XaoVangTab(QWidget):
             self._side_buttons[side] = btn
             side_row.addWidget(btn)
 
-        bet_section, self.bet_row = self._build_button_section("Số vàng cần xào")
+        bet_section, self.bet_row = self._build_bet_button_section("Số vàng cần xào")
 
         control_band.addLayout(profile_section, 0, 0)
         control_band.addWidget(self._make_separator(), 0, 1)
         control_band.addLayout(side_section, 0, 2)
-        control_band.addWidget(self._make_separator(), 0, 3)
-        control_band.addLayout(bet_section, 0, 4)
         control_band.setColumnStretch(0, 1)
         control_band.setColumnStretch(2, 1)
-        control_band.setColumnStretch(4, 3)
         panel_lay.addLayout(control_band)
+        panel_lay.addWidget(self._make_separator(horizontal=True))
+        panel_lay.addLayout(bet_section)
 
         delay_row = QHBoxLayout()
         delay_row.setSpacing(8)
@@ -160,7 +175,7 @@ class XaoVangTab(QWidget):
         auto_count_label.setObjectName("xv_small_label")
         self.spn_auto_rounds = QSpinBox()
         self.spn_auto_rounds.setRange(1, 999)
-        self.spn_auto_rounds.setValue(10)
+        self.spn_auto_rounds.setValue(15)
         self.lbl_auto_status = QLabel("Auto: tắt")
         self.lbl_auto_status.setObjectName("xv_auto_status")
         auto_row.addWidget(self.btn_auto_toggle)
@@ -176,6 +191,7 @@ class XaoVangTab(QWidget):
         self.log_box = QPlainTextEdit()
         self.log_box.setReadOnly(True)
         self.log_box.setObjectName("xv_log")
+        self.log_box.setMinimumHeight(110)
         root.addWidget(self.log_box, 1)
 
     def _build_button_section(self, title: str):
@@ -189,16 +205,28 @@ class XaoVangTab(QWidget):
         layout.addLayout(row)
         return layout, row
 
+    def _build_bet_button_section(self, title: str):
+        layout = QVBoxLayout()
+        layout.setSpacing(6)
+        label = QLabel(title)
+        label.setObjectName("xv_section_label")
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(8)
+        layout.addWidget(label)
+        layout.addLayout(grid)
+        return layout, grid
+
     def _make_choice_button(self, text: str) -> QPushButton:
         btn = QPushButton(text)
         btn.setCheckable(True)
         btn.setMinimumHeight(36)
         return btn
 
-    def _make_separator(self) -> QFrame:
+    def _make_separator(self, *, horizontal: bool = False) -> QFrame:
         line = QFrame()
-        line.setObjectName("xv_vline")
-        line.setFrameShape(QFrame.VLine)
+        line.setObjectName("xv_hline" if horizontal else "xv_vline")
+        line.setFrameShape(QFrame.HLine if horizontal else QFrame.VLine)
         line.setFrameShadow(QFrame.Plain)
         return line
 
@@ -270,8 +298,24 @@ class XaoVangTab(QWidget):
             btn = self._make_choice_button(self._format_bet_short(bet))
             btn.clicked.connect(lambda checked=False, value=bet: self._select_bet(value))
             self._bet_buttons[bet] = btn
-            self.bet_row.addWidget(btn)
-        self.bet_row.addStretch(1)
+        self._reflow_bet_buttons(force=True)
+
+    def _reflow_bet_buttons(self, *, force: bool = False) -> None:
+        """Wrap amount buttons into readable rows instead of squeezing or clipping them."""
+        if not hasattr(self, "bet_row") or not self._bet_buttons:
+            return
+        panel = getattr(self, "summary_panel", None)
+        available_width = max(76, (panel.width() if panel is not None else self.width()) - 24)
+        columns = max(1, min(len(self._bet_buttons), available_width // 84))
+        if not force and columns == self._bet_grid_columns:
+            return
+        self._bet_grid_columns = columns
+        for index, btn in enumerate(self._bet_buttons.values()):
+            self.bet_row.addWidget(btn, index // columns, index % columns)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._reflow_bet_buttons()
 
     def _clear_layout(self, layout) -> None:
         while layout.count():
@@ -557,6 +601,9 @@ class XaoVangTab(QWidget):
             }
             QFrame#xv_vline {
                 background:#2A3544; max-width:1px; min-width:1px;
+            }
+            QFrame#xv_hline {
+                background:#2A3544; max-height:1px; min-height:1px;
             }
             QPushButton, QSpinBox, QPlainTextEdit {
                 background:#11161D; border:1px solid #303846; border-radius:7px; padding:4px 8px;

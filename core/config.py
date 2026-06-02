@@ -42,6 +42,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     },
     "ui": {
         "tool_index": 1,
+        "browser_window_positions": {},
+        "tool_window_geometries": {},
         "theme": "Tối",
         "theme_colors": {
             "Tối": {

@@ -207,6 +207,27 @@ class ProfilesTabV2(ProfileTab):
         win_form.addRow("Width:", self.win_width_spin)
         win_form.addRow("Height:", self.win_height_spin)
         win_form.addRow("Scale (%):", self.scale_spin)
+        self._btn_save_window_position = QPushButton("Đặt vị trí hiện tại làm mặc định")
+        self._btn_save_window_position.setToolTip(
+            "Lưu vị trí cửa sổ Chrome đang mở làm vị trí mặc định cho profile này"
+        )
+        self._btn_save_window_position.clicked.connect(self._save_current_window_position_v2)
+        window_position_row = QWidget()
+        window_position_l = QHBoxLayout(window_position_row)
+        window_position_l.setContentsMargins(0, 0, 0, 0)
+        window_position_l.setSpacing(6)
+        self._btn_save_all_window_positions = QPushButton("ALL")
+        self._btn_save_all_window_positions.setFixedWidth(56)
+        self._btn_save_all_window_positions.setStyleSheet(
+            "background-color: #333333; font-weight: 700;"
+        )
+        self._btn_save_all_window_positions.setToolTip(
+            "Lưu lần lượt vị trí hiện tại của P1, P2, P3 làm mặc định"
+        )
+        self._btn_save_all_window_positions.clicked.connect(self._save_all_window_positions_v2)
+        window_position_l.addWidget(self._btn_save_window_position, 1)
+        window_position_l.addWidget(self._btn_save_all_window_positions, 0)
+        win_form.addRow("Vị trí mở:", window_position_row)
 
         # --- Proxy group
         proxy_group = QGroupBox("Proxy")
@@ -369,6 +390,39 @@ class ProfilesTabV2(ProfileTab):
         folder = QFileDialog.getExistingDirectory(self, "Chọn thư mục Profile sạch/gốc", start_dir)
         if folder:
             self.chrome_path_edit.setText(folder)
+
+    def _save_current_window_position_v2(self) -> None:
+        """Persist the current Chrome window position for the selected tool/profile."""
+        pid = self.profile_combo.currentText() or "P1"
+        bm = self.browser_manager
+        if not hasattr(bm, "save_current_browser_window_position"):
+            QMessageBox.warning(self, "Lỗi", "BrowserManager không hỗ trợ lưu vị trí cửa sổ.")
+            return
+        ok, message = bm.save_current_browser_window_position(pid)
+        if ok:
+            QMessageBox.information(self, "Đã lưu vị trí", message)
+        else:
+            QMessageBox.warning(self, "Không thể lưu vị trí", message)
+
+    def _save_all_window_positions_v2(self) -> None:
+        """Persist visible P1/P2/P3 Chrome positions in one sequential action."""
+        bm = self.browser_manager
+        if not hasattr(bm, "save_current_browser_window_position"):
+            QMessageBox.warning(self, "Lỗi", "BrowserManager không hỗ trợ lưu vị trí cửa sổ.")
+            return
+
+        lines = []
+        all_ok = True
+        for pid in ("P1", "P2", "P3"):
+            ok, message = bm.save_current_browser_window_position(pid)
+            all_ok = all_ok and bool(ok)
+            lines.append(f"{pid}: {message}")
+
+        text = "\n".join(lines)
+        if all_ok:
+            QMessageBox.information(self, "Đã lưu vị trí ALL", text)
+        else:
+            QMessageBox.warning(self, "Lưu vị trí ALL chưa hoàn tất", text)
 
     def _on_sidebar_item_changed(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
         if not current:
