@@ -177,6 +177,7 @@ class StrategyTab(QWidget):
         self._auto_play_pending_key: Optional[str] = None
         self._auto_play_applied_profile_keys = set()
         self._auto_play_log_sink = None
+        self._auto_settings_notifier = None
         # Đánh dấu đã từng click chọn 1 gợi ý OPP/NGU hay chưa
         self._ngu_clicked_once: bool = False
 
@@ -887,6 +888,10 @@ class StrategyTab(QWidget):
     def set_auto_play_log_sink(self, sink) -> None:
         self._auto_play_log_sink = sink
 
+    def set_auto_settings_notifier(self, notifier) -> None:
+        """Attach the cached Auto settings/notifier service owned by MainWindow."""
+        self._auto_settings_notifier = notifier
+
     def set_auto_play(self, enabled: bool, rounds: int = 0, delay_min_ms: int = 5000, delay_max_ms: int = 20000) -> None:
         self._auto_play_enabled = bool(enabled)
         self._auto_play_remaining = max(0, int(rounds or 0)) if enabled else 0
@@ -1008,6 +1013,14 @@ class StrategyTab(QWidget):
             room_engine = getattr(owner, "room_engine", None)
             room_context = classify_auto_room_context(room_engine)
             allow_opp_plan = room_context.kind == "external_opp"
+            allow_intentional_foul = (
+                allow_opp_plan
+                and len(room_context.external_uids) == 1
+                and bool(
+                    self._auto_settings_notifier is not None
+                    and self._auto_settings_notifier.is_intentional_foul_enabled()
+                )
+            )
             is_internal = room_context.kind in ("internal_3p", "internal_2p")
             self._auto_play_log(
                 f"[ROOM] kind={room_context.kind} controlled={list(room_context.controlled_pids)}"
@@ -1023,7 +1036,11 @@ class StrategyTab(QWidget):
 
             # ── Chọn plan theo bối cảnh bàn ──────────────────────────────
             if allow_opp_plan and has_auto_opp:
-                plan = build_auto_play_plan(self, max_opp=3)
+                plan = build_auto_play_plan(
+                    self,
+                    max_opp=3,
+                    allow_intentional_foul=allow_intentional_foul,
+                )
             elif is_internal:
                 plan = build_internal_balance_plan(self, room_context)
                 if plan is None:
@@ -1069,6 +1086,10 @@ class StrategyTab(QWidget):
                     f"Chọn OPP #{plan.opp_index + 1} | dùng Bẻ Sập Làng | score={plan.score}"
                 )
                 self._auto_apply_suggestions_random(plan.suggestions)
+
+            elif plan.kind == "intentional_foul":
+                self._auto_play_log("OPP ăn sập làng không thể chạy | dùng Binh Lủng 3P.")
+                self._auto_apply_intentional_foul_random(plan.suggestions, hand_key)
 
             elif plan.kind == "internal_balance":
                 ready_pids = list((plan.suggestions or {}).keys())
@@ -1175,11 +1196,16 @@ class StrategyTab(QWidget):
         self,
         suggestions_by_pid: Dict[str, dict],
         report_binh_pids=None,
+        no_complete_pids=None,
+        expected_profile_keys=None,
+        on_apply_started=None,
     ) -> None:
         """Apply Auto Play profile-by-profile with an independent random delay per P."""
         from ui2.tabs.strategy2.strategy_suggest import apply_suggestion_dashboard_style
 
         report_binh_pids = set(report_binh_pids or ())
+        no_complete_pids = set(no_complete_pids or ())
+        expected_profile_keys = dict(expected_profile_keys or {})
         for pid in self.profiles:
             sug = dict((suggestions_by_pid or {}).get(pid) or {})
             ws_codes = list(self._codes_slot_order.get(pid) or [])
@@ -1190,14 +1216,27 @@ class StrategyTab(QWidget):
             self._auto_play_log(f"{pid}: chờ random {delay_ms}ms rồi xếp.")
             self._auto_play_applied_profile_keys.add(self._auto_profile_apply_key(pid))
 
-            def _apply_one(profile_id=pid, cards=list(ws_codes), suggestion=dict(sug)) -> None:
+            def _apply_one(
+                profile_id=pid,
+                cards=list(ws_codes),
+                suggestion=dict(sug),
+                expected_key=expected_profile_keys.get(pid),
+            ) -> None:
                 try:
+                    if expected_key and any(
+                        self._auto_profile_apply_key(pid) != key
+                        for pid, key in expected_profile_keys.items()
+                    ):
+                        self._auto_play_log(f"{profile_id}: bỏ Binh Lủng vì bài đã đổi.")
+                        return
+                    if callable(on_apply_started):
+                        on_apply_started(profile_id)
                     apply_suggestion_dashboard_style(
                         tab=self,
                         profile_id=profile_id,
                         ws_codes=list(cards),
                         suggestion=dict(suggestion),
-                        on_complete=(
+                        on_complete=None if profile_id in no_complete_pids else (
                             (lambda p=profile_id: self._auto_schedule_click_binh(p))
                             if profile_id in report_binh_pids
                             else (lambda p=profile_id: self._auto_schedule_click_done(p))
@@ -1208,6 +1247,25 @@ class StrategyTab(QWidget):
                     log.exception("[AUTO-PLAY] apply profile failed pid=%s", profile_id)
 
             QTimer.singleShot(delay_ms, _apply_one)
+
+    def _auto_apply_intentional_foul_random(self, suggestions_by_pid: Dict[str, dict], hand_key: str) -> None:
+        """Apply intentional foul layouts without clicking Xong or Báo binh."""
+        expected = {pid: self._auto_profile_apply_key(pid) for pid in self.profiles}
+        notifier = getattr(self, "_auto_settings_notifier", None)
+
+        def _notify_once(_pid: str) -> None:
+            try:
+                if notifier is not None:
+                    notifier.send_bi_sap_lang(hand_key)
+            except Exception:
+                log.exception("[AUTO-PLAY] send bị sập làng Telegram failed")
+
+        self._auto_apply_suggestions_random(
+            suggestions_by_pid,
+            no_complete_pids=set(self.profiles),
+            expected_profile_keys=expected,
+            on_apply_started=_notify_once,
+        )
 
     def _get_selected_opp_suggestion(self) -> Optional[dict]:
         lst = list(self._ngu_suggestions or [])

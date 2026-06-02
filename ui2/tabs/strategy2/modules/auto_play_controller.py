@@ -5,6 +5,8 @@ from typing import Dict, List, Optional, Tuple
 
 from ui2.tabs.strategy2.strategy_anti_sap import _codes_to_threechi, _eval_vs_opp
 from ui2.tabs.strategy2.strategy_combo_sap_lang import find_sap_lang_combo, SapLangCombo
+from ui2.tabs.strategy2.strategy_intentional_foul import build_intentional_foul_suggestion
+from ui2.tabs.strategy2.strategy_special13 import detect_special_13
 from engine.money_scoring import score_money_vs_opp
 
 
@@ -65,7 +67,10 @@ def classify_auto_room_context(room_engine) -> AutoRoomContext:
         uid = str(own.get("uid") or "").strip()
         # gold từ cmd=205 (on_room_balance_205 đã update _gold_by_uid)
         gold_raw = own.get("gold")
-        gold_by_pid[pid] = int(gold_raw) if gold_raw is not None else None
+        try:
+            gold_by_pid[pid] = int(gold_raw) if gold_raw is not None else None
+        except (TypeError, ValueError):
+            gold_by_pid[pid] = None
 
         roster = tuple(sorted(str(x).strip() for x in (state.get("room_uids") or []) if str(x).strip()))
         if uid:
@@ -89,8 +94,10 @@ def classify_auto_room_context(room_engine) -> AutoRoomContext:
     )
     external_uids = tuple(uid for uid in roster if uid not in controlled_uid_set)
 
-    # External OPP: đủ 3P đồng thuận + có UID ngoài
-    if len(reporting_pids) == 3 and len(controlled_pids) == 3 and external_uids:
+    # External OPP: đủ 3P đồng thuận + đúng một UID ngoài.
+    # NGU is derived as the fourth 13-card hand, so a stale roster containing
+    # multiple external UIDs must fail closed instead of using the OPP path.
+    if len(reporting_pids) == 3 and len(controlled_pids) == 3 and len(external_uids) == 1:
         return AutoRoomContext(
             kind="external_opp",
             roster=roster,
@@ -488,7 +495,95 @@ def _sum_scores(items: List[Tuple[int, int, int, int]]) -> Tuple[int, int, int, 
     )
 
 
-def build_best_plan_for_opp(tab, opp_index: int, opp: dict) -> Optional[AutoPlayPlan]:
+def _is_swept_by_opp(suggestion: dict, opp: dict) -> bool:
+    my_three = _codes_to_threechi(suggestion)
+    opp_three = _codes_to_threechi(opp)
+    if my_three is None or opp_three is None:
+        return False
+    return bool(_eval_vs_opp(my_three, opp_three, allow_special_13=False).lose_all)
+
+
+def _has_any_special(tab) -> bool:
+    for pid in PROFILES:
+        codes = list(tab._codes_slot_order.get(pid) or [])
+        if len(codes) == 13:
+            try:
+                if detect_special_13(codes):
+                    return True
+            except Exception:
+                pass
+        for suggestion in list(tab._suggestions.get(pid) or []):
+            try:
+                if tab._is_special_row(suggestion):
+                    return True
+            except Exception:
+                if suggestion.get("_is_special_row"):
+                    return True
+    return False
+
+
+def _has_special_codes(codes: List[str]) -> bool:
+    if len(codes) != 13:
+        return False
+    try:
+        return bool(detect_special_13(codes))
+    except Exception:
+        return False
+
+
+def _build_intentional_foul_plan(
+    tab,
+    *,
+    opp_index: int,
+    opp: dict,
+    normal_plan: AutoPlayPlan,
+) -> Optional[AutoPlayPlan]:
+    """Build the last-resort 3P foul plan only after normal optimization loses 0-3."""
+    if _has_any_special(tab):
+        return None
+    opp_codes = (
+        list(opp.get("chi1_codes") or [])
+        + list(opp.get("chi2_codes") or [])
+        + list(opp.get("chi3_codes") or [])
+    )
+    if _has_special_codes(opp_codes):
+        return None
+    if any(
+        not _is_swept_by_opp(normal_plan.suggestions.get(pid) or {}, opp)
+        for pid in PROFILES
+    ):
+        return None
+
+    foul_suggestions: Dict[str, dict] = {}
+    for pid in PROFILES:
+        money = _get_money_split(tab, pid)
+        if money is None:
+            return None
+        _idx, money_suggestion = money
+        foul = build_intentional_foul_suggestion(
+            money_suggestion,
+            list(tab._codes_slot_order.get(pid) or []),
+        )
+        if foul is None:
+            return None
+        foul_suggestions[pid] = dict(foul)
+
+    return AutoPlayPlan(
+        kind="intentional_foul",
+        opp_index=int(opp_index),
+        score=normal_plan.score,
+        selected_index={},
+        suggestions=foul_suggestions,
+    )
+
+
+def build_best_plan_for_opp(
+    tab,
+    opp_index: int,
+    opp: dict,
+    *,
+    allow_intentional_foul: bool = False,
+) -> Optional[AutoPlayPlan]:
     selected_index: Dict[str, int] = {}
     normal_suggestions: Dict[str, dict] = {}
     normal_scores: List[Tuple[int, int, int, int]] = []
@@ -523,18 +618,28 @@ def build_best_plan_for_opp(tab, opp_index: int, opp: dict) -> Optional[AutoPlay
         ws_codes_by_pid={pid: list(tab._codes_slot_order.get(pid) or []) for pid in PROFILES},
         opp_suggestion=opp,
     )
-    if combo is None:
-        return normal_plan
+    best_plan = normal_plan
+    if combo is not None:
+        combo_plan = AutoPlayPlan(
+            kind="sap_lang",
+            opp_index=int(opp_index),
+            score=tuple(int(x) for x in combo.score),
+            selected_index={},
+            suggestions={pid: dict(s) for pid, s in combo.suggestions.items()},
+            combo=combo,
+        )
+        if combo_plan.score > normal_plan.score:
+            best_plan = combo_plan
 
-    combo_plan = AutoPlayPlan(
-        kind="sap_lang",
-        opp_index=int(opp_index),
-        score=tuple(int(x) for x in combo.score),
-        selected_index={},
-        suggestions={pid: dict(s) for pid, s in combo.suggestions.items()},
-        combo=combo,
+    if best_plan.kind != "normal" or not allow_intentional_foul:
+        return best_plan
+    foul_plan = _build_intentional_foul_plan(
+        tab,
+        opp_index=opp_index,
+        opp=opp,
+        normal_plan=normal_plan,
     )
-    return combo_plan if combo_plan.score > normal_plan.score else normal_plan
+    return foul_plan or best_plan
 
 
 def build_partial_plan_for_opp(tab, opp_index: int, opp: dict) -> Optional[AutoPlayPlan]:
@@ -656,7 +761,12 @@ def _has_553_split(s: Optional[dict]) -> bool:
     )
 
 
-def build_auto_play_plan(tab, max_opp: int = 3) -> Optional[AutoPlayPlan]:
+def build_auto_play_plan(
+    tab,
+    max_opp: int = 3,
+    *,
+    allow_intentional_foul: bool = False,
+) -> Optional[AutoPlayPlan]:
     """Use the protected OPP Auto Money suggestion, then return the best response."""
     # Keep max_opp in the public signature for compatibility with the existing
     # StrategyTab caller. Auto Play now intentionally benchmarks one Money row.
@@ -690,5 +800,10 @@ def build_auto_play_plan(tab, max_opp: int = 3) -> Optional[AutoPlayPlan]:
     )
     idx, opp = opp_candidate
     if full_ready:
-        return build_best_plan_for_opp(tab, idx, opp)
+        return build_best_plan_for_opp(
+            tab,
+            idx,
+            opp,
+            allow_intentional_foul=allow_intentional_foul,
+        )
     return build_partial_plan_for_opp(tab, idx, opp)

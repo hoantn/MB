@@ -55,7 +55,9 @@ from ui2.tabs.config_tab import ConfigTab
 from ui2.tabs.capture_tab import CaptureTab
 from ui2.tabs.xao_vang_tab import XaoVangTab
 from ui2.tabs.auto_play_tab import AutoPlayTab
+from ui2.tabs.auto_settings_tab import AutoSettingsTab
 from core.config import load_config
+from core.gold_threshold_notifier import GoldThresholdNotifier
 from ui2.tabs.players_tab import PlayersTab
 from ui2.tabs.poker_tab import PokerTab
 
@@ -193,6 +195,8 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self.telegram_tab = None
         self.xao_vang_tab = None
         self.auto_play_tab = None
+        self.auto_settings_tab = None
+        self.gold_threshold_notifier = None
         self.ws_test_tab = None
         
         self.tab_widget: Optional[QTabWidget] = None
@@ -426,6 +430,15 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self.auto_play_tab = AutoPlayTab(self)
         self.auto_play_tab.auto_changed.connect(self._on_auto_play_changed)
         self.strategy_tab.set_auto_play_log_sink(self.auto_play_tab)
+        self.gold_threshold_notifier = GoldThresholdNotifier(
+            GoldThresholdNotifier.config_from_dict(load_config())
+        )
+        self.auto_settings_tab = AutoSettingsTab(
+            send_test=self.gold_threshold_notifier.send_test,
+            parent=self,
+        )
+        self.auto_settings_tab.config_saved.connect(self.gold_threshold_notifier.update_config)
+        self.strategy_tab.set_auto_settings_notifier(self.gold_threshold_notifier)
         self.config_tab = ConfigTab(self)
         self.players_tab = PlayersTab(self)
         self.ws_test_tab = WSTestTab(self) if ENABLE_WS_TEST_TAB else None
@@ -456,6 +469,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         tabs.addTab(self.xao_vang_tab, "Xào Vàng")
         auto_play_placeholder = QWidget(self)
         tabs.addTab(auto_play_placeholder, "Auto Play")
+        tabs.addTab(self.auto_settings_tab, "Cài đặt Auto")
         tabs.currentChanged.connect(self._on_main_tab_changed)
         # tabs.addTab(self.poker_tab, "Poker")
         # tabs.addTab(self.phom_tab, "Phỏm")
@@ -497,6 +511,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
         self.room_engine.sig_player_joined.connect(self._on_player_joined_toast)
         self.room_engine.sig_player_left.connect(self._on_player_left_toast)
+        self.room_engine.sig_gold_monitor_changed.connect(self.gold_threshold_notifier.check)
 
         # Legacy Tai/Xiu manual tab is optional; Xao Vang keeps using the same game-controller entrypoint.
         if ENABLE_TAIXIU and ENABLE_TAIXIU_LEGACY_TOOLS and self.taixiu_control_tab is not None:
@@ -989,6 +1004,11 @@ class MainWindow(QMainWindow, WebSocketGateway):
         try:
             if self._ws_server:
                 self._ws_server.shutdown()
+        except Exception:
+            pass
+        try:
+            if self.gold_threshold_notifier is not None:
+                self.gold_threshold_notifier.stop()
         except Exception:
             pass
 

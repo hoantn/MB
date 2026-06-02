@@ -72,6 +72,9 @@ class RoomEngine(QObject):
     # args: profile_id, player_name, gold
     sig_player_left = Signal(str, str, int)
 
+    # args: profiles mapping from get_room_monitor_state()
+    sig_gold_monitor_changed = Signal(object)
+
     def __init__(
         self,
         room_tab: RoomControlTab,
@@ -666,6 +669,13 @@ class RoomEngine(QObject):
             except Exception:
                 pass
         self._room_uids_by_profile[profile_id] = room_uids
+        if room_uids:
+            self._emit_gold_monitor_changed(profile_id)
+
+    def _emit_gold_monitor_changed(self, profile_id: str) -> None:
+        profiles = self.get_room_monitor_state(profile_id).get("profiles") or {}
+        if profiles:
+            self.sig_gold_monitor_changed.emit(profiles)
 
     def get_room_monitor_state(self, profile_id: str) -> Dict[str, Any]:
         """Return a read-only monitoring snapshot for UI/debug consumers."""
@@ -775,6 +785,8 @@ class RoomEngine(QObject):
 
             if roster_changed:
                 log.debug("[ROOM_MONITOR] %s roster=%s", profile_id, sorted(realtime_uids))
+            if changed_uids:
+                self._emit_gold_monitor_changed(profile_id)
         except Exception:
             log.exception("RoomEngine.on_room_balance_205 failed: pid=%s payload=%s", profile_id, payload)
 

@@ -224,10 +224,6 @@ def apply_suggestion_dashboard_style(
             except Exception:
                 pass
 
-            # Auto Play special uses this hook to click Báo binh only after the
-            # drag worker has finished. Manual apply keeps the default None.
-            if not err_msg and callable(on_complete):
-                _ui_call(tab, on_complete, delay_ms=0)
             # ------------------------------------------------------------------
             # LẦN 2 (FORCE): chạy ngay 1 vòng nữa cho chắc
             # - Mục tiêu: tương đương click Apply 2 lần thủ công
@@ -282,7 +278,7 @@ def apply_suggestion_dashboard_style(
             # ------------------------------------------------------------------
 
             # EARLY UI UNLOCK:
-            # - Ngay sau khi apply_arrangement LẦN 1 xong (drag cuối xong),
+            # - Ngay sau khi apply_arrangement LẦN 2 xong,
             #   trả nút Apply về default để click tiếp được ngay.
             # - Vẫn giữ worker chạy tiếp scan/fallback để đảm bảo đồng bộ.
             # ------------------------------------------------------------------
@@ -364,6 +360,11 @@ def apply_suggestion_dashboard_style(
                 if list(real_codes) != list(res_codes):
                     if isinstance(real_codes, list) and len(real_codes) == 13:
                         tab._layout_codes[pid] = list(real_codes)
+
+            # Auto Play schedules Xong/Báo binh only after both drag passes and
+            # the realtime scan have completed. Manual apply keeps this unset.
+            if callable(on_complete):
+                _ui_call(tab, on_complete, delay_ms=0)
 
         except Exception as e:
             err_msg = str(e)

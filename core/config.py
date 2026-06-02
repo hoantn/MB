@@ -112,6 +112,25 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "regions": {"P1": None, "P2": None, "P3": None},
         "slots": {"P1": {}, "P2": {}, "P3": {}},
     },
+    "auto_settings": {
+        "telegram": {
+            "bot_token": "",
+            "chat_id": "",
+        },
+        "alerts": {
+            "gold_min_threshold": {
+                "enabled": False,
+                "threshold": 0,
+            },
+            "gold_max_threshold": {
+                "enabled": False,
+                "threshold": 0,
+            },
+            "opp_sap_lang_intentional_foul": {
+                "enabled": False,
+            },
+        },
+    },
 }
 
 
