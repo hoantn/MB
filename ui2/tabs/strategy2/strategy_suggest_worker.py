@@ -10,6 +10,7 @@ from engine.arranger import arrange_cards, arrange_13_cards, arrange_cached_mone
 from ui2.tabs.dashboard.dashboard_constants import classify_chis, _format_suggestion_label
 
 from ui2.tabs.strategy2.strategy_special13 import detect_special_13, build_special_split
+from ui2.tabs.strategy2.strategy_opp_money_predictor import optimize_opp_money_split
 
 def special_html_7colors(text: str) -> str:
     colors = ["#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#32ade6", "#007aff", "#af52de"]
@@ -202,6 +203,16 @@ def build_suggestions_for_codes(profile_id: str, codes: List[str], stage: str = 
 
     # CACHE: mặc định tắt để tránh reuse list cũ khi bạn đang test/đổi arrange.
     money_split = arrange_cached_money_split(cards)
+    money_split_optimized = False
+    if pid == "NGU" and money_split is not None:
+        try:
+            optimized_split = optimize_opp_money_split(cards, money_split)
+            if optimized_split is not None:
+                money_split_optimized = optimized_split != money_split
+                money_split = optimized_split
+        except Exception:
+            # Predictor is optional; never let it block the stable Money row.
+            money_split_optimized = False
     if money_split is not None:
         c1, c2, c3 = money_split
         auto_money = {
@@ -217,6 +228,8 @@ def build_suggestions_for_codes(profile_id: str, codes: List[str], stage: str = 
         }
         if pid == "NGU":
             auto_money["_auto_opp_money"] = True
+            if money_split_optimized:
+                auto_money["_auto_opp_money_predict"] = "pair_top_to_two_pair"
         else:
             auto_money["_auto_profile_money"] = True
         out.insert(0, auto_money)
