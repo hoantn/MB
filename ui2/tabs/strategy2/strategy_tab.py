@@ -7,8 +7,8 @@ import queue
 import re
 import random
 
-from PySide6.QtCore import QTimer, QThread, Signal, Slot
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtCore import Qt, QTimer, QThread, Signal, Slot
+from PySide6.QtWidgets import QFrame, QScrollArea, QWidget, QVBoxLayout
 
 from .modules.ngu_derive import NGUDeriver
 from .modules.suggest_pipeline import SuggestPipeline
@@ -139,7 +139,15 @@ class StrategyTab(QWidget):
 
         lay = QVBoxLayout(self)
         self.view = StrategyView(self.profiles, self)
-        lay.addWidget(self.view)
+        # Preserve card and action sizes on compact windows. Strategy remains
+        # fully usable through scrollbars instead of shrinking card rows.
+        self.view_scroll = QScrollArea()
+        self.view_scroll.setWidgetResizable(True)
+        self.view_scroll.setFrameShape(QFrame.NoFrame)
+        self.view_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.view_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.view_scroll.setWidget(self.view)
+        lay.addWidget(self.view_scroll)
 
         # UI events
         self.view.profile_changed.connect(self._on_profile_switch)

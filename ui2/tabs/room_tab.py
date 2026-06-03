@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
     QLineEdit, QComboBox, QSpinBox, QPushButton, QTableWidget, QTableWidgetItem,
     QDialog, QMessageBox,
-    QListWidget, QListWidgetItem, QStackedWidget, QSizePolicy, QSplitter
+    QListWidget, QListWidgetItem, QStackedWidget, QSizePolicy, QSplitter, QScrollArea
 )
 from PySide6.QtGui import QPixmap, QMouseEvent, QGuiApplication
 
@@ -664,7 +664,15 @@ class RoomControlTab(QWidget):
         for pid in ("P1", "P2", "P3"):
             p = PanelPhongProfile(pid)
             self.panels[pid] = p
-            idx = self.detail_stack.addWidget(p)
+            # Keep room controls at usable sizes when the combined view is compact.
+            # The profile sidebar stays visible while only the selected detail scrolls.
+            detail_scroll = QScrollArea()
+            detail_scroll.setWidgetResizable(True)
+            detail_scroll.setFrameShape(QScrollArea.NoFrame)
+            detail_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            detail_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            detail_scroll.setWidget(p)
+            idx = self.detail_stack.addWidget(detail_scroll)
             self._pid_to_index[pid] = idx
 
             # Relay UI signals -> RoomEngine (giữ nguyên API)
