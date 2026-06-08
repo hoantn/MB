@@ -651,7 +651,11 @@ class MainWindow(QMainWindow, WebSocketGateway):
         tabs.addTab(self.strategy_room_splitter, "Chiến Thuật")
         tabs.addTab(self.xao_vang_tab, "Xào Vàng")
         # Tab Auto Play: quản lý 4 tool slot đồng thời
-        self.auto_four_tool_tab = AutoFourToolTab(self)
+        try:
+            self.auto_four_tool_tab = AutoFourToolTab(self)
+        except Exception:
+            log.exception("[Main] AutoFourToolTab khởi tạo thất bại, dùng placeholder")
+            self.auto_four_tool_tab = QWidget(self)
         tabs.addTab(self.auto_four_tool_tab, "Auto Play")
         tabs.addTab(self.auto_settings_tab, "Cài đặt Auto")
         tabs.currentChanged.connect(self._on_main_tab_changed)
@@ -792,16 +796,8 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self._show_auto_play_window()
 
     def _on_main_tab_changed(self, index: int) -> None:
-        try:
-            if self.tab_widget is None:
-                return
-            if self.tab_widget.tabText(index) == "Auto Play":
-                self._toggle_auto_play_window()
-                strategy_idx = self.tab_widget.indexOf(self.strategy_room_splitter)
-                if strategy_idx >= 0:
-                    QTimer.singleShot(0, lambda: self.tab_widget.setCurrentIndex(strategy_idx))
-        except Exception:
-            log.exception("Auto Play tab switch failed")
+        # Tab "Auto Play" giờ là AutoFourToolTab nhúng trực tiếp — không cần floating dialog nữa
+        pass
 
     def _on_auto_play_changed(self, enabled: bool, rounds: int, delay_min_ms: int = 5000, delay_max_ms: int = 10000) -> None:
         try:

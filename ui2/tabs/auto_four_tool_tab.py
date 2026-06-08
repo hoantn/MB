@@ -149,21 +149,28 @@ class AutoFourToolTab(QWidget):
         # ToolContext cho cả 4 slot — index 0 = slot 1, ... index 3 = slot 4
         self._contexts: List = []
         self._current_slot = 1
-
-        # Tạo ToolContext cho slot 1-4
-        self._init_tool_contexts()
-
-        # Build UI
         self._cards: List[ToolSlotCard] = []
         self._strategy_stack = QStackedWidget()
         self._room_stack = QStackedWidget()
         self._log_edit = QTextEdit()
         self._log_edit.setReadOnly(True)
-        self._log_edit.setMaximumWidth(220)
         self._log_edit.setPlaceholderText("Activity log...")
 
-        self._build_ui()
-        self._select_slot(1)
+        # Tạo ToolContext cho slot 1-4
+        self._init_tool_contexts()
+
+        # Build UI — bọc try/except để không bị blank khi có lỗi khởi tạo
+        try:
+            self._build_ui()
+            self._select_slot(1)
+        except Exception:
+            log.exception("[AutoFourToolTab] _build_ui lỗi")
+            # Hiển thị thông báo lỗi thay vì blank
+            from PySide6.QtWidgets import QLabel
+            err_lbl = QLabel("Lỗi khởi tạo Auto Play tab — xem logs/tool.log")
+            err_lbl.setStyleSheet("color: #ef4444; padding: 20px;")
+            QVBoxLayout(self).addWidget(err_lbl)
+            return
 
         # Timer poll events cho slot 2-4 (slot 1 được poll bởi main.py)
         self._poll_timer = QTimer(self)
@@ -312,13 +319,13 @@ class AutoFourToolTab(QWidget):
             lay.setContentsMargins(16, 16, 16, 16)
             lay.setSpacing(8)
 
-            if slot == 1:
-                tool_index = 1
-                port = 9527
+            ctx = self._contexts[slot - 1]
+            if ctx is not None:
+                tool_index = ctx.tool_index
+                port = ctx._bridge_port
             else:
-                ctx = self._contexts[slot - 2]
-                tool_index = ctx.tool_index if ctx else slot
-                port = ctx._bridge_port if ctx else (9526 + slot)
+                tool_index = slot
+                port = 9526 + slot
 
             lbl = QLabel(f"<b>Tool {slot}</b>")
             lbl.setStyleSheet("color: #E6E6E6; font-size: 14pt;")
