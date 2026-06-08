@@ -6,6 +6,7 @@ from typing import Dict, Optional, Any
 from PySide6.QtWidgets import QApplication
 
 from browser.devtools import DevToolsClient
+from core.apply_trace import apply_trace
 from core.config import load_config
 
 class GameController:
@@ -181,6 +182,7 @@ class GameController:
         self.click_exit_room_1(profile_id)
 
     def click_binh(self, profile_id: str) -> None:
+        apply_trace("click_binh_enter", profile_id)
         """Click nút Báo binh sau khi game đã nhận hình bài đặc biệt."""
         cfg = load_config()
         game_ui = cfg.get("game_ui", {}) or {}
@@ -190,12 +192,15 @@ class GameController:
             raise RuntimeError(
                 f"Chưa cấu hình nút Báo binh cho profile {profile_id} trong config.json"
             )
+        apply_trace("click_binh_before_mouse", profile_id, x=int(pos.get("x", 0)), y=int(pos.get("y", 0)))
         self._client(profile_id).mouse_click(
             int(pos.get("x", 0)),
             int(pos.get("y", 0)),
         )
+        apply_trace("click_binh_after_mouse", profile_id)
 
     def click_done(self, profile_id: str) -> None:
+        apply_trace("click_done_enter", profile_id)
         """Click nút Xong sau khi game đã nhận hình bài xếp thường."""
         cfg = load_config()
         game_ui = cfg.get("game_ui", {}) or {}
@@ -205,10 +210,12 @@ class GameController:
             raise RuntimeError(
                 f"Chưa cấu hình nút Xong cho profile {profile_id} trong config.json"
             )
+        apply_trace("click_done_before_mouse", profile_id, x=int(pos.get("x", 0)), y=int(pos.get("y", 0)))
         self._client(profile_id).mouse_click(
             int(pos.get("x", 0)),
             int(pos.get("y", 0)),
         )
+        apply_trace("click_done_after_mouse", profile_id)
 
     def click_taixiu_bet(self, profile_id: str, bet: int) -> None:
         """

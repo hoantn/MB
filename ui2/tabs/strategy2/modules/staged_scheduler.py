@@ -19,6 +19,19 @@ class StagedScheduler:
     def __init__(self) -> None:
         self.job_q = deque()  # items: (key, stage, kind, hand_hash, codes_snapshot)
         self.job_running: bool = False
+        # queued_hash/running_hash dùng để phân biệt "đang chờ/đang chạy"
+        # với _scheduled_hash của StrategyTab. _scheduled_hash chỉ nên mang
+        # nghĩa "đã sinh gợi ý thành công", nếu không queue bị clear sẽ làm
+        # mất job nhưng hash vẫn khóa lại.
+        self.queued_hash = {}
+        self.running_hash = {}
+
+    def has_pending(self, key: str, hand_hash: str) -> bool:
+        """Kiểm tra key/hash có đang nằm trong queue hoặc worker hay không."""
+        return (
+            self.queued_hash.get(key) == hand_hash
+            or self.running_hash.get(key) == hand_hash
+        )
 
     # ---- moved from StrategyTab._enqueue_batch_jobs ----
     def enqueue_batch_jobs(self, tab) -> None:
@@ -41,18 +54,24 @@ class StagedScheduler:
             return
 
         self.job_q.clear()
+        self.queued_hash.clear()
 
         # BASE: MAX + MONEY (nhanh) cho từng key
         # Chỉ còn 1 job duy nhất cho mỗi key: EXTRA/ALL
         for k in ordered_keys:
             codes = snapshot[k]
             h = tab._hand_hash(codes)
-            if tab._scheduled_hash.get(k) == h:
+            has_result = bool(tab._scheduled_hash.get(k) == h) and bool(
+                tab._ngu_suggestions if k == "NGU" else tab._suggestions.get(k)
+            )
+            if has_result:
                 continue
-            tab._scheduled_hash[k] = h
+            if self.running_hash.get(k) == h:
+                continue
 
             # EXTRA/ALL sẽ gọi build_suggestions_for_codes (Cách 2)
             self.job_q.append((k, "EXTRA", "ALL", h, list(codes)))
+            self.queued_hash[k] = h
 
         self.run_next_job(tab)
 
@@ -64,6 +83,8 @@ class StagedScheduler:
             return
 
         k, stage, kind, h, codes = self.job_q.popleft()
+        if self.queued_hash.get(k) == h:
+            self.queued_hash.pop(k, None)
 
         if len(codes) != 13:
             self.run_next_job(tab)
@@ -76,6 +97,7 @@ class StagedScheduler:
             return
 
         self.job_running = True
+        self.running_hash[k] = h
 
         if k == tab.active_profile and stage == "BASE":
             tab.view.set_p_status("Đang tính gợi ý…")
@@ -119,6 +141,10 @@ class StagedScheduler:
                 key, _gen, sugg, err, stage, kind, h = item
 
             if err is not None:
+                if h is not None and self.running_hash.get(key) == h:
+                    self.running_hash.pop(key, None)
+                if h is not None and tab._scheduled_hash.get(key) == h:
+                    tab._scheduled_hash[key] = None
                 if key == tab.active_profile:
                     tab.view.set_p_status("Lỗi gợi ý")
                 if key == "NGU":
@@ -128,6 +154,18 @@ class StagedScheduler:
                 continue
 
             suggs = sugg or []
+            if h is not None:
+                cur_codes = tab._ngu_base_codes if key == "NGU" else (tab._codes_slot_order.get(key) or [])
+                if len(cur_codes) != 13 or tab._hand_hash(cur_codes) != h:
+                    # Kết quả cũ về muộn sau khi bài đã đổi: bỏ kết quả và
+                    # không khóa hash, để batch hiện tại được chạy lại.
+                    if self.running_hash.get(key) == h:
+                        self.running_hash.pop(key, None)
+                    if tab._scheduled_hash.get(key) == h:
+                        tab._scheduled_hash[key] = None
+                    self.job_running = False
+                    self.run_next_job(tab)
+                    continue
 
             if stage == "BASE":
                 if key == "NGU":
@@ -317,6 +355,14 @@ class StagedScheduler:
                     if key == tab.active_profile:
                         active_updated = True
 
+            # Chỉ khóa completed hash khi worker thật sự trả gợi ý. Nếu rỗng,
+            # watchdog sẽ retry thay vì để UI/Auto kẹt không có suggestion.
+            if h is not None and suggs:
+                tab._scheduled_hash[key] = h
+            elif h is not None and tab._scheduled_hash.get(key) == h:
+                tab._scheduled_hash[key] = None
+            if h is not None and self.running_hash.get(key) == h:
+                self.running_hash.pop(key, None)
             self.job_running = False
             self.run_next_job(tab)
 

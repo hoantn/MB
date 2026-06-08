@@ -45,7 +45,7 @@ class AutoPlayTab(QWidget):
         self.spn_delay.setSuffix(" giây")
         self.spn_delay_to = QSpinBox()
         self.spn_delay_to.setRange(0, 60)
-        self.spn_delay_to.setValue(20)
+        self.spn_delay_to.setValue(10)
         self.spn_delay_to.setSuffix(" giây")
         self.lbl_status = QLabel("Trạng thái: tắt")
         row.addWidget(self.btn_toggle)

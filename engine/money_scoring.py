@@ -7,6 +7,7 @@ from typing import List, Tuple, Optional
 from .card import Card
 from .rules import evaluate_5cards, is_straight, is_flush
 from core.constants import RANK_ORDER
+from engine.foul_rules import evaluate_top_for_foul, is_no_foul
 
 
 # ============================================================
@@ -110,36 +111,12 @@ def get_special_13_bonus(t: Optional[Special13Type]) -> int:
     return _SPECIAL_13_BONUS.get(t, 0)
 
 def _eval_top_for_foul(cs3: List[Card]) -> Tuple[int, List[int]]:
-    """
-    Đánh giá chi 3 để so foul với chi2.
-    Mở rộng: nếu 3 lá là sảnh (A23 hoặc liên tiếp) thì coi như type=4 (sảnh).
-    """
-    assert len(cs3) == 3
-    r = sorted([c.rank_index for c in cs3])
-    # A-2-3
-    if r == [0, 1, len(RANK_ORDER) - 1]:
-        return 4, [1]  # treat as straight with high=3 (index 1)
-    # liên tiếp
-    if r[1] == r[0] + 1 and r[2] == r[1] + 1:
-        return 4, [r[2]]
-    # fallback về bộ 3 lá chuẩn (mậu thầu/đôi/xám)
-    t, d = evaluate_3cards(cs3)
-    if t == 2:
-        return 3, d  # xám -> trips như 5 lá
-    if t == 1:
-        return 1, d  # đôi
-    return 0, d      # mậu thầu
+    """Compatibility wrapper; luật chuẩn nằm tại engine.foul_rules."""
+    return evaluate_top_for_foul(cs3)
 
 def _no_foul(chi1: List[Card], chi2: List[Card], chi3: List[Card]) -> bool:
-    """Không binh lủng: chi1 >= chi2 >= chi3."""
-    t1, d1 = evaluate_5cards(chi1)
-    t2, d2 = evaluate_5cards(chi2)
-    t3, d3 = _eval_top_for_foul(chi3)
-    if _cmp_hand(t1, d1, t2, d2) < 0:
-        return False
-    if _cmp_hand(t2, d2, t3, d3) < 0:
-        return False
-    return True
+    """Compatibility wrapper; không binh lủng khi chi1 >= chi2 >= chi3."""
+    return is_no_foul(chi1, chi2, chi3)
 
 def _score_split(chi1: List[Card], chi2: List[Card], chi3: List[Card]) -> Tuple:
     """Chấm điểm để chọn split tốt nhất (ưu tiên mạnh)."""

@@ -230,6 +230,40 @@ def _pick_natural_lose_vs_both(
     return best
 
 
+def _pick_not_swept_natural_lose(tab, pid: str, vs_sug: dict) -> Optional[Tuple[int, dict]]:
+    """Pick a natural losing split that is not swept 0-3."""
+    best: Optional[Tuple[int, dict]] = None
+    best_key: Optional[Tuple[int, int, int]] = None
+    for idx, s in enumerate(tab._suggestions.get(pid) or []):
+        if not _is_playable(tab, s):
+            continue
+        money, wins, _neg_losses, draws = _score_suggestion_vs_opp(s, vs_sug)
+        if _is_swept_by_opp(s, vs_sug):
+            continue
+        key = (-wins, -draws, money)
+        if best_key is None or key > best_key:
+            best_key = key
+            best = (idx, dict(s))
+    return best
+
+
+def _pick_swept_natural(tab, pid: str, vs_sug: dict) -> Optional[Tuple[int, dict]]:
+    """Pick the strongest natural split that loses all three chi to vs_sug."""
+    best: Optional[Tuple[int, dict]] = None
+    best_key: Optional[Tuple[int, int]] = None
+    for idx, s in enumerate(tab._suggestions.get(pid) or []):
+        if not _is_playable(tab, s):
+            continue
+        money, wins, _neg_losses, _draws = _score_suggestion_vs_opp(s, vs_sug)
+        if wins != 0 or not _is_swept_by_opp(s, vs_sug):
+            continue
+        key = (money, idx)
+        if best_key is None or key > best_key:
+            best_key = key
+            best = (idx, dict(s))
+    return best
+
+
 def _build_3p_balance(tab, sorted_pids: List[str]) -> Optional[AutoPlayPlan]:
     """
     Tối ưu nội bộ 3P:
@@ -301,6 +335,75 @@ def _build_2p_balance(tab, sorted_pids: List[str]) -> Optional[AutoPlayPlan]:
         score=(0, 0, 0, 0),
         selected_index=selected_index,
         suggestions=suggestions,
+        dependency_groups=(tuple(sorted_pids),),
+    )
+
+
+def _build_3p_sap_ham(tab, sorted_pids: List[str]) -> Optional[AutoPlayPlan]:
+    """
+    Internal 3P sap-ham cycle:
+      - P_min plays Money.
+      - P_max must lose all three chi to P_min.
+      - P_mid must not also be swept by P_min, so this never becomes sap-lang.
+    """
+    p_min, p_mid, p_max = sorted_pids
+
+    min_result = _get_money_split(tab, p_min)
+    if min_result is None:
+        return None
+    min_idx, min_sug = min_result
+
+    mid_result = _pick_not_swept_natural_lose(tab, p_mid, min_sug)
+    if mid_result is None:
+        return None
+    mid_idx, mid_sug = mid_result
+
+    max_result = _pick_swept_natural(tab, p_max, min_sug)
+    if max_result is None:
+        return None
+    max_idx, max_sug = max_result
+
+    if _is_swept_by_opp(mid_sug, min_sug):
+        return None
+    if not _is_swept_by_opp(max_sug, min_sug):
+        return None
+
+    return AutoPlayPlan(
+        kind="internal_sap_ham",
+        opp_index=-1,
+        score=(0, 0, 0, 0),
+        selected_index={p_min: min_idx, p_mid: mid_idx, p_max: max_idx},
+        suggestions={p_min: min_sug, p_mid: mid_sug, p_max: max_sug},
+        dependency_groups=(tuple(sorted_pids),),
+    )
+
+
+def _build_2p_sap_ham(tab, sorted_pids: List[str]) -> Optional[AutoPlayPlan]:
+    """
+    Internal 2P sap-ham cycle: the higher-gold profile loses all three chi to
+    the lower-gold profile. Sap-lang does not apply to a two-player table.
+    """
+    p_less, p_more = sorted_pids
+
+    less_result = _get_money_split(tab, p_less)
+    if less_result is None:
+        return None
+    less_idx, less_sug = less_result
+
+    more_result = _pick_swept_natural(tab, p_more, less_sug)
+    if more_result is None:
+        return None
+    more_idx, more_sug = more_result
+
+    if not _is_swept_by_opp(more_sug, less_sug):
+        return None
+
+    return AutoPlayPlan(
+        kind="internal_sap_ham",
+        opp_index=-1,
+        score=(0, 0, 0, 0),
+        selected_index={p_less: less_idx, p_more: more_idx},
+        suggestions={p_less: less_sug, p_more: more_sug},
         dependency_groups=(tuple(sorted_pids),),
     )
 
@@ -382,6 +485,54 @@ def build_internal_balance_plan(tab, context: AutoRoomContext) -> Optional[AutoP
     if context.kind == "internal_2p":
         return _build_2p_balance(tab, sorted_pids)
 
+    return None
+
+
+def build_internal_sap_ham_plan(tab, context: AutoRoomContext) -> Optional[AutoPlayPlan]:
+    """
+    Build the special internal cycle round after the normal no-sweep rounds.
+
+    It is intentionally separate from build_internal_balance_plan because the
+    normal helper avoids sap-ham, while this helper requires one controlled
+    sap-ham and blocks sap-lang in 3P.
+    """
+    import logging as _log
+    _logger = _log.getLogger("MauBinhTool")
+
+    controlled = list(context.controlled_pids)
+    if len(controlled) not in (2, 3):
+        return None
+
+    gold_map = context.gold_by_pid
+    none_pids = [pid for pid in controlled if gold_map.get(pid) is None]
+    if none_pids:
+        _logger.info("[INTERNAL-SAP-HAM] skip: gold=None cho %s", none_pids)
+        return None
+
+    unique_golds = {gold_map[pid] for pid in controlled}
+    if len(unique_golds) < len(controlled):
+        _logger.info(
+            "[INTERNAL-SAP-HAM] skip: gold co cap bang nhau %s",
+            {p: gold_map.get(p) for p in controlled}
+        )
+        return None
+
+    empty_pids = [pid for pid in controlled if not (tab._suggestions.get(pid) or [])]
+    if empty_pids:
+        _logger.info("[INTERNAL-SAP-HAM] skip: suggestions rong cho %s", empty_pids)
+        return None
+
+    profile_order = {p: i for i, p in enumerate(PROFILES)}
+    sorted_pids = sorted(controlled, key=lambda p: (gold_map[p], profile_order.get(p, 99)))
+    _logger.info(
+        "[INTERNAL-SAP-HAM] thu tu: P_min=%s(vang=%s) P_max=%s(vang=%s)",
+        sorted_pids[0], gold_map.get(sorted_pids[0]), sorted_pids[-1], gold_map.get(sorted_pids[-1])
+    )
+
+    if context.kind == "internal_3p":
+        return _build_3p_sap_ham(tab, sorted_pids)
+    if context.kind == "internal_2p":
+        return _build_2p_sap_ham(tab, sorted_pids)
     return None
 
 

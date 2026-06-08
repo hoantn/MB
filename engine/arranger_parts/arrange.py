@@ -265,16 +265,31 @@ def _analyze_flush_straight(idx5, ranks13, suits13, rank_to_indices, suit_to_ind
 
     return None
     
-def _generate_flush_straight_variants(idx5, related, ranks13, suits13, kind, max_variants=3):
+def _generate_flush_straight_variants(
+    idx5,
+    related,
+    ranks13,
+    suits13,
+    kind,
+    max_variants: Optional[int] = None,
+    variant_cache: Optional[
+        Dict[Tuple[str, Tuple[int, ...]], List[Tuple[int, int, int, int, int]]]
+    ] = None,
+):
     """
     Sinh các phương án chọn 5 lá khác nhau từ idx5 + related.
     BẮT BUỘC: variant phải GIỮ ĐÚNG LOẠI hand ban đầu (kind: "flush" | "straight").
     """
-    base = list(idx5)
-    all_cards = list(set(base) | set(related))
+    base = tuple(sorted(idx5))
+    all_cards = tuple(sorted(set(base) | set(related)))
+    cache_key = (str(kind), all_cards)
+    if variant_cache is not None and cache_key in variant_cache:
+        cached = variant_cache[cache_key]
+        if max_variants and max_variants > 0:
+            return cached[: int(max_variants)]
+        return cached
 
     # sort ưu tiên thay thế theo rank cao -> thấp (giữ hành vi gần nhất code cũ)
-    all_cards.sort(key=lambda i: ranks13[i], reverse=True)
 
     def _is_flush(idx_list):
         s0 = suits13[idx_list[0]]
@@ -304,31 +319,18 @@ def _generate_flush_straight_variants(idx5, related, ranks13, suits13, kind, max
             return _is_straight(idx_list)
         return True  # fallback an toàn
 
-    variants = []
+    variants = [base]
+    for comb5 in combinations(all_cards, 5):
+        v = tuple(sorted(comb5))
+        if v == base:
+            continue
+        if _match_kind(v):
+            variants.append(v)
+
     # 1) Giữ nguyên (luôn hợp lệ)
-    variants.append(tuple(sorted(base)))
 
     # 2) Thử hy sinh lá cao (drop theo rank cao -> thấp), thay bằng lá từ related/all_cards
-    for drop in sorted(base, key=lambda i: ranks13[i], reverse=True):
-        candidate4 = [i for i in base if i != drop]
-
-        for add in all_cards:
-            if add in candidate4:
-                continue
-
-            new5 = candidate4 + [add]
-            if len(set(new5)) != 5:
-                continue
-
             # BẮT BUỘC: giữ đúng loại hand ban đầu
-            if not _match_kind(new5):
-                continue
-
-            variants.append(tuple(sorted(new5)))
-            break
-
-        if len(variants) >= max_variants:
-            break
         # nếu không tìm được add hợp lệ cho drop này, thử drop tiếp theo
 
     # Dedup & giới hạn
@@ -338,8 +340,11 @@ def _generate_flush_straight_variants(idx5, related, ranks13, suits13, kind, max
         if v not in seen:
             seen.add(v)
             out.append(v)
-        if len(out) >= max_variants:
+        if max_variants and max_variants > 0 and len(out) >= max_variants:
             break
+
+    if variant_cache is not None and not (max_variants and max_variants > 0):
+        variant_cache[cache_key] = out
 
     return out
 
@@ -381,6 +386,10 @@ def arrange_13_cards(
     # ---- cache evaluator theo tuple index (rẻ & ổn định) ----
     eval5_cache: Dict[Tuple[int, int, int, int, int], Tuple[int, List[int]]] = {}
     eval3_cache: Dict[Tuple[int, int, int], Tuple[int, List[int]]] = {}
+    variant_cache: Dict[
+        Tuple[str, Tuple[int, ...]],
+        List[Tuple[int, int, int, int, int]],
+    ] = {}
     # ---- Precompute ranks/suits/index maps (dùng cho _style_tuple, giảm CPU) ----
     ranks13: List[int] = [c.rank_index for c in cards]
     suits13: List[int] = [c.suit for c in cards]
@@ -460,7 +469,21 @@ def arrange_13_cards(
         # pad d3 cho ổn định (tối đa 3 phần tử)
         d3p = (d3 + [-1, -1, -1])[:3]
         return [t1] + d1 + [t2] + d2 + [t3m] + d3p
-    def _style_tuple(idx1, idx2, idx3) -> List[int]:
+
+    def _style_hard_prefix(st: List[int]) -> int:
+        return int(st[0]) if st else 1
+
+    def _display_sort_key(sc: List[int], st: List[int]):
+        # Hard style prefix is only for global rules such as Chi2 flush/straight
+        # overflow. After that, keep the original strength-first UI ordering.
+        return (_style_hard_prefix(st), tuple(sc), tuple(st))
+
+    def _money_sort_key(money_score: float, sc: List[int], st: List[int]):
+        # Money remains the main Auto Money score, but it cannot override a hard
+        # style rule that marks a flush/straight overflow variant as bad.
+        return (_style_hard_prefix(st), money_score, tuple(st), tuple(sc))
+
+    def _style_tuple(idx1, idx2, idx3, overflow_context=None) -> List[int]:
         # Style ưu tiên: pair mạnh và rác mạnh dồn về chi3 -> chi2 -> chi1
         # So sánh bằng lexicographic list[int]: list lớn hơn => hợp style hơn.
 
@@ -564,7 +587,156 @@ def arrange_13_cards(
         part_chi2 = pad(p2, 2) + pad(s2, 5)
         part_chi1 = pad(p1, 2) + pad(s1, 5)
 
-        return part_chi3 + part_chi2 + part_chi1
+        base_style = part_chi3 + part_chi2 + part_chi1
+        if not overflow_context:
+            return [1] + base_style
+
+        # Hard style rule for Chi2 flush/straight overflow:
+        # prefer the strongest base flush/straight, and only allow sacrificing it
+        # when another chi gains real hand value. This keeps every caller
+        # (manual Max, profile Money, OPP Auto Money) on one shared style source.
+        style_prefix = _flush_straight_style_prefix(
+            overflow_context.get("kind"),
+            overflow_context.get("base_record"),
+            overflow_context.get("current_record"),
+        )
+        return style_prefix + base_style
+
+    def _chi3_has_real_gain(base_e3, cur_e3) -> bool:
+        base_type, base_detail = base_e3
+        cur_type, cur_detail = cur_e3
+        if cur_type > base_type:
+            return True
+        if cur_type != base_type:
+            return False
+        if cur_type == 1:
+            # Pair gain means pair rank improves. Kicker is treated as trash.
+            return bool(cur_detail and base_detail and cur_detail[0] > base_detail[0])
+        if cur_type == 2:
+            # Trips gain means trips rank improves.
+            return bool(cur_detail and base_detail and cur_detail[0] > base_detail[0])
+        return False
+
+    def _mau_swap_gain_allowed(kind, base_idx2, cur_idx2, base_idx3, cur_idx3, base_e2, base_e3, cur_e3) -> bool:
+        if base_e3[0] != 0 or cur_e3[0] != 0:
+            return False
+        if not cur_e3[1] > base_e3[1]:
+            return False
+
+        moved_to_chi3 = set(base_idx2) - set(cur_idx2)
+        moved_to_chi2 = set(base_idx3) - set(cur_idx3)
+        if len(moved_to_chi3) != 1 or len(moved_to_chi2) != 1:
+            return False
+
+        moved_idx = next(iter(moved_to_chi3))
+        replaced_idx = next(iter(moved_to_chi2))
+        moved_rank = ranks13[moved_idx]
+        replaced_rank = ranks13[replaced_idx]
+        base_chi3_ranks = [ranks13[i] for i in base_idx3]
+
+        if kind == "flush":
+            base_ranks = sorted((ranks13[i] for i in base_idx2), reverse=True)
+            if len(base_ranks) < 2 or moved_rank != base_ranks[1]:
+                return False
+            base_without_moved = set(base_idx2) - {moved_idx}
+            valid_replacements = [
+                i for i in base_idx3
+                if _is_flush_idx(tuple(sorted(base_without_moved | {i})))
+            ]
+            if not valid_replacements:
+                return False
+            min_valid_rank = min(ranks13[i] for i in valid_replacements)
+            return replaced_rank == min_valid_rank
+
+        if kind == "straight":
+            straight_high = base_e2[1][0] if base_e2[1] else -1
+            if moved_rank != straight_high:
+                return False
+            base_without_moved = set(base_idx2) - {moved_idx}
+            valid_replacements = [
+                i for i in base_idx3
+                if _eval5(tuple(sorted(base_without_moved | {i})))[0] == 4
+            ]
+            if not valid_replacements:
+                return False
+            min_valid_rank = min(ranks13[i] for i in valid_replacements)
+            return replaced_rank == min_valid_rank
+
+        return False
+
+    def _flush_straight_style_prefix(kind, base_record, cur_record) -> List[int]:
+        if not kind or base_record is None:
+            return [1]
+
+        base_idx2, base_e2, base_idx3, base_e3 = base_record
+        cur_idx2, _cur_e2, cur_idx3, cur_e3 = cur_record
+        if tuple(cur_idx2) == tuple(base_idx2):
+            return [1]
+
+        if _chi3_has_real_gain(base_e3, cur_e3):
+            return [1]
+
+        if _mau_swap_gain_allowed(
+            kind,
+            base_idx2,
+            cur_idx2,
+            base_idx3,
+            cur_idx3,
+            base_e2,
+            base_e3,
+            cur_e3,
+        ):
+            return [1]
+
+        return [0]
+
+    def _is_flush_idx(idx5: Tuple[int, int, int, int, int]) -> bool:
+        suit = suits13[idx5[0]]
+        return all(suits13[i] == suit for i in idx5[1:])
+
+    def _overflow_kind_for_idx2(
+        idx5: Tuple[int, int, int, int, int],
+        e5: Tuple[int, List[int]],
+        info_kind: Optional[str] = None,
+    ) -> Optional[str]:
+        if info_kind:
+            return info_kind
+        if _is_flush_idx(idx5):
+            return "flush"
+        if e5[0] == 4:
+            return "straight"
+        return None
+
+    def _rem8_flush_straight_bases(
+        candidates: List[Tuple[Tuple[int, int, int, int, int], Tuple[int, List[int]]]],
+        rem8_list: List[int],
+    ) -> Dict[str, Tuple[Tuple[int, int, int, int, int], Tuple[int, List[int]], Tuple[int, int, int], Tuple[int, List[int]]]]:
+        bases: Dict[str, Tuple[Tuple[int, int, int, int, int], Tuple[int, List[int]], Tuple[int, int, int], Tuple[int, List[int]]]] = {}
+        best_keys: Dict[str, Tuple[int, List[int]]] = {}
+
+        for b_idx2, b_e2 in candidates:
+            b_set2 = set(b_idx2)
+            b_rem3 = [i for i in rem8_list if i not in b_set2]
+            if len(b_rem3) != 3:
+                continue
+            b_idx3 = tuple(sorted(b_rem3))  # type: ignore
+            b_e3 = _eval3(b_idx3)
+            if _cmp_5_vs_3(b_e2, b_e3) < 0:
+                continue
+
+            kinds: List[str] = []
+            if _is_flush_idx(b_idx2):
+                kinds.append("flush")
+            if b_e2[0] == 4:
+                kinds.append("straight")
+
+            for kind in kinds:
+                key = (b_e2[0], b_e2[1])
+                if kind not in best_keys or key > best_keys[kind]:
+                    best_keys[kind] = key
+                    bases[kind] = (b_idx2, b_e2, b_idx3, b_e3)
+
+        return bases
 
     # ---- main loop: chi1 (1287) x chi2 (56) = 72k ----
 
@@ -584,6 +756,7 @@ def arrange_13_cards(
             chi2_candidates.append((idx2, e2))
 
         chi2_candidates.sort(key=lambda it: (it[1][0], it[1][1]), reverse=True)
+        rem8_base_by_kind = _rem8_flush_straight_bases(chi2_candidates, rem8)
 
         # prune theo (t1,t2): khi đã lấy đủ t3 hợp lệ cho t2 thì skip các chi2 còn lại cùng t2
         # seen_t3_by_t2: Dict[int, set[int]] = {}
@@ -605,12 +778,12 @@ def arrange_13_cards(
                     ranks13,
                     suits13,
                     info["type"],
+                    variant_cache=variant_cache,
                 )
 
+            variant_records = []
             for v_idx2 in variants2:
                 e2 = _eval5(v_idx2)
-                t2 = e2[0]
-
                 set2 = set(v_idx2)
                 rem3 = [i for i in rem8 if i not in set2]
                 if len(rem3) != 3:
@@ -626,6 +799,10 @@ def arrange_13_cards(
                 if _cmp_5_vs_3(e2, e3) < 0:
                     continue
 
+                variant_records.append((v_idx2, e2, idx3, e3))
+
+            for v_idx2, e2, idx3, e3 in variant_records:
+                t2 = e2[0]
                 t1 = e1[0]
                 t3 = e3[0]
                 struct_key = (t1, t2, t3)
@@ -633,12 +810,28 @@ def arrange_13_cards(
                 sc = _score_tuple(e1, e2, e3)
 
                 # QUAN TRỌNG: style phải dùng v_idx2 (variant), KHÔNG dùng idx2 gốc
-                st = _style_tuple(idx1, v_idx2, idx3)
+                overflow_kind = _overflow_kind_for_idx2(
+                    v_idx2,
+                    e2,
+                    info["type"] if info else None,
+                )
+                base_variant_record = (
+                    rem8_base_by_kind.get(overflow_kind)
+                    if overflow_kind
+                    else None
+                )
+                overflow_context = {
+                    "kind": overflow_kind,
+                    "base_record": base_variant_record,
+                    "current_record": (v_idx2, e2, idx3, e3),
+                }
+                st = _style_tuple(idx1, v_idx2, idx3, overflow_context)
 
                 # Capture the best self-money split inside the existing scan.
                 # Auto Play can reuse it without starting another 72k pass.
                 money_e3 = (_map_3_to_5_scale(e3[0]), e3[1])
-                money_key = (float(_score_max_money(e1, e2, money_e3)), tuple(st), tuple(sc))
+                money_score = float(_score_max_money(e1, e2, money_e3))
+                money_key = _money_sort_key(money_score, sc, st)
                 if best_money_key is None or money_key > best_money_key:
                     best_money_key = money_key
                     best_money_idx = (idx1, v_idx2, idx3)
@@ -685,8 +878,8 @@ def arrange_13_cards(
     filtered.extend(best_mau_by_e1.values())
     reps = filtered
 
-    # sort theo score tuple sc desc
-    reps.sort(key=lambda it: it[3], reverse=True)
+    # sort theo final display key: hard style rule -> score tuple -> style.
+    reps.sort(key=lambda it: _display_sort_key(it[3], it[4]), reverse=True)
     # --- hard filter: nếu chi3 là MẬU, không giữ những rep có chi2 type thấp hơn rep tốt nhất
     # group theo (chi1 eval, chi3 type) => ở đây chi3 type luôn 0, nhưng để rõ ràng
     best_t2_by_e1_for_mau: Dict[Tuple[int, Tuple[int, ...]], int] = {}

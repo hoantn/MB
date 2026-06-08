@@ -6,6 +6,7 @@ import threading
 import queue
 import re
 import random
+import time
 
 from PySide6.QtCore import Qt, QTimer, QThread, Signal, Slot
 from PySide6.QtWidgets import QFrame, QScrollArea, QWidget, QVBoxLayout
@@ -18,6 +19,7 @@ MAX_UI_P_ITEMS = 12
 MAX_UI_NGU_ITEMS = 12
 
 from core.logger import log
+from core.apply_trace import apply_trace
 from ui2.bridge.ws_card_store import ws_card_store
 from ui2.tabs.dashboard.dashboard_constants import FULL_DECK
 
@@ -40,6 +42,7 @@ from .modules.apply_controller import ApplyController
 from .modules.auto_play_controller import (
     build_auto_play_plan,
     build_internal_balance_plan,
+    build_internal_sap_ham_plan,
     build_money_fallback_plan,
     classify_auto_room_context,
 )
@@ -165,6 +168,9 @@ class StrategyTab(QWidget):
         self._codes_slot_order: Dict[str, List[str]] = {pid: [] for pid in self.profiles}
         self._ws_snapshot: Dict[str, Optional[List[str]]] = {pid: None for pid in self.profiles}
         self._last_hand_hash: Dict[str, Optional[str]] = {pid: None for pid in self.profiles}
+        # Tăng đúng một lần khi nhận bộ bài mới của từng P. Auto dùng generation
+        # để không nhầm hai ván khác nhau vô tình có cùng bộ 13 lá.
+        self._hand_generation: Dict[str, int] = {pid: 0 for pid in self.profiles}
 
         self._layout_codes: Dict[str, List[str]] = {}
 
@@ -180,15 +186,18 @@ class StrategyTab(QWidget):
         self._auto_play_enabled: bool = False
         self._auto_play_remaining: int = 0
         self._auto_play_delay_min_ms: int = 5000
-        self._auto_play_delay_max_ms: int = 20000
+        self._auto_play_delay_max_ms: int = 10000
         self._auto_play_hand_key: Optional[str] = None
         self._auto_play_pending_key: Optional[str] = None
         self._auto_play_applied_profile_keys = set()
         self._auto_play_reservations: Dict[str, str] = {}
+        self._auto_apply_unsafe_retry_counts: Dict[str, int] = {}
         self._auto_play_counted_round_keys = set()
-        # Internal balance cycle: after 3 completed internal rounds, run one
+        # Internal cycle: N no-sweep rounds, one sap-ham round, then one
         # independent Money round before allowing internal balance again.
+        self._auto_play_internal_cycle_limit: int = 4
         self._auto_play_internal_streak: int = 0
+        self._auto_play_internal_sap_ham_done: bool = False
         self._auto_play_round_modes: Dict[str, str] = {}
         self._auto_play_session: int = 0
         self._auto_play_log_sink = None
@@ -217,6 +226,7 @@ class StrategyTab(QWidget):
         self._batch_debounce.timeout.connect(self._enqueue_batch_jobs)
 
         self._scheduled_hash: Dict[str, Optional[str]] = {pid: None for pid in (self.profiles + ["NGU"])}
+        self._last_suggestion_watchdog_at: float = 0.0
         # ========================================================================
 
         self._poll_suggest_timer = QTimer(self)
@@ -257,12 +267,9 @@ class StrategyTab(QWidget):
 
     # =================== helpers ===================
     def _hand_hash(self, codes: List[str]) -> str:
-        """Order-sensitive hand hash (matches legacy strategy_tab - Copy.py).
-
-        This hash is used ONLY for WS dedup/new-hand detection and must remain stable across refactors.
-        """
+        """Nhận diện bộ 13 lá, không phụ thuộc thứ tự slot/layout."""
         m = hashlib.md5()
-        for c in codes:
+        for c in sorted(map(str, codes)):
             m.update(str(c).encode("utf-8"))
             m.update(b"|")
         return m.hexdigest()
@@ -600,9 +607,27 @@ class StrategyTab(QWidget):
         self._suggestions[pid] = []
         self._suggestions_render[pid] = []
         self._selected_index[pid] = -1
+        try:
+            self._confirmed_apply_tokens.pop(pid, None)
+        except Exception:
+            pass
 
         # 2) last_hand_hash không còn ý nghĩa theo Hướng A (vẫn có thể giữ để debug)
         self._last_hand_hash[pid] = None
+        # Thu hồi state Auto cũ của riêng P này; không chạm P khác đang chạy.
+        prefix = f"{pid}:"
+        self._auto_play_applied_profile_keys = {
+            key for key in self._auto_play_applied_profile_keys
+            if not str(key).startswith(prefix)
+        }
+        self._auto_play_reservations = {
+            key: value for key, value in self._auto_play_reservations.items()
+            if not str(key).startswith(prefix)
+        }
+        self._auto_apply_unsafe_retry_counts = {
+            key: value for key, value in self._auto_apply_unsafe_retry_counts.items()
+            if not str(key).startswith(prefix)
+        }
         # Khi bất kỳ P nào reset bài, coi như NGU key cũ không còn giá trị
         self._ngu_key = None
         self._sap_lang_combo = None
@@ -647,6 +672,7 @@ class StrategyTab(QWidget):
         if codes and isinstance(codes, list) and len(codes) == 13:
             # áp dụng lại như một WS update "force"
             self._force_reset_pid_state(pid)
+            self._hand_generation[pid] = int(self._hand_generation.get(pid, 0) or 0) + 1
             self._last_hand_hash[pid] = self._hand_hash(codes)
             self._codes_slot_order[pid] = list(codes)
             self._layout_codes[pid] = list(codes)
@@ -666,15 +692,9 @@ class StrategyTab(QWidget):
         if not (codes and isinstance(codes, list) and len(codes) == 13):
             return
 
-        # SAME HAND: chỉ sync layout/slot + UI, KHÔNG force reset, KHÔNG trigger pipeline
-        self._codes_slot_order[pid] = list(codes)
-        self._layout_codes[pid] = list(codes)
-
-        if pid == self.active_profile:
-            try:
-                self.view.set_cards_p_normalized(list(codes))
-            except Exception:
-                pass
+        # cmd=600 chỉ xác định bộ bài gốc, không phải layout sau kéo. Snapshot
+        # cùng bộ lá đến muộn không được ghi đè layout dự đoán vừa apply.
+        log.debug("[WS SAME HAND] bỏ qua cập nhật layout pid=%s", pid)
 
     def _poll_ws(self) -> None:
         updates, waiting = self._ws_ingest.poll(
@@ -737,6 +757,7 @@ class StrategyTab(QWidget):
             if up.is_new_hand:
                 log.warning("[WS FORCE RESET] pid=%s first3=%s", pid, codes[:3])
                 self._force_reset_pid_state(pid)
+                self._hand_generation[pid] = int(self._hand_generation.get(pid, 0) or 0) + 1
                 self._last_hand_hash[pid] = up.hand_hash
 
                 self._codes_slot_order[pid] = list(codes)
@@ -751,14 +772,9 @@ class StrategyTab(QWidget):
                 self._batch_debounce.start()
                 any_new_hand = True
             else:
-                # SAME HAND: chỉ sync nhẹ, không reset, không trigger compute
-                self._codes_slot_order[pid] = list(codes)
-                self._layout_codes[pid] = list(codes)
-                if pid == self.active_profile:
-                    try:
-                        self.view.set_cards_p_normalized(list(codes))
-                    except Exception:
-                        pass
+                # Cùng bộ 13 lá không phải ván mới và cmd=600 không đại diện
+                # cho layout sau kéo, vì vậy không ghi đè state apply hiện tại.
+                log.debug("[WS SAME HAND] bỏ qua cập nhật layout pid=%s", pid)
 
 
         if any_new_hand:
@@ -794,7 +810,50 @@ class StrategyTab(QWidget):
         return self._pipeline.filter_extras(full)
 
     def _poll_suggest_results(self) -> None:
-        return self._scheduler.poll_suggest_results(self)
+        self._scheduler.poll_suggest_results(self)
+        self._watchdog_missing_suggestions()
+
+    def _watchdog_missing_suggestions(self) -> None:
+        """
+        Tự cứu luồng sinh gợi ý.
+
+        Nếu một profile đã có đủ 13 lá nhưng _suggestions vẫn rỗng, Auto sẽ
+        không có dữ liệu để xếp. Trường hợp này từng xảy ra khi queue bị clear
+        nhưng hash đã bị đánh dấu. Watchdog chỉ chạy nhẹ mỗi ~1 giây, không
+        sinh job trùng nếu scheduler đang queue/running cùng hand.
+        """
+        now = time.monotonic()
+        if now - float(getattr(self, "_last_suggestion_watchdog_at", 0.0) or 0.0) < 1.0:
+            return
+        self._last_suggestion_watchdog_at = now
+
+        scheduler = getattr(self, "_scheduler", None)
+        retry = False
+        for pid in self.profiles:
+            codes = list(self._codes_slot_order.get(pid) or [])
+            if len(codes) != 13 or (self._suggestions.get(pid) or []):
+                continue
+            h = self._hand_hash(codes)
+            if scheduler is not None and hasattr(scheduler, "has_pending") and scheduler.has_pending(pid, h):
+                continue
+            self._scheduled_hash[pid] = None
+            retry = True
+            log.warning("[SUGGEST-WATCHDOG] retry pid=%s hash=%s", pid, h[:8])
+
+        if self._ngu_base_codes and len(self._ngu_base_codes) == 13 and not (self._ngu_suggestions or []):
+            h = self._hand_hash(self._ngu_base_codes)
+            if not (
+                scheduler is not None
+                and hasattr(scheduler, "has_pending")
+                and scheduler.has_pending("NGU", h)
+            ):
+                self._scheduled_hash["NGU"] = None
+                retry = True
+                log.warning("[SUGGEST-WATCHDOG] retry NGU hash=%s", h[:8])
+
+        if retry:
+            self._batch_debounce.stop()
+            self._batch_debounce.start()
 
     # =================== legacy worker (kept) ===================
     def _start_suggest_worker(self, key: str, codes: List[str]) -> None:
@@ -833,6 +892,7 @@ class StrategyTab(QWidget):
         self._renderer.render_p_active(self)
         self._update_special_labels()   # mỗi lần render P active, cập nhật label
         self._refresh_sap_lang_combo()
+        self._sync_apply_button_enabled()
 
 
     # =================== NGU derive ===================
@@ -920,16 +980,25 @@ class StrategyTab(QWidget):
         if not requested:
             return False
 
-        running = [
+        running_requested = [
             str(pid)
             for pid, worker in (getattr(self, "_apply_threads", {}) or {}).items()
+            if str(pid) in requested
             if worker is not None and getattr(worker, "is_alive", lambda: False)()
         ]
-        if running:
+        if running_requested:
             self._auto_play_log(
-                f"Bỏ thao tác tay vì đang xếp: {','.join(sorted(running))}."
+                f"Bỏ thao tác tay vì đang xếp: {','.join(sorted(running_requested))}."
             )
             return False
+
+        # Thao tác tay phải thu hồi ngay quyền click Xong/Báo binh đang chờ của
+        # Auto trên đúng P được chọn. Không đụng token của các P khác.
+        for pid in requested:
+            try:
+                self._confirmed_apply_tokens.pop(pid, None)
+            except Exception:
+                pass
 
         if self._auto_play_enabled or self._auto_play_reservations:
             self._auto_play_session += 1
@@ -1000,7 +1069,7 @@ class StrategyTab(QWidget):
         except Exception:
             log.exception("[AUTO-PLAY] missing 3P alert check failed")
 
-    def set_auto_play(self, enabled: bool, rounds: int = 0, delay_min_ms: int = 5000, delay_max_ms: int = 20000) -> None:
+    def set_auto_play(self, enabled: bool, rounds: int = 0, delay_min_ms: int = 5000, delay_max_ms: int = 10000) -> None:
         self._auto_play_session += 1
         self._auto_play_enabled = bool(enabled)
         self._auto_play_remaining = max(0, int(rounds or 0)) if enabled else 0
@@ -1012,6 +1081,7 @@ class StrategyTab(QWidget):
         self._auto_play_pending_key = None
         self._auto_play_applied_profile_keys = set()
         self._auto_play_reservations = {}
+        self._auto_apply_unsafe_retry_counts = {}
         self._auto_play_counted_round_keys = set()
         self._auto_reset_internal_cycle()
         if not self._auto_play_enabled:
@@ -1076,9 +1146,8 @@ class StrategyTab(QWidget):
 
     def _auto_profile_apply_key(self, pid: str) -> str:
         codes = list(self._codes_slot_order.get(pid) or [])
-        # A profile hand must be applied at most once even if NGU appears later
-        # or the game reports the same 13 cards again in a different slot order.
-        return f"{pid}:{','.join(sorted(map(str, codes)))}"
+        generation = int((getattr(self, "_hand_generation", {}) or {}).get(pid, 0) or 0)
+        return f"{pid}:g{generation}:{','.join(sorted(map(str, codes)))}"
 
     @staticmethod
     def _auto_room_context_key(context) -> str:
@@ -1116,6 +1185,7 @@ class StrategyTab(QWidget):
     def _auto_reset_internal_cycle(self) -> None:
         """Reset transient internal-balance cycle state."""
         self._auto_play_internal_streak = 0
+        self._auto_play_internal_sap_ham_done = False
         self._auto_play_round_modes = {}
 
     def _auto_register_round_mode(self, mode: str) -> None:
@@ -1128,16 +1198,26 @@ class StrategyTab(QWidget):
         """Update the cycle only after every visible profile finished applying."""
         mode = self._auto_play_round_modes.pop(round_key, "other")
         if mode == "internal_balance":
-            self._auto_play_internal_streak = min(3, self._auto_play_internal_streak + 1)
+            limit = int(getattr(self, "_auto_play_internal_cycle_limit", 4) or 4)
+            self._auto_play_internal_streak = min(limit, self._auto_play_internal_streak + 1)
             self._auto_play_log(
-                f"Chu ky noi bo: {self._auto_play_internal_streak}/3 van lien tiep."
+                f"Chu ky noi bo: {self._auto_play_internal_streak}/{limit} van lien tiep."
             )
             return
+        if mode == "internal_sap_ham":
+            limit = int(getattr(self, "_auto_play_internal_cycle_limit", 4) or 4)
+            self._auto_play_internal_streak = limit
+            self._auto_play_internal_sap_ham_done = True
+            self._auto_play_log("Chu ky noi bo: da xep Sap Ham, van tiep theo dung Money rieng.")
+            return
         if mode == "internal_cycle_money":
+            limit = int(getattr(self, "_auto_play_internal_cycle_limit", 4) or 4)
             self._auto_play_internal_streak = 0
-            self._auto_play_log("Chu ky noi bo: da xep Money rieng, reset ve 0/3.")
+            self._auto_play_internal_sap_ham_done = False
+            self._auto_play_log(f"Chu ky noi bo: da xep Money rieng, reset ve 0/{limit}.")
             return
         self._auto_play_internal_streak = 0
+        self._auto_play_internal_sap_ham_done = False
 
     def _auto_finish_round_if_ready(self) -> None:
         """Consume one Auto round only after every visible profile has finished apply."""
@@ -1177,7 +1257,55 @@ class StrategyTab(QWidget):
     def _auto_mark_profile_done(self, profile_key: str) -> None:
         if self._auto_play_reservations.get(profile_key) == "applied":
             self._auto_play_reservations[profile_key] = "done"
+        try:
+            self._auto_apply_unsafe_retry_counts.pop(profile_key, None)
+        except Exception:
+            pass
         self._auto_finish_round_if_ready()
+
+    def _auto_mark_profile_unsafe(
+        self,
+        profile_key: str,
+        expected_group_keys: Dict[str, str],
+        reason: str = "unknown",
+    ) -> None:
+        """
+        Apply của một P lỗi thật sự trước khi hoàn tất.
+
+        Retry độc lập theo P; tuyệt đối không giải phóng/reset các P khác đang
+        kéo hoặc đã hoàn tất trong cùng plan.
+        """
+        reason = str(reason or "unknown")
+        # Các lỗi liên quan 606 xảy ra sau khi layout thật không được xác nhận.
+        # Retry tự động có thể kéo chồng từ trạng thái sai, nên khóa riêng P cho
+        # tới ván mới thay vì lập kế hoạch/kéo lại cùng ván.
+        if reason.startswith("layout606_"):
+            self._auto_play_reservations[profile_key] = "failed"
+            self._auto_play_log(
+                f"Dừng riêng {profile_key.split(':', 1)[0]} trong ván hiện tại: {reason}; không retry mù."
+            )
+            apply_trace("auto_retry_blocked_606", profile_key.split(":", 1)[0], reason=reason)
+            return
+
+        retry_counts = getattr(self, "_auto_apply_unsafe_retry_counts", None)
+        if not isinstance(retry_counts, dict):
+            retry_counts = {}
+            self._auto_apply_unsafe_retry_counts = retry_counts
+        retry_count = int(retry_counts.get(profile_key, 0) or 0) + 1
+        retry_counts[profile_key] = retry_count
+
+        if retry_count >= 2:
+            self._auto_play_reservations[profile_key] = "failed"
+            self._auto_play_log("Dừng retry P hiện tại vì DevTools/apply lỗi hai lần.")
+            return
+
+        self._auto_play_reservations.pop(profile_key, None)
+        self._auto_play_applied_profile_keys.discard(profile_key)
+        self._auto_play_hand_key = None
+        self._auto_play_pending_key = None
+        if self._auto_play_enabled and self._auto_play_remaining > 0:
+            session = self._auto_play_session
+            QTimer.singleShot(1000, lambda s=session: self._maybe_run_auto_play(s))
 
     def _auto_is_waiting_for_ngu_suggestions(self) -> bool:
         """Keep the full 3P path alive while the derived OPP job is still pending."""
@@ -1240,7 +1368,17 @@ class StrategyTab(QWidget):
                 return
 
             # ── Chọn plan theo bối cảnh bàn ──────────────────────────────
-            internal_cycle_money = bool(is_internal and self._auto_play_internal_streak >= 3)
+            internal_cycle_limit = int(getattr(self, "_auto_play_internal_cycle_limit", 4) or 4)
+            sap_ham_due = bool(
+                is_internal
+                and self._auto_play_internal_streak >= internal_cycle_limit
+                and not bool(getattr(self, "_auto_play_internal_sap_ham_done", False))
+            )
+            internal_cycle_money = bool(
+                is_internal
+                and self._auto_play_internal_streak >= internal_cycle_limit
+                and bool(getattr(self, "_auto_play_internal_sap_ham_done", False))
+            )
             if allow_opp_plan and has_auto_opp:
                 plan = build_auto_play_plan(
                     self,
@@ -1248,11 +1386,15 @@ class StrategyTab(QWidget):
                     allow_intentional_foul=allow_intentional_foul,
                 )
             elif is_internal:
-                plan = (
-                    build_money_fallback_plan(self)
-                    if internal_cycle_money
-                    else build_internal_balance_plan(self, room_context)
-                )
+                if internal_cycle_money:
+                    plan = build_money_fallback_plan(self)
+                elif sap_ham_due:
+                    plan = build_internal_sap_ham_plan(self, room_context)
+                    if plan is None:
+                        self._auto_play_log("Chu ky noi bo: chua tim duoc Sap Ham an toan, dung noi bo khong sap.")
+                        plan = build_internal_balance_plan(self, room_context)
+                else:
+                    plan = build_internal_balance_plan(self, room_context)
                 if plan is None:
                     # Fallback: gold bằng nhau / thiếu data → Money độc lập
                     plan = build_money_fallback_plan(self)
@@ -1267,7 +1409,7 @@ class StrategyTab(QWidget):
                 return
 
             separate_plan = None
-            if room_context.kind == "internal_2p" and plan.kind == "internal_balance":
+            if room_context.kind == "internal_2p" and plan.kind in ("internal_balance", "internal_sap_ham"):
                 pair_pids = set(room_context.controlled_pids)
                 separate_plan = build_money_fallback_plan(
                     self,
@@ -1304,14 +1446,21 @@ class StrategyTab(QWidget):
             self._auto_play_hand_key = hand_key
             if plan.kind == "internal_balance":
                 self._auto_register_round_mode("internal_balance")
+            elif plan.kind == "internal_sap_ham":
+                self._auto_register_round_mode("internal_sap_ham")
+                self._auto_play_log(
+                    f"Chu ky noi bo: van thu {internal_cycle_limit + 1} dung Sap Ham noi bo."
+                )
             elif internal_cycle_money:
                 self._auto_register_round_mode("internal_cycle_money")
-                self._auto_play_log("Chu ky noi bo: van thu 4 dung Money rieng cho tung P.")
+                self._auto_play_log(
+                    f"Chu ky noi bo: van thu {internal_cycle_limit + 2} dung Money rieng cho tung P."
+                )
             else:
                 self._auto_register_round_mode("other")
 
             # OPP selection chỉ cập nhật khi có external OPP
-            if plan.kind not in ("money_fallback", "internal_balance"):
+            if plan.kind not in ("money_fallback", "internal_balance", "internal_sap_ham"):
                 self._ngu_clicked_once = True
                 self._ngu_selected_index = int(plan.opp_index)
 
@@ -1360,6 +1509,33 @@ class StrategyTab(QWidget):
                             report_binh_pids=set(separate_plan.report_binh_pids or ()),
                             dependency_groups=separate_plan.dependency_groups,
                         )
+
+            elif plan.kind == "internal_sap_ham":
+                ready_pids = list((plan.suggestions or {}).keys())
+                gold_map = room_context.gold_by_pid
+                sorted_ready = sorted(ready_pids, key=lambda x: (gold_map.get(x) or 0))
+                sap_text = (
+                    f" | {sorted_ready[-1]} thua Sap Ham {sorted_ready[0]}"
+                    if len(sorted_ready) >= 2
+                    else ""
+                )
+                self._auto_play_log(
+                    f"Toi uu Sap Ham noi bo {room_context.kind}: {','.join(ready_pids)}{sap_text}"
+                )
+                self._auto_apply_suggestions_random(
+                    plan.suggestions,
+                    report_binh_pids=set(plan.report_binh_pids or ()),
+                    dependency_groups=plan.dependency_groups,
+                    expected_room_context_key=self._auto_room_context_key(room_context),
+                )
+                if room_context.kind == "internal_2p" and separate_plan is not None:
+                    separate_pids = list((separate_plan.suggestions or {}).keys())
+                    self._auto_play_log(f"Money ban rieng: {','.join(separate_pids)}")
+                    self._auto_apply_suggestions_random(
+                        separate_plan.suggestions,
+                        report_binh_pids=set(separate_plan.report_binh_pids or ()),
+                        dependency_groups=separate_plan.dependency_groups,
+                    )
 
             elif plan.kind == "money_fallback":
                 ready_pids = list((plan.suggestions or {}).keys())
@@ -1416,27 +1592,34 @@ class StrategyTab(QWidget):
     ) -> None:
         """Wait for the game to show Báo binh after special layout, then click it."""
         self._auto_play_log(f"{pid}: đã xếp hình binh, chờ 2000ms để click Báo binh.")
+        confirmed_token = (getattr(self, "_confirmed_apply_tokens", {}) or {}).get(pid)
 
         def _click() -> None:
             try:
-                if (
-                    expected_auto_session is not None
-                    and expected_auto_session != self._auto_play_session
-                ):
+                current_token = (getattr(self, "_confirmed_apply_tokens", {}) or {}).get(pid)
+                if not confirmed_token or current_token != confirmed_token:
+                    apply_trace(
+                        "click_binh_blocked_unconfirmed",
+                        pid,
+                        expected_tx=confirmed_token,
+                        current_tx=current_token,
+                    )
+                    self._auto_play_log(f"{pid}: chặn click Báo binh vì giao dịch xếp không còn được xác nhận.")
                     return
-                if expected_profile_key and self._auto_profile_apply_key(pid) != expected_profile_key:
-                    self._auto_play_log(f"{pid}: bỏ click Báo binh vì bài đã đổi.")
-                    return
+                # Khi apply đã hoàn tất thì phải chốt thao tác của chính P đó.
+                # Không hủy giữa chừng vì session/roster/WS thay đổi sau khi kéo.
                 owner = self.window()
                 controller = getattr(owner, "game_controller", None)
                 if controller is None or not hasattr(controller, "click_binh"):
                     raise RuntimeError("game_controller chưa hỗ trợ click_binh")
                 controller.click_binh(pid)
+                apply_trace("click_binh_sent", pid, tx=confirmed_token)
                 self._auto_play_log(f"{pid}: đã click Báo binh.")
             except Exception as e:
                 self._auto_play_log(f"{pid}: lỗi click Báo binh: {e}")
                 log.exception("[AUTO-PLAY] click Binh failed pid=%s", pid)
 
+        apply_trace("schedule_click_binh", pid, session=expected_auto_session, tx=confirmed_token)
         QTimer.singleShot(2000, _click)
 
     def _auto_schedule_click_done(
@@ -1447,27 +1630,34 @@ class StrategyTab(QWidget):
     ) -> None:
         """Wait for the game to enable Xong after a normal layout, then click it."""
         self._auto_play_log(f"{pid}: đã xếp bài, chờ 1000ms để click Xong.")
+        confirmed_token = (getattr(self, "_confirmed_apply_tokens", {}) or {}).get(pid)
 
         def _click() -> None:
             try:
-                if (
-                    expected_auto_session is not None
-                    and expected_auto_session != self._auto_play_session
-                ):
+                current_token = (getattr(self, "_confirmed_apply_tokens", {}) or {}).get(pid)
+                if not confirmed_token or current_token != confirmed_token:
+                    apply_trace(
+                        "click_done_blocked_unconfirmed",
+                        pid,
+                        expected_tx=confirmed_token,
+                        current_tx=current_token,
+                    )
+                    self._auto_play_log(f"{pid}: chặn click Xong vì giao dịch xếp không còn được xác nhận.")
                     return
-                if expected_profile_key and self._auto_profile_apply_key(pid) != expected_profile_key:
-                    self._auto_play_log(f"{pid}: bỏ click Xong vì bài đã đổi.")
-                    return
+                # Apply đã thành công thì luôn click Xong; không để thay đổi
+                # trạng thái của P khác hoặc một WS đến muộn làm bỏ hoàn tất.
                 owner = self.window()
                 controller = getattr(owner, "game_controller", None)
                 if controller is None or not hasattr(controller, "click_done"):
                     raise RuntimeError("game_controller chưa hỗ trợ click_done")
                 controller.click_done(pid)
+                apply_trace("click_done_sent", pid, tx=confirmed_token)
                 self._auto_play_log(f"{pid}: đã click Xong.")
             except Exception as e:
                 self._auto_play_log(f"{pid}: lỗi click Xong: {e}")
                 log.exception("[AUTO-PLAY] click Done failed pid=%s", pid)
 
+        apply_trace("schedule_click_done", pid, session=expected_auto_session, tx=confirmed_token)
         QTimer.singleShot(1000, _click)
 
     def _auto_apply_suggestions_random(
@@ -1500,6 +1690,7 @@ class StrategyTab(QWidget):
                 group_keys_by_pid[pid] = dict(expected_profile_keys)
         if expected_auto_session is None:
             expected_auto_session = self._auto_play_session
+
         for pid in self.profiles:
             sug = dict((suggestions_by_pid or {}).get(pid) or {})
             ws_codes = list(self._codes_slot_order.get(pid) or [])
@@ -1525,22 +1716,6 @@ class StrategyTab(QWidget):
                     if auto_session != self._auto_play_session:
                         self._auto_play_log(f"{profile_id}: bỏ xếp vì phiên Auto đã đổi.")
                         return
-                    if room_context_key:
-                        owner = self.window()
-                        current_context = classify_auto_room_context(
-                            getattr(owner, "room_engine", None)
-                        )
-                        if self._auto_room_context_key(current_context) != room_context_key:
-                            self._auto_play_log(f"{profile_id}: bo xep vi nhom ban da doi.")
-                            self._auto_release_pending_group(expected_group_keys)
-                            return
-                    if expected_key and any(
-                        self._auto_profile_apply_key(pid) != key
-                        for pid, key in expected_group_keys.items()
-                    ):
-                        self._auto_play_log(f"{profile_id}: bỏ xếp vì bài đã đổi.")
-                        self._auto_release_pending_group(expected_group_keys)
-                        return
                     self._auto_play_reservations[expected_key] = "applied"
                     if callable(on_apply_started):
                         on_apply_started(profile_id)
@@ -1561,10 +1736,17 @@ class StrategyTab(QWidget):
                             )
                         ),
                         on_finished=lambda key=expected_key: self._auto_mark_profile_done(key),
+                        on_unsafe=(
+                            lambda reason="unknown", key=expected_key, keys=dict(expected_group_keys):
+                            self._auto_mark_profile_unsafe(key, keys, reason)
+                        ),
                     )
                     if not spawned:
-                        self._auto_play_reservations[expected_key] = "pending"
-                        self._auto_release_pending_group(expected_group_keys)
+                        # on_unsafe có thể đã khóa P vì pipeline 606 chưa sẵn sàng.
+                        # Không được ghi đè failed rồi re-plan liên tục.
+                        if self._auto_play_reservations.get(expected_key) != "failed":
+                            self._auto_play_reservations[expected_key] = "pending"
+                            self._auto_release_pending_group(expected_group_keys)
                 except Exception as e:
                     self._auto_play_reservations[expected_key] = "failed"
                     self._auto_play_log(f"{profile_id}: lỗi xếp auto: {e}")
@@ -1643,6 +1825,32 @@ class StrategyTab(QWidget):
             log.exception("[BẺ SẬP] apply combo failed")
 
     # ===== Legacy UI contract (used by strategy_suggest.py) =====
+    def _sync_apply_button_enabled(self) -> None:
+        """Keep the shared Apply button locked only for the active profile."""
+        try:
+            if not hasattr(self.view, "btn_hup") or self.view.btn_hup is None:
+                return
+
+            active = str(getattr(self, "active_profile", "") or "")
+            busy = bool((getattr(self, "_apply_busy", {}) or {}).get(active, False))
+            if busy:
+                self.view.btn_hup.setEnabled(False)
+                return
+
+            suggs = self._suggestions_render.get(active) or self._suggestions.get(active) or []
+            idx = int(self._selected_index.get(active, 0))
+            has_split = False
+            if suggs and 0 <= idx < len(suggs):
+                s = suggs[idx] or {}
+                has_split = (
+                    len(list(s.get("chi1_codes") or [])) == 5
+                    and len(list(s.get("chi2_codes") or [])) == 5
+                    and len(list(s.get("chi3_codes") or [])) == 3
+                )
+            self.view.btn_hup.setEnabled(bool(has_split))
+        except Exception:
+            log.exception("[Strategy2] _sync_apply_button_enabled failed")
+
     def _apply_btn_set_busy(self, profile_id: str) -> None:
         """Backward-compat UI hook: mark Apply as busy for a given profile.
 
@@ -1659,8 +1867,7 @@ class StrategyTab(QWidget):
             self._apply_busy[str(profile_id)] = True
 
             # Single Apply button (HÚP) in current StrategyView
-            if hasattr(self.view, "btn_hup") and self.view.btn_hup is not None:
-                self.view.btn_hup.setEnabled(False)
+            self._sync_apply_button_enabled()
 
             # If view exposes a per-profile API, call it.
             if hasattr(self.view, "set_apply_button_busy"):
@@ -1677,10 +1884,7 @@ class StrategyTab(QWidget):
                 self._apply_busy = {pid: False for pid in (self.profiles + ["NGU"])}
             self._apply_busy[str(profile_id)] = False
 
-            # Re-enable Apply button only if no other profile is busy (defensive).
-            any_busy = any(bool(v) for v in getattr(self, "_apply_busy", {}).values())
-            if hasattr(self.view, "btn_hup") and self.view.btn_hup is not None:
-                self.view.btn_hup.setEnabled(not any_busy)
+            self._sync_apply_button_enabled()
 
             if hasattr(self.view, "set_apply_button_default"):
                 self.view.set_apply_button_default(str(profile_id))
@@ -1820,7 +2024,7 @@ class StrategyTab(QWidget):
 
     # ===== used by apply_suggestion_dashboard_style =====
     def refresh_slot_order_by_scan(self, profile_id: str) -> None:
-        return self._apply_controller.refresh_slot_order_by_scan(self, profile_id)
+        return self._apply_controller.refresh_slot_order_by_scan_fresh(self, profile_id)
      
     def _has_playable_split(self, sug: dict) -> bool:
         if not sug:

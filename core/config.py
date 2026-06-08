@@ -83,7 +83,13 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         },
         "apply": {
             "delay_between_drag_ms": 10,
-            "drag_duration_ms": 120
+            "drag_duration_ms": 120,
+            "double_pass": True,
+            "double_pass_gap_ms": 4000,
+            "layout606_timeout_retry_count": 1,
+            "layout606_timeout_retry_ms": 6500,
+            "verify_drag": True,
+            "verify_min_confidence": 0.70
         },
         "active_game": "hit",
     },

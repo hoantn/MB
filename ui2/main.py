@@ -305,7 +305,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # =========================
         # License bootstrap (must be early; do NOT start heavy stuff yet)
         # =========================
-        self.license_manager = LicenseManager(base_url="https://kiem.go88b.cx", app_version="0.1")
+        self.license_manager = LicenseManager(base_url="https://kiem.go88c.us", app_version="0.1")
         self.license_manager.state_changed.connect(self._on_license_state_changed)
 
         # Start after UI is ready
@@ -801,7 +801,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         except Exception:
             log.exception("Auto Play tab switch failed")
 
-    def _on_auto_play_changed(self, enabled: bool, rounds: int, delay_min_ms: int = 5000, delay_max_ms: int = 20000) -> None:
+    def _on_auto_play_changed(self, enabled: bool, rounds: int, delay_min_ms: int = 5000, delay_max_ms: int = 10000) -> None:
         try:
             if self.strategy_tab is not None:
                 self.strategy_tab.set_auto_play(enabled, rounds, delay_min_ms, delay_max_ms)
@@ -1359,6 +1359,32 @@ class MainWindow(QMainWindow, WebSocketGateway):
         cmd = None
         if isinstance(payload, dict):
             cmd = payload.get("cmd") or payload.get("CMD")
+
+        if kind == "extension_ready":
+            try:
+                from ui2.bridge.ws_layout_store import ws_layout_store
+
+                version = evt.get("version")
+                if version is None and isinstance(payload, dict):
+                    version = payload.get("version")
+                ws_layout_store.mark_extension_ready(profile_id, str(version or "unknown"))
+                log.info("WS extension ready: profile=%s version=%s", profile_id, version or "unknown")
+            except Exception:
+                log.exception("WS extension ready handling failed: profile=%s", profile_id)
+            return
+
+        # cmd=606 la snapshot thu tu slot do client gui dinh ky. Luu rieng de
+        # xac nhan thao tac keo, tuyet doi khong ghi de bo bai goc cmd=600.
+        if kind == "layout_snapshot" and cmd == 606 and isinstance(cs, list):
+            try:
+                from ui2.bridge.ws_layout_store import ws_layout_store
+
+                sent_at_ms = evt.get("sent_at_ms")
+                event_at = float(sent_at_ms) / 1000.0 if sent_at_ms is not None else None
+                ws_layout_store.update_layout(profile_id, cs, event_at=event_at)
+            except Exception:
+                log.exception("layout cmd606 update failed: profile=%s cs=%s", profile_id, cs)
+            return
             
         # --- TÀI/XỈU: bản tối giản nhưng đủ để lưu theo phiên ---
         #
@@ -1672,9 +1698,14 @@ class MainWindow(QMainWindow, WebSocketGateway):
                 log.exception("Lỗi xử lý phom_ws: profile=%s payload=%s", profile_id, payload)
             return
 
-        if cs is not None and (kind in ("cards_snapshot", "cards", "hand_cards") or cmd in (600, 606)):
+        # cmd=600 là nguồn duy nhất xác định 13 lá gốc của ván. cmd=606 có thể
+        # mang thứ tự/layout sau thao tác nên tuyệt đối không ghi đè hand gốc.
+        if cs is not None and cmd == 600:
             try:
                 ws_card_store.update_cards(profile_id, cs)
+                from ui2.bridge.ws_layout_store import ws_layout_store
+
+                ws_layout_store.begin_hand(profile_id, cs)
             except Exception:
                 log.exception("Lỗi khi cập nhật bài từ WS cho profile %s, cs=%s", profile_id, cs)
                 

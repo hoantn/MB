@@ -429,6 +429,34 @@
           "template": "Kết Quả: [KetQua]"
         }
       ]
+    },
+    "binh_button_profile": {
+      "P1": {
+        "x": 593,
+        "y": 278
+      },
+      "P2": {
+        "x": 593,
+        "y": 278
+      },
+      "P3": {
+        "x": 593,
+        "y": 278
+      }
+    },
+    "done_button_profile": {
+      "P1": {
+        "x": 593,
+        "y": 238
+      },
+      "P2": {
+        "x": 593,
+        "y": 238
+      },
+      "P3": {
+        "x": 593,
+        "y": 238
+      }
     }
   },
   "ui": {
@@ -437,16 +465,21 @@
     },
     "theme": "Tối",
     "room": {
-      "delay_create_ms": 700,
-      "delay_join_ms": 700,
-      "exit_double_click_ms": 200,
+      "delay_create_ms": 450,
+      "delay_join_ms": 450,
+      "exit_double_click_ms": 170,
       "notify_enter_exit": false,
       "mini_as_window": true
     },
     "apply": {
       "delay_between_drag_ms": 10,
       "drag_duration_ms": 10,
+      "double_pass": true,
+      "double_pass_gap_ms": 4000,
+      "layout606_timeout_retry_count": 1,
+      "layout606_timeout_retry_ms": 6500,
       "verify_drag": true,
+      "verify_min_confidence": 0.7,
       "verify_clip_pad": 2,
       "verify_hash_threshold": 7,
       "verify_max_attempts": 3
@@ -483,74 +516,102 @@
         "btn_hover": "#333333"
       }
     },
-    "active_game": "go88"
+    "active_game": "go88",
+    "tool_index": 1,
+    "browser_window_positions": {
+      "tool1": {
+        "P1": {
+          "x": -1927,
+          "y": 2
+        },
+        "P2": {
+          "x": -1291,
+          "y": 2
+        },
+        "P3": {
+          "x": -654,
+          "y": 2
+        }
+      }
+    },
+    "tool_window_geometries": {
+      "tool1": {
+        "x": 820,
+        "y": 38,
+        "width": 820,
+        "height": 530
+      }
+    }
   },
   "profiles": {
     "P1": {
       "name": "Profile 1",
-      "chrome_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-      "user_data_dir": "D:\\MB\\user-data\\P1",
+      "chrome_path": "D:/Users/PC GAMING/Downloads/goc",
+      "user_data_dir": "",
       "proxy": {
-        "host": "http://hndc46.proxyno1.com",
-        "port": 12960,
-        "username": "hung",
-        "password": "hung",
+        "host": "http://hndc31.proxyno1.com",
+        "port": 49734,
+        "username": "jfgrxy",
+        "password": "TmlQphOL",
         "tmproxy_api_key": "fcb86c608fc5ddaacefb3c2f815742ee",
         "tmproxy_type": "https",
-        "proxyno1_api_key": "kel8sv6gi436jzmcY7BwiH1769955267",
+        "proxyno1_api_key": "wQXFse4PmbA82MHi0C6MnB1780375586",
         "provider": "proxyno1",
-        "proxyno1_last_change_at": "2026-03-16T21:31:25",
+        "proxyno1_last_change_at": "2026-06-06T23:49:49",
         "proxyno1_last_message": "Đổi IP thành công"
       },
       "window": {
         "width": 1280,
         "height": 780,
         "scale_percent": 51
-      }
+      },
+      "target_url": "https://play.top88.vc/?a=LT8"
     },
     "P2": {
       "name": "Profile 2",
-      "chrome_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-      "user_data_dir": "D:\\MB\\user-data\\P2",
+      "chrome_path": "D:/Users/PC GAMING/Downloads/goc",
+      "user_data_dir": "",
       "proxy": {
-        "host": "http://hndc20.proxyno1.com",
-        "port": 37526,
-        "username": "hung",
-        "password": "hung",
+        "host": "http://hydc1.proxyno1.com",
+        "port": 54954,
+        "username": "jfgrxy",
+        "password": "TmlQphOL",
         "tmproxy_api_key": "0dbaaf04399cac6331792cf50b32a901",
         "tmproxy_type": "https",
-        "proxyno1_api_key": "Tz8Xh4xdrM6i6abvbMhlTG1769955264",
+        "proxyno1_api_key": "z1VRf8msFfQrDBY4KT3RUl1780375585",
         "provider": "proxyno1",
-        "proxyno1_last_change_at": "2026-03-31T00:03:12",
+        "proxyno1_last_change_at": "2026-06-07T22:46:55",
         "proxyno1_last_message": "Đổi IP thành công"
       },
       "window": {
         "width": 1280,
         "height": 780,
         "scale_percent": 51
-      }
+      },
+      "target_url": "https://web.yo88.st/?a=yo88win"
     },
     "P3": {
       "name": "Profile 3",
-      "chrome_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-      "user_data_dir": "D:\\MB\\user-data\\P3",
+      "chrome_path": "D:/Users/PC GAMING/Downloads/goc",
+      "user_data_dir": "",
       "proxy": {
         "host": "http://hndc54.proxyno1.com",
-        "port": 32466,
-        "username": "hung",
-        "password": "hung",
+        "port": 49979,
+        "username": "jfgrxy",
+        "password": "TmlQphOL",
         "tmproxy_api_key": "27339f4405281b70d31669f64226fe0e",
         "tmproxy_type": "https",
-        "proxyno1_api_key": "uEesUDNTNR3xsr95PsBDs61769955261",
+        "proxyno1_api_key": "uj1nFM8ZwLsrln2zlXr4lv1780375585",
         "provider": "proxyno1",
-        "proxyno1_last_change_at": "2026-03-16T21:19:42",
+        "proxyno1_last_change_at": "2026-06-07T10:11:49",
         "proxyno1_last_message": "Đổi IP thành công"
       },
       "window": {
         "width": 1280,
         "height": 780,
         "scale_percent": 51
-      }
+      },
+      "target_url": "https://play.ricwin.tw/?a=RIC001"
     }
   },
   "capture": {
@@ -1080,6 +1141,28 @@
             "height": 144.7058823529412
           }
         }
+      }
+    }
+  },
+  "auto_settings": {
+    "telegram": {
+      "bot_token": "8405834485:AAHqTCRxEmR1GgnEhI0zcUF5u4Axr_d4yLI",
+      "chat_id": "-1003981567870"
+    },
+    "alerts": {
+      "gold_min_threshold": {
+        "enabled": true,
+        "threshold": 30000
+      },
+      "gold_max_threshold": {
+        "enabled": true,
+        "threshold": 500000
+      },
+      "opp_sap_lang_intentional_foul": {
+        "enabled": true
+      },
+      "missing_3p": {
+        "enabled": true
       }
     }
   }

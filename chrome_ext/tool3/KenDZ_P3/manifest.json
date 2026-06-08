@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Kendz MB Tool 3 cho P3",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Hook WebSocket cá»§a game Máº­u Binh Ä‘á»ƒ thu tháº­p vÃ  Ä‘iá»u khiá»ƒn phÃ²ng/vÃ¡n.",
   "permissions": [
     "proxy",

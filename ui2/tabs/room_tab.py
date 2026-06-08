@@ -440,6 +440,34 @@ class PanelPhongProfile(QWidget):
             log.exception("RoomTab start_join_with_uid crashed: %s", e)
 
 
+    def prepare_join_with_uid(self, uid: str, bet: Optional[int] = None) -> Optional[dict]:
+        """Chuẩn bị UI join theo UID nhưng chưa emit, để RoomEngine click đồng bộ theo batch."""
+        try:
+            uid = str(uid or "").strip()
+            if not uid:
+                return None
+
+            self.edit_target_uid.setText(uid)
+
+            if bet is not None:
+                try:
+                    idx = self.combo_bet_join.findData(int(bet))
+                    if idx >= 0:
+                        self.combo_bet_join.setCurrentIndex(idx)
+                except Exception:
+                    pass
+
+            bet_value = self.combo_bet_join.currentData()
+            delay_ms = int(self.spin_delay_join.value())
+            self._save_room_delay('delay_join_ms', delay_ms)
+            self._dang_join = True
+            self.nut_join_toggle.setText("Dá»«ng vÃ o")
+            self.nhan_trang_thai_join.setText(f"Äang chá» click Ä‘á»“ng bá»™ (UID {uid})...")
+            return {"target_uid": uid, "bet": bet_value, "delay_ms": delay_ms}
+        except Exception as e:
+            log.exception("RoomTab prepare_join_with_uid crashed: %s", e)
+            return None
+
 # ---------------- ENGINE → UI UPDATE ----------------
 
     def dat_trang_thai_tao(self, text: str, dang_chay: Optional[bool] = None) -> None:
@@ -584,6 +612,7 @@ class RoomControlTab(QWidget):
 
     request_auto_create_room = Signal(str, dict)
     request_auto_join_room = Signal(str, dict)
+    request_auto_join_team_uid = Signal(object)  # list[(profile_id, params)]
     request_stop_room_task = Signal(str)
     request_refresh_room = Signal(str)
     request_auto_find_guest_room = Signal(str, dict)
@@ -846,15 +875,18 @@ class RoomControlTab(QWidget):
 
             uid = None
             bet = None
+            room_id = None
 
             if st is not None:
                 uid = getattr(st, "my_uid", None)
                 bet = getattr(st, "bet", None)
+                room_id = getattr(st, "room_id", None)
 
             uid = (uid or "").strip() if isinstance(uid, str) else str(uid or "").strip()
 
             # ⭐ Popup nếu host chưa có UID
             if not uid or uid == "-":
+                log.warning("[ROOM-GOI-TEAM] abort host=%s reason=missing_uid room_id=%s", host_pid, room_id)
                 QMessageBox.information(
                     self,
                     "Thông báo",
@@ -862,15 +894,42 @@ class RoomControlTab(QWidget):
                 )
                 return
 
+            log.info(
+                "[ROOM-GOI-TEAM] mode=sync_uid host=%s uid=%s room_id=%s bet=%s",
+                host_pid,
+                uid,
+                room_id,
+                bet,
+            )
+
             # Followers
             others = [p for p in ("P1","P2","P3") if p != host_pid]
+            batch = []
 
             for follower in others:
                 panel = self.panels.get(follower)
                 if not panel:
+                    log.warning("[ROOM-GOI-TEAM] follower panel missing: %s", follower)
                     continue
 
-                panel.start_join_with_uid(uid, bet)
+                follower_state = self._last_room_state.get(follower)
+                follower_players = getattr(follower_state, "nguoi_choi", None) if follower_state is not None else None
+                if follower_players and any(str(getattr(p, "uid", "") or "") == uid for p in follower_players):
+                    log.info("[ROOM-GOI-TEAM] follower=%s already in target UID room -> done", follower)
+                    panel.dat_trang_thai_join(f"ĐÃ VÀO ĐÚNG PHÒNG có UID {uid}.", dang_chay=False)
+                    continue
+
+                params = panel.prepare_join_with_uid(uid, bet)
+                if not params:
+                    log.warning("[ROOM-GOI-TEAM] follower=%s prepare_join failed", follower)
+                    continue
+                batch.append((follower, params))
+
+            if batch:
+                log.info("[ROOM-GOI-TEAM] sync batch click followers=%s uid=%s", [p for p, _ in batch], uid)
+                self.request_auto_join_team_uid.emit(batch)
+            else:
+                log.info("[ROOM-GOI-TEAM] no follower needs join host=%s uid=%s", host_pid, uid)
 
         except Exception as e:
             log.exception("RoomTab _on_ui_goi_team crashed: %s", e)

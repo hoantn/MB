@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from collections import Counter
+import threading
 
 from PySide6.QtCore import QTimer, QThread
 from PySide6.QtWidgets import QMessageBox
 
+from core.apply_trace import apply_trace
 from core.logger import log
 from ui2.tabs.dashboard.dashboard_scan_worker import ScanWorker
+from ui2.tabs.strategy2.modules.layout_verifier import scan_layout_fresh
 from ui2.tabs.strategy2.strategy_suggest import apply_suggestion_dashboard_style
 
 
@@ -181,6 +184,14 @@ class ApplyController:
 
             contexts = []
             for pid in pids:
+                try:
+                    worker = (getattr(tab, "_apply_threads", {}) or {}).get(pid)
+                    if worker is not None and getattr(worker, "is_alive", lambda: False)():
+                        log.warning("[Strategy2] Apply ALL skip busy pid=%s", pid)
+                        continue
+                except Exception:
+                    pass
+
                 # Apply only if we have 13 cards + suggestions
                 ws_codes = list(tab._codes_slot_order.get(pid) or [])
                 if len(ws_codes) != 13:
@@ -252,14 +263,64 @@ class ApplyController:
     # Scan / resync (optional)
     # -----------------------
 
-    def refresh_slot_order_by_scan(self, tab, profile_id: str) -> None:
+    def refresh_slot_order_by_scan_fresh(self, tab, profile_id: str) -> None:
+        """Quét ảnh mới trong thread riêng và đồng bộ layout lên UI."""
+        pid = str(profile_id)
+        apply_trace("refresh_scan_enter", pid)
+        try:
+            running = tab._scan_threads.get(pid)
+            if running is not None and getattr(running, "is_alive", lambda: False)():
+                apply_trace("refresh_scan_skip_running", pid)
+                return
+        except Exception:
+            pass
+
+        def _scan() -> None:
+            try:
+                result = scan_layout_fresh(pid, getattr(tab, "capture_manager", None))
+                if result is None:
+                    apply_trace("refresh_scan_no_result", pid)
+                    return
+                codes = list(result.codes)
+
+                def _apply_result() -> None:
+                    tab._codes_slot_order[pid] = list(codes)
+                    tab._layout_codes[pid] = list(codes)
+                    if getattr(tab, "active_profile", None) == pid:
+                        tab.view.set_cards_p_normalized(list(codes))
+                    apply_trace("refresh_scan_result", pid, result_len=len(codes))
+
+                try:
+                    tab.ui_call.emit(_apply_result)
+                except Exception:
+                    _apply_result()
+            except Exception as exc:
+                apply_trace("refresh_scan_exception", pid, error=str(exc))
+                log.exception("[Strategy2] fresh refresh scan failed pid=%s: %s", pid, exc)
+            finally:
+                try:
+                    tab._scan_threads.pop(pid, None)
+                except Exception:
+                    pass
+                apply_trace("refresh_scan_cleanup", pid)
+
+        if not hasattr(tab, "_scan_threads"):
+            tab._scan_threads = {}
+        thread = threading.Thread(target=_scan, name=f"MB-Strategy2-Scan-{pid}", daemon=True)
+        tab._scan_threads[pid] = thread
+        apply_trace("refresh_scan_thread_start", pid)
+        thread.start()
+
+    def _refresh_slot_order_by_scan_legacy(self, tab, profile_id: str) -> None:
         """
         Optional post-apply resync. If StrategyTab calls it, keep robust.
         """
+        apply_trace("refresh_scan_enter", profile_id)
         # Guard: prevent duplicate scan for the same profile_id
         try:
             th0 = tab._scan_threads.get(profile_id)
             if th0 is not None and th0.isRunning():
+                apply_trace("refresh_scan_skip_running", profile_id)
                 return
         except Exception:
             pass
@@ -273,11 +334,14 @@ class ApplyController:
                     worker = ScanWorker(tab.browser_manager, profile_id)
                 except TypeError:
                     worker = ScanWorker(profile_id)
+            apply_trace("refresh_scan_worker_created", profile_id, worker_type=type(worker).__name__)
 
             th = QThread(tab)
             worker.moveToThread(th)
+            apply_trace("refresh_scan_thread_created", profile_id)
 
             def _cleanup():
+                apply_trace("refresh_scan_cleanup", profile_id)
                 try:
                     tab._scan_threads.pop(profile_id, None)
                 except Exception:
@@ -296,6 +360,11 @@ class ApplyController:
                 pass
 
             def _on_result(codes_slot_order):
+                apply_trace(
+                    "refresh_scan_result",
+                    profile_id,
+                    result_len=len(codes_slot_order) if isinstance(codes_slot_order, list) else -1,
+                )
                 try:
                     if isinstance(codes_slot_order, list) and len(codes_slot_order) == 13:
                         tab._codes_slot_order[profile_id] = list(codes_slot_order)
@@ -323,9 +392,11 @@ class ApplyController:
                 tab._scan_threads = {}
             tab._scan_threads[profile_id] = th
 
+            apply_trace("refresh_scan_thread_start", profile_id)
             th.start()
 
         except Exception as e:
+            apply_trace("refresh_scan_exception", profile_id, error=str(e))
             log.exception("[Strategy2] refresh_slot_order_by_scan error pid=%s: %s", profile_id, e)
             try:
                 QTimer.singleShot(0, lambda: QMessageBox.warning(tab, "HÚP", f"{profile_id}: Scan lỗi: {e}"))

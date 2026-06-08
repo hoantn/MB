@@ -5,6 +5,7 @@ from typing import List, Optional, Tuple
 
 from core.constants import RANK_ORDER
 from engine.card import Card
+from engine.foul_rules import evaluate_top_for_foul, is_no_foul
 from engine.money_scoring import evaluate_3cards
 from engine.rules import evaluate_5cards
 
@@ -30,17 +31,11 @@ def _cmp_eval(left: Tuple[int, List[int]], right: Tuple[int, List[int]]) -> int:
 
 
 def _top_eval_for_foul(cards3: List[Card]) -> Tuple[int, List[int]]:
-    hand_type, detail = evaluate_3cards(cards3)
-    if hand_type == 2:
-        return 3, detail
-    return hand_type, detail
+    return evaluate_top_for_foul(cards3)
 
 
 def _no_foul(chi1: List[Card], chi2: List[Card], chi3: List[Card]) -> bool:
-    return (
-        _cmp_eval(evaluate_5cards(chi1), evaluate_5cards(chi2)) >= 0
-        and _cmp_eval(evaluate_5cards(chi2), _top_eval_for_foul(chi3)) >= 0
-    )
+    return is_no_foul(chi1, chi2, chi3)
 
 
 def _pair_rank(cards: List[Card]) -> Optional[int]:

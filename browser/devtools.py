@@ -1,5 +1,6 @@
 import base64
 import json
+import threading
 import time
 from typing import Dict, Optional, List
 
@@ -29,6 +30,9 @@ class DevToolsClient:
         self.profile_id = profile_id
         self.port = port
         self._ws_url: Optional[str] = None
+        # Các thao tác chuột của cùng một P phải tuần tự. P1/P2/P3 vẫn dùng
+        # client/lock riêng nên tiếp tục hoạt động độc lập.
+        self._input_lock = threading.RLock()
 
     # ================== KẾT NỐI CƠ BẢN =====================
 
@@ -196,24 +200,51 @@ class DevToolsClient:
     # ================== INPUT CHUỘT =========================
 
     def _dispatch_mouse_events(self, events: List[Dict]):
+        with self._input_lock:
+            self._dispatch_mouse_events_locked(events)
+
+    def _dispatch_mouse_events_locked(self, events: List[Dict]):
         """
-        Gửi nhiều Input.dispatchMouseEvent trong một connection.
+        Gửi nhiều Input.dispatchMouseEvent trong một connection và chờ Chrome
+        xác nhận toàn bộ command trước khi coi thao tác thành công.
         'events' là list các dict params (không chứa id/method).
         """
         ws = self._open_ws()
         try:
             msg_id = 1
+
+            def _send_and_wait(method: str, params: Optional[Dict] = None) -> None:
+                nonlocal msg_id
+                command_id = msg_id
+                payload = {"id": command_id, "method": method}
+                if params is not None:
+                    payload["params"] = params
+                ws.send(json.dumps(payload))
+                msg_id += 1
+
+                while True:
+                    raw = ws.recv()
+                    if not raw:
+                        raise RuntimeError(
+                            "DevTools đóng kết nối trước khi xác nhận thao tác chuột"
+                        )
+                    response = json.loads(raw)
+                    if response.get("id") != command_id:
+                        continue
+                    if response.get("error"):
+                        raise RuntimeError(
+                            f"DevTools từ chối thao tác chuột id={command_id}: "
+                            f"{response.get('error')}"
+                        )
+                    return
+
             # enable Input & Page tối thiểu
-            ws.send(json.dumps({"id": msg_id, "method": "Page.enable"}))
-            msg_id += 1
+            _send_and_wait("Page.enable")
 
             for ev in events:
-                ws.send(json.dumps({
-                    "id": msg_id,
-                    "method": "Input.dispatchMouseEvent",
-                    "params": ev,
-                }))
-                msg_id += 1
+                # Xác nhận từng bước trước khi gửi bước kế tiếp. Khi một bước
+                # lỗi, chuỗi dừng ngay thay vì vẫn bắn phần còn lại vào game.
+                _send_and_wait("Input.dispatchMouseEvent", ev)
                 # nhỏ giọt tránh spam
                 time.sleep(0.01)
         finally:

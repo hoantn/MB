@@ -1,0 +1,495 @@
+﻿<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AUTO Play - 4 Tool Demo</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --bg: #0f1216;
+      --panel: #171b20;
+      --panel2: #1d2229;
+      --panel3: #12161b;
+      --line: #303741;
+      --line2: #242a32;
+      --text: #edf1f5;
+      --muted: #929ca8;
+      --green: #2fb171;
+      --green2: #1e704b;
+      --blue: #4e8bd9;
+      --amber: #e3a53b;
+      --red: #dc5b62;
+      --cyan: #42b8c4;
+    }
+    body {
+      margin: 0;
+      min-width: 1040px;
+      min-height: 100vh;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font: 12px/1.35 "Segoe UI", Arial, sans-serif;
+    }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .app { height: 100vh; display: grid; grid-template-rows: 48px 1fr 28px; }
+    .topbar {
+      display: flex; align-items: center; gap: 12px; padding: 0 14px;
+      border-bottom: 1px solid var(--line); background: #15191e;
+    }
+    .brand { font-size: 15px; font-weight: 800; white-space: nowrap; }
+    .brand span { color: var(--green); }
+    .sep { width: 1px; height: 24px; background: var(--line); }
+    .summary { display: flex; align-items: center; gap: 14px; color: var(--muted); }
+    .summary b { color: var(--text); }
+    .spacer { flex: 1; }
+    .control { display: flex; align-items: center; gap: 6px; }
+    .control label { color: var(--muted); }
+    input, select {
+      height: 29px; border: 1px solid var(--line); border-radius: 4px;
+      background: var(--panel3); color: var(--text); padding: 0 8px;
+    }
+    input[type=number] { width: 66px; }
+    .btn {
+      height: 30px; border: 1px solid transparent; border-radius: 4px;
+      padding: 0 11px; color: #fff; background: #343b45; font-weight: 700;
+    }
+    .btn:hover { filter: brightness(1.12); }
+    .btn.start { background: var(--green2); border-color: var(--green); }
+    .btn.stop { background: #532e32; border-color: #98444b; }
+    .btn.ghost { background: var(--panel2); border-color: var(--line); color: #dbe1e7; }
+    .btn.blue { background: #254c7d; border-color: var(--blue); }
+    .btn.cyan { background: #1d5560; border-color: var(--cyan); }
+    .btn.amber { background: #5d4218; border-color: var(--amber); color: #ffe1a3; }
+    .btn.danger { background: #622b31; border-color: var(--red); }
+    .body { min-height: 0; display: grid; grid-template-columns: 250px minmax(620px, 1fr) 310px; }
+    .sidebar, .detail, .activity { min-height: 0; overflow: hidden; }
+    .sidebar { border-right: 1px solid var(--line); background: #12161a; padding: 10px; }
+    .detail { padding: 10px; overflow: auto; }
+    .activity { border-left: 1px solid var(--line); background: #12161a; display: grid; grid-template-rows: auto 1fr; }
+    .section-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      min-height: 28px; margin-bottom: 7px; font-weight: 800;
+    }
+    .muted { color: var(--muted); font-weight: 500; }
+    .tool-list { display: grid; gap: 7px; }
+    .tool {
+      width: 100%; border: 1px solid var(--line); border-radius: 5px;
+      background: var(--panel); color: var(--text); padding: 9px; text-align: left;
+    }
+    .tool.active { border-color: var(--blue); background: #1b2633; box-shadow: inset 3px 0 var(--blue); }
+    .tool-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .tool-title { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 800; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #69737e; flex: none; }
+    .dot.run { background: var(--green); box-shadow: 0 0 0 3px rgba(47,177,113,.13); }
+    .dot.wait { background: var(--amber); }
+    .dot.err { background: var(--red); }
+    .switch {
+      width: 32px; height: 17px; border: 1px solid #4a535e; border-radius: 9px;
+      background: #242a31; padding: 2px; display: flex; align-items: center;
+    }
+    .switch::after { content: ""; width: 11px; height: 11px; border-radius: 50%; background: #87919d; }
+    .tool.running .switch { justify-content: flex-end; background: #174f38; border-color: var(--green); }
+    .tool.running .switch::after { background: #68d6a0; }
+    .tool-meta { margin: 7px 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mini-profiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+    .mini-p {
+      border: 1px solid var(--line2); border-radius: 3px; background: var(--panel3);
+      padding: 4px 5px; display: flex; align-items: center; justify-content: space-between; color: #b9c1ca;
+    }
+    .mini-p i { width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
+    .mini-p i.wait { background: var(--amber); }
+    .mini-p i.err { background: var(--red); }
+    .sidebar-foot {
+      margin-top: 10px; border: 1px solid var(--line); background: var(--panel); border-radius: 5px; padding: 9px;
+    }
+    .health { display: grid; grid-template-columns: 1fr auto; gap: 6px; color: var(--muted); }
+    .health b { color: var(--text); }
+    .detail-head {
+      display: grid; grid-template-columns: 1fr auto; align-items: start; gap: 12px;
+      border-bottom: 1px solid var(--line); padding: 1px 1px 10px; margin-bottom: 10px;
+    }
+    .detail-title { display: flex; align-items: center; gap: 9px; }
+    .detail-title h1 { font-size: 17px; margin: 0; letter-spacing: 0; }
+    .status-badge {
+      border: 1px solid #32664f; background: #173b2c; color: #86e0b2;
+      border-radius: 4px; padding: 3px 7px; font-weight: 700;
+    }
+    .status-badge.off { border-color: var(--line); background: var(--panel2); color: var(--muted); }
+    .detail-sub { color: var(--muted); margin-top: 4px; }
+    .detail-actions { display: flex; gap: 6px; }
+    .metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin-bottom: 10px; }
+    .metric { border: 1px solid var(--line); border-radius: 5px; background: var(--panel); padding: 8px; min-width: 0; }
+    .metric span { color: var(--muted); display: block; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .metric b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .metric b.green { color: #6dd39f; }
+    .metric b.amber { color: #f0bd63; }
+    .profiles-table { border: 1px solid var(--line); border-radius: 5px; overflow: hidden; margin-bottom: 10px; }
+    .p-row {
+      display: grid; grid-template-columns: 1.25fr .78fr 1.45fr .78fr .9fr;
+      align-items: center; min-height: 48px; border-bottom: 1px solid var(--line2); background: var(--panel);
+    }
+    .p-row:last-child { border-bottom: 0; }
+    .p-row.header { min-height: 30px; background: #20262d; color: var(--muted); font-weight: 700; }
+    .p-row > div { min-width: 0; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pid { font-weight: 900; font-size: 13px; display: flex; align-items: center; gap: 7px; }
+    .state { color: #c8d0d8; }
+    .state strong { display: block; color: var(--text); }
+    .state small { color: var(--muted); }
+    .bar { height: 5px; border-radius: 3px; background: #2c333b; overflow: hidden; margin-top: 5px; }
+    .bar i { display: block; height: 100%; width: 0; background: var(--green); transition: width .35s ease; }
+    .tag {
+      display: inline-block; border: 1px solid var(--line); background: var(--panel3);
+      color: #c9d1d9; border-radius: 3px; padding: 2px 5px; font-size: 11px;
+    }
+    .tag.green { border-color: #32664f; background: #183b2d; color: #86e0b2; }
+    .tag.amber { border-color: #72582a; background: #3d301b; color: #f3c46f; }
+    .tag.red { border-color: #783b40; background: #402326; color: #f09aa0; }
+    .plan-grid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 10px; }
+    .panel { border: 1px solid var(--line); border-radius: 5px; background: var(--panel); padding: 9px; }
+    .p-row.opp { background: #182129; box-shadow: inset 3px 0 var(--cyan); }
+    .p-row.opp .pid { color: #7ed6df; }
+    .room-table-wrap { display: grid; grid-template-columns: 1fr 250px; gap: 10px; align-items: stretch; }
+    .room-side { border: 1px solid var(--line); border-radius: 5px; background: var(--panel); padding: 9px; }
+    .room-side .flow { margin-top: 6px; }
+    .room-ops {
+      border: 1px solid var(--line); border-radius: 5px; background: var(--panel);
+      padding: 9px; margin-bottom: 10px;
+    }
+    .room-controls { display: grid; grid-template-columns: 112px 148px 1fr auto; column-gap: 12px; row-gap: 8px; align-items: center; }
+    .room-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .profile-picks { display: flex; align-items: center; gap: 5px; padding-right: 34px; }
+    .pick {
+      height: 29px; min-width: 38px; display: inline-grid; place-items: center;
+      border: 1px solid var(--line); border-radius: 4px; background: var(--panel3);
+      color: #cbd3db; font-weight: 800;
+    }
+    .pick.on { border-color: var(--green); background: #173b2c; color: #8de3b6; }
+    .room-status {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px;
+      margin-top: 8px;
+    }
+    .room-stat { border: 1px solid var(--line2); border-radius: 4px; background: var(--panel3); padding: 7px; }
+    .room-stat span { color: var(--muted); display: block; margin-bottom: 2px; }
+    .room-stat b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .plan-line { display: grid; grid-template-columns: 104px 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line2); }
+    .plan-line:last-child { border-bottom: 0; }
+    .plan-line span { color: var(--muted); }
+    .plan-line b { font-weight: 700; }
+    .flow { display: grid; gap: 7px; }
+    .flow-step { display: grid; grid-template-columns: 21px 1fr auto; align-items: center; gap: 7px; color: var(--muted); }
+    .flow-step i {
+      width: 18px; height: 18px; border: 1px solid var(--line); border-radius: 50%;
+      display: grid; place-items: center; color: #b8c0c8; font-style: normal; font-size: 10px;
+    }
+    .flow-step.done { color: #d9e0e7; }
+    .flow-step.done i { border-color: var(--green); background: #1a5038; color: #9ce2bc; }
+    .flow-step.now { color: #f0bd63; font-weight: 700; }
+    .flow-step.now i { border-color: var(--amber); background: #4c3716; color: #f2c56f; }
+    .activity-head { padding: 10px; border-bottom: 1px solid var(--line); }
+    .activity-tabs { display: flex; gap: 4px; }
+    .activity-tab { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 4px; padding: 5px 8px; }
+    .activity-tab.on { background: #253343; color: #e5edf5; border-color: #46627e; }
+    .log { min-height: 0; overflow: auto; padding: 8px 10px 18px; }
+    .log-entry { position: relative; padding: 7px 3px 7px 19px; border-bottom: 1px solid var(--line2); color: #bbc4cd; }
+    .log-entry::before { content: ""; position: absolute; left: 3px; top: 11px; width: 6px; height: 6px; border-radius: 50%; background: #66727f; }
+    .log-entry.ok::before { background: var(--green); }
+    .log-entry.warn::before { background: var(--amber); }
+    .log-entry.err::before { background: var(--red); }
+    .log-entry b { color: var(--text); }
+    .time { color: #697581; font-variant-numeric: tabular-nums; margin-right: 4px; }
+    .footer {
+      display: flex; align-items: center; justify-content: space-between; padding: 0 10px;
+      border-top: 1px solid var(--line); background: #15191e; color: var(--muted);
+    }
+    .footer b { color: #bfc7cf; }
+    .modal-backdrop {
+      position: fixed; inset: 0; display: none; place-items: center;
+      background: rgba(0,0,0,.58); z-index: 20;
+    }
+    .modal-backdrop.show { display: grid; }
+    .confirm-box {
+      width: min(420px, calc(100vw - 28px)); border: 1px solid var(--line);
+      border-radius: 6px; background: #171b20; box-shadow: 0 24px 70px rgba(0,0,0,.48);
+      overflow: hidden;
+    }
+    .confirm-head { padding: 11px 13px; border-bottom: 1px solid var(--line); font-weight: 900; }
+    .confirm-body { padding: 13px; color: #c6ced6; }
+    .confirm-body b { color: var(--text); }
+    .confirm-actions {
+      display: flex; justify-content: flex-end; gap: 8px; padding: 10px 13px;
+      border-top: 1px solid var(--line); background: #12161a;
+    }
+    @media (max-width: 1280px) {
+      .body { grid-template-columns: 220px minmax(610px, 1fr) 270px; }
+      .summary { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">MB CONTROL <span>/ AUTO PLAY</span></div>
+      <div class="sep"></div>
+      <div class="summary"><span>Tool chay <b id="runningCount">3/4</b></span><span>Profile online <b>11/12</b></span><span>He thong <b>4/4</b></span></div>
+      <div class="spacer"></div>
+      <div class="control"><label>So van</label><input id="rounds" type="number" value="999" min="1"></div>
+      <div class="control"><label>Delay</label><input type="number" value="5" min="0"><span class="muted">-</span><input type="number" value="10" min="0"><span class="muted">giay</span></div>
+      <button class="btn start" id="startAll">Chay tat ca</button>
+      <button class="btn stop" id="stopAll">Dung tat ca</button>
+    </header>
+
+    <main class="body">
+      <aside class="sidebar">
+        <div class="section-head"><span>Danh sach Tool</span><span class="muted">4 cum / 12P</span></div>
+        <div class="tool-list" id="toolList"></div>
+        <div class="sidebar-foot">
+          <div class="section-head"><span>Suc khoe he thong</span><span class="tag green">On dinh</span></div>
+          <div class="health"><span>He thong</span><b>4/4 san sang</b><span>Profile ket noi</span><b>12 ho so</b><span>Tac vu cho</span><b>2 tac vu</b><span>Loi xac minh</span><b style="color:#f09aa0">1</b></div>
+        </div>
+      </aside>
+
+      <section class="detail">
+        <div class="detail-head">
+          <div>
+            <div class="detail-title"><span class="dot run" id="detailDot"></span><h1 id="detailName">Tool 1</h1><span class="status-badge" id="detailStatus">AUTO dang chay</span></div>
+            <div class="detail-sub" id="detailSub">He thong san sang - 3 ho so trinh duyet - Tool 1</div>
+          </div>
+          <div class="detail-actions">
+            <button class="btn ghost" id="openBrowsers">Mo 3 trinh duyet</button>
+            <button class="btn blue" id="reconnectAll">Ket noi lai ALL</button>
+            <button class="btn amber" id="resetProxyAll">Reset Proxy ALL</button>
+            <button class="btn danger" id="clearProfilesAll">Xoa ALL Profile</button>
+            <button class="btn start" id="toggleSelected">Tam dung</button>
+          </div>
+        </div>
+
+        <div class="metrics">
+          <div class="metric"><span>Boi canh ban</span><b class="green" id="roomKind">Co doi thu</b></div>
+          <div class="metric"><span>Ke hoach hien tai</span><b id="planKind">Toi uu OPP 3P</b></div>
+          <div class="metric"><span>Van con lai</span><b id="remain">996 / 999</b></div>
+          <div class="metric"><span>Tien trinh van</span><b class="amber" id="roundState">Dang xac minh</b></div>
+          <div class="metric"><span>Loi gan nhat</span><b id="lastError">Khong co</b></div>
+        </div>
+
+        <div class="room-ops">
+          <div class="section-head"><span>Dieu phoi phong</span><span class="muted">Tao / join / tim khach / goi P trong cung context Tool</span></div>
+          <div class="room-controls">
+            <select id="roomBet"><option>100</option><option>500</option><option>1000</option><option>5000</option><option>10000</option></select>
+            <div class="profile-picks"><span class="pick on">P1</span><span class="pick on">P2</span><span class="pick on">P3</span></div>
+            <input id="targetUid" value="1_298845021" title="UID muc tieu hoac UID host">
+            <div class="room-actions">
+              <button class="btn start" id="createRoom">Tao phong</button>
+              <button class="btn ghost" id="callTeam">Goi P khac</button>
+              <button class="btn ghost" id="joinRoom">Join UID</button>
+              <button class="btn ghost" id="findGuest">Tim khach</button>
+              <button class="btn stop" id="leaveRoom">Thoat</button>
+            </div>
+          </div>
+          <div class="room-status">
+            <div class="room-stat"><span>Room hien tai</span><b id="currentRoom">38122 - 4 nguoi</b></div>
+            <div class="room-stat"><span>Host / muc tieu</span><b id="roomTarget">OPP 1_298845021</b></div>
+            <div class="room-stat"><span>Kiem tra vao phong</span><b id="joinGuard">Xac nhan UID + bet</b></div>
+            <div class="room-stat"><span>Tac vu phong</span><b id="roomTask">Dang on dinh phong</b></div>
+          </div>
+        </div>
+
+        <div class="section-head"><span>Thong tin phong hien tai</span><span class="muted">Gon nhu bang phong cu de danh cho Chien thuat AUTO</span></div>
+        <div class="room-table-wrap">
+          <div class="profiles-table" id="profilesTable"></div>
+          <div class="room-side">
+            <div class="section-head"><span>Trang thai van</span><span class="muted">hand g184</span></div>
+            <div class="flow" id="flow"></div>
+          </div>
+        </div>
+
+        <div style="display:none">
+          <span id="planTag"></span>
+          <span id="roomMembers"></span>
+          <span id="strategy"></span>
+          <span id="applyOrder"></span>
+          <div id="flowHidden"></div>
+        </div>
+      </section>
+
+      <aside class="activity">
+        <div class="activity-head">
+          <div class="section-head"><span>Hoat dong</span><button class="btn ghost" id="clearLog">Xoa log</button></div>
+          <div class="activity-tabs"><button class="activity-tab on">Tool dang chon</button><button class="activity-tab">Tat ca</button><button class="activity-tab">Chi loi</button></div>
+        </div>
+        <div class="log" id="log"></div>
+      </aside>
+    </main>
+
+    <footer class="footer"><span>License: <b>Da kich hoat</b></span><span>Ho so tach biet: <b>Tool 1-4 / P1-P3</b></span><span id="clock">--:--:--</span></footer>
+  </div>
+
+  <div class="modal-backdrop" id="confirmModal">
+    <div class="confirm-box">
+      <div class="confirm-head" id="confirmTitle">Xac nhan thao tac</div>
+      <div class="confirm-body" id="confirmBody"></div>
+      <div class="confirm-actions">
+        <button class="btn ghost" id="confirmCancel">Huy</button>
+        <button class="btn danger" id="confirmOk">Dong y</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const tools = [
+    { id: 1, running: true, kind: "Co doi thu", plan: "Toi uu doi thu 3P", remain: 996, state: "Dang xac minh", error: "Khong co", meta: "Room 38122 - Bet 100 - 4 nguoi", opp: ["nguoichoi_8842", "1_298845021", "286.400", "Danh sach phong + bai chia", "13 la - hop le", "Auto Money - diem +18"], profiles: [
+      ["P1", "ready", "Online - ket noi on dinh", "128.400", "13 la - 8 goi y", "Da xep - cho click Xong", 100],
+      ["P2", "ready", "Online - ket noi on dinh", "92.700", "13 la - 7 goi y", "Da xac minh xep bai", 100],
+      ["P3", "wait", "Online - ket noi on dinh", "347.200", "13 la - 9 goi y", "Dang xac minh xep bai", 82]
+    ]},
+    { id: 2, running: true, kind: "Ban noi bo 3P", plan: "Can vang noi bo", remain: 482, state: "Cho bai moi", error: "Khong co", meta: "Room 19408 - Bet 500 - 3 nguoi", opp: null, profiles: [
+      ["P1", "ready", "Online - ket noi on dinh", "418.300", "Cho bai moi", "Hoan tat van truoc", 100],
+      ["P2", "ready", "Online - ket noi on dinh", "73.500", "Cho bai moi", "Hoan tat van truoc", 100],
+      ["P3", "ready", "Online - ket noi on dinh", "201.900", "Cho bai moi", "Hoan tat van truoc", 100]
+    ]},
+    { id: 3, running: false, kind: "Chua xac dinh", plan: "Money doc lap", remain: 120, state: "Da tam dung", error: "Phong chua on dinh", meta: "P1/P2 cung ban - P3 rieng", opp: null, profiles: [
+      ["P1", "ready", "Online - ket noi on dinh", "55.300", "13 la - 6 goi y", "Da tam dung", 0],
+      ["P2", "ready", "Online - ket noi on dinh", "81.200", "13 la - 6 goi y", "Da tam dung", 0],
+      ["P3", "wait", "Online - cho ket noi", "39.700", "Chua co bai", "Da tam dung", 0]
+    ]},
+    { id: 4, running: true, kind: "Ban noi bo 2P", plan: "Can 2P + Money rieng", remain: 738, state: "Dang xep bai", error: "P3: loi xac minh van truoc", meta: "P1/P2 cung ban - P3 ban rieng", opp: null, profiles: [
+      ["P1", "ready", "Online - ket noi on dinh", "244.600", "13 la - 7 goi y", "Dang xep bai", 48],
+      ["P2", "ready", "Online - ket noi on dinh", "126.800", "13 la - 8 goi y", "Cho luot xep", 18],
+      ["P3", "err", "Online - ket noi on dinh", "307.100", "13 la - 8 goi y", "Money rieng - cho xep", 8]
+    ]}
+  ];
+
+  let selected = 1;
+  const flowSteps = ["Nhan du bai", "Tinh goi y P1-P3 / OPP", "Phan loai ban choi", "Chon ke hoach AUTO", "Xep bai tung profile", "Xac minh xep bai", "Click Xong / Bao binh"];
+  const logs = {
+    1: [["ok","12:18:31","P2","Da xac minh xep bai, chuan bi click Xong."],["warn","12:18:30","P3","Dang cho xac minh xep bai moi nhat."],["ok","12:18:28","P1","Xep bai hoan tat, bo cuc khop muc tieu."],["","12:18:21","AUTO","Chon doi thu #1, toi uu 3P, diem +18."],["","12:18:18","PHONG","Co doi thu - P1,P2,P3 cung ban - 1 khach ngoai"],["ok","12:18:14","BAI","Da nhan du bai P1-P3 va suy ra doi thu."]],
+    2: [["","12:17:55","AUTO","Da hoan tat van, con 482 van."],["ok","12:17:54","P1-P3","Da click Xong toan bo profile."],["","12:17:43","AUTO","Can vang noi bo: P2 < P3 < P1."]],
+    3: [["warn","12:16:10","AUTO","Da tam dung theo thao tac nguoi dung."],["warn","12:16:05","PHONG","Phong chua on dinh, dung Money doc lap."]],
+    4: [["warn","12:18:27","P3","Money ban rieng, cho xep."],["","12:18:25","P1","Dang xep bai theo can vang noi bo."],["err","12:17:02","P3","Khong xac minh duoc xep bai, he thong da chan click Xong."],["","12:16:48","PHONG","Ban noi bo 2P: P1,P2 cung ban; P3 chay Money rieng."]]
+  };
+
+  function renderTools() {
+    document.getElementById("toolList").innerHTML = tools.map(t => `
+      <button class="tool ${t.running ? "running" : ""} ${selected === t.id ? "active" : ""}" data-tool="${t.id}">
+        <div class="tool-top"><div class="tool-title"><span class="dot ${t.running ? "run" : ""}"></span>Tool ${t.id}</div><span class="switch"></span></div>
+        <div class="tool-meta">${t.meta}</div>
+        <div class="mini-profiles">${t.profiles.map(p => `<span class="mini-p">${p[0]}<i class="${p[1] === "err" ? "err" : p[1] === "wait" ? "wait" : ""}"></i></span>`).join("")}</div>
+      </button>`).join("");
+    document.querySelectorAll(".tool").forEach(el => el.onclick = () => { selected = +el.dataset.tool; render(); });
+    document.getElementById("runningCount").textContent = `${tools.filter(t => t.running).length}/4`;
+  }
+
+  function renderProfiles(t) {
+    const names = { P1: "Profile 1", P2: "Profile 2", P3: "Profile 3" };
+    const uids = { P1: "43_819818", P2: "1_276568235", P3: "1_285364925" };
+    const oppRow = Array.isArray(t.opp) ? `<div class="p-row opp">
+        <div class="pid"><span class="dot run"></span>${t.opp[0]}</div>
+        <div><b>${t.opp[2]}</b></div>
+        <div class="state"><strong>${t.opp[1]}</strong><small>${t.opp[3]}</small></div>
+        <div><span class="tag green">OPP</span></div>
+        <div>${t.opp[5]}</div>
+      </div>` : `<div class="p-row opp">
+        <div class="pid"><span class="dot ${t.kind === "Chua xac dinh" ? "wait" : ""}"></span>${t.kind === "Chua xac dinh" ? "Chua ro OPP" : "Khong co OPP"}</div>
+        <div><b>-</b></div>
+        <div class="state"><strong>${t.kind === "Chua xac dinh" ? "Phong chua on dinh" : "Ban noi bo"}</strong><small>${t.kind === "Chua xac dinh" ? "Dang cho lam moi phong" : "Chi gom profile kiem soat"}</small></div>
+        <div><span class="tag ${t.kind === "Chua xac dinh" ? "amber" : ""}">${t.kind === "Chua xac dinh" ? "Cho" : "Noi bo"}</span></div>
+        <div>Khong dung benchmark OPP</div>
+      </div>`;
+    document.getElementById("profilesTable").innerHTML = `
+      <div class="p-row header"><div>Ten</div><div>Vang</div><div>UID / nguon</div><div>Vai tro</div><div>Trang thai</div></div>
+      ${t.profiles.map(p => `<div class="p-row">
+        <div class="pid"><span class="dot ${p[1] === "err" ? "err" : p[1] === "wait" ? "wait" : "run"}"></span>${names[p[0]]} (${p[0]})</div>
+        <div><b>${p[3]}</b></div>
+        <div class="state"><strong>${uids[p[0]]}</strong><small>${p[2]}</small></div>
+        <div><span class="tag ${p[1] === "err" ? "red" : p[1] === "wait" ? "amber" : "green"}">3P</span></div>
+        <div>${p[4]} - ${p[5]}</div>
+      </div>`).join("")}${oppRow}`;
+  }
+
+  function renderFlow(t) {
+    let now = t.state.includes("xac minh") ? 5 : t.state.includes("xep") ? 4 : t.state.includes("Cho bai") ? 0 : 3;
+    document.getElementById("flow").innerHTML = flowSteps.map((s,i) => `<div class="flow-step ${i < now ? "done" : i === now ? "now" : ""}"><i>${i < now ? "ok" : i + 1}</i><span>${s}</span><small>${i < now ? "xong" : i === now ? "dang chay" : ""}</small></div>`).join("");
+  }
+
+  function renderLog() {
+    document.getElementById("log").innerHTML = (logs[selected] || []).map(l => `<div class="log-entry ${l[0]}"><span class="time">${l[1]}</span><b>${l[2]}</b><br>${l[3]}</div>`).join("");
+  }
+
+  function renderDetail() {
+    const t = tools[selected - 1];
+    document.getElementById("detailName").textContent = `Tool ${t.id}`;
+    document.getElementById("detailStatus").textContent = t.running ? "AUTO dang chay" : "AUTO da tam dung";
+    document.getElementById("detailStatus").className = `status-badge ${t.running ? "" : "off"}`;
+    document.getElementById("detailDot").className = `dot ${t.running ? "run" : ""}`;
+    document.getElementById("detailSub").textContent = `He thong san sang - 3 ho so trinh duyet - Tool ${t.id}`;
+    document.getElementById("roomKind").textContent = t.kind;
+    document.getElementById("planKind").textContent = t.plan;
+    document.getElementById("remain").textContent = `${t.remain} / ${document.getElementById("rounds").value || 999}`;
+    document.getElementById("roundState").textContent = t.state;
+    document.getElementById("lastError").textContent = t.error;
+    document.getElementById("currentRoom").textContent = t.meta.includes("Room") ? t.meta : "Chua co dinh";
+    document.getElementById("roomTarget").textContent = Array.isArray(t.opp) ? `OPP ${t.opp[1]}` : t.kind === "Ban noi bo 3P" ? "Ban noi bo 3P" : t.kind === "Ban noi bo 2P" ? "P1/P2 cung ban - P3 rieng" : "Dang cho xac nhan";
+    document.getElementById("joinGuard").textContent = t.kind === "Chua xac dinh" ? "Can lam moi phong" : "Xac nhan UID + bet";
+    document.getElementById("roomTask").textContent = t.running ? (t.kind === "Co doi thu" ? "Giu ban co OPP" : "Theo doi ban noi bo") : "Da dung";
+    document.getElementById("toggleSelected").textContent = t.running ? "Tam dung" : "Tiep tuc";
+    document.getElementById("toggleSelected").className = `btn ${t.running ? "stop" : "start"}`;
+    const hasOpp = t.kind === "Co doi thu";
+    document.getElementById("roomMembers").textContent = hasOpp ? "P1, P2, P3 + 1 doi thu" : t.kind === "Ban noi bo 3P" ? "P1, P2, P3 cung ban" : t.kind === "Ban noi bo 2P" ? "P1, P2 cung ban - P3 ban rieng" : "Phong chua on dinh";
+    document.getElementById("strategy").textContent = hasOpp ? "Danh theo Auto Money OPP, toi uu dong thoi 3 profile" : t.plan;
+    document.getElementById("applyOrder").textContent = t.kind === "Ban noi bo 2P" ? "P1/P2 theo nhom - P3 doc lap" : "P2 -> P1 -> P3, delay doc lap";
+    document.getElementById("planTag").textContent = hasOpp ? "doi thu - diem +18" : t.kind;
+    renderProfiles(t); renderFlow(t); renderLog();
+  }
+
+  function addLog(toolId, type, source, message) {
+    const d = new Date(); const tm = d.toLocaleTimeString("vi-VN", {hour12:false});
+    logs[toolId].unshift([type, tm, source, message]);
+  }
+
+  function setAll(value) {
+    tools.forEach(t => { t.running = value; t.state = value ? "Cho bai / goi y" : "Da tam dung"; addLog(t.id, value ? "ok" : "warn", "AUTO", value ? "Da bat AUTO tu dieu khien tong." : "Da dung AUTO tu dieu khien tong."); });
+    render();
+  }
+
+  function confirmAction(title, body, okClass, onOk) {
+    const modal = document.getElementById("confirmModal");
+    const ok = document.getElementById("confirmOk");
+    const cancel = document.getElementById("confirmCancel");
+    document.getElementById("confirmTitle").textContent = title;
+    document.getElementById("confirmBody").innerHTML = body;
+    ok.className = `btn ${okClass || "danger"}`;
+    modal.classList.add("show");
+    const cleanup = () => { modal.classList.remove("show"); ok.onclick = null; cancel.onclick = null; };
+    cancel.onclick = cleanup;
+    ok.onclick = () => { cleanup(); if (typeof onOk === "function") onOk(); };
+  }
+
+  function render() { renderTools(); renderDetail(); }
+
+  document.getElementById("startAll").onclick = () => setAll(true);
+  document.getElementById("stopAll").onclick = () => setAll(false);
+  document.getElementById("toggleSelected").onclick = () => {
+    const t = tools[selected - 1]; t.running = !t.running; t.state = t.running ? "Cho bai / goi y" : "Da tam dung";
+    addLog(t.id, t.running ? "ok" : "warn", "AUTO", t.running ? "Da tiep tuc AUTO." : "Da tam dung AUTO."); render();
+  };
+  document.getElementById("clearLog").onclick = () => { logs[selected] = []; renderLog(); };
+  document.getElementById("createRoom").onclick = () => { addLog(selected, "ok", "PHONG", `Tao phong bet ${document.getElementById("roomBet").value} cho Tool ${selected}.`); renderLog(); };
+  document.getElementById("callTeam").onclick = () => { addLog(selected, "ok", "PHONG", "Goi P con lai vao cung phong theo UID host."); renderLog(); };
+  document.getElementById("joinRoom").onclick = () => { addLog(selected, "", "PHONG", `Join theo UID ${document.getElementById("targetUid").value}.`); renderLog(); };
+  document.getElementById("findGuest").onclick = () => { addLog(selected, "warn", "PHONG", "Bat dau tim khach, AUTO se cho phong co OPP."); renderLog(); };
+  document.getElementById("leaveRoom").onclick = () => { addLog(selected, "warn", "PHONG", "Thoat phong cho cac P da chon."); renderLog(); };
+  document.getElementById("openBrowsers").onclick = () => { addLog(selected, "ok", "TRINH DUYET", `Mo 3 trinh duyet cho Tool ${selected}: P1/P2/P3.`); renderLog(); };
+  document.getElementById("reconnectAll").onclick = () => confirmAction("Ket noi lai ALL", `<b>Tool ${selected}</b> se ket noi lai toan bo P1/P2/P3. AUTO hien tai se giu nguyen trang thai.`, "blue", () => { addLog(selected, "ok", "HE THONG", "Da ket noi lai ALL P1/P2/P3."); renderLog(); });
+  document.getElementById("resetProxyAll").onclick = () => confirmAction("Reset Proxy ALL", `<b>Tool ${selected}</b> se reset proxy cho P1/P2/P3. Co the can mo lai trinh duyet sau khi doi IP.`, "amber", () => { addLog(selected, "warn", "PROXY", "Da gui yeu cau Reset Proxy ALL P1/P2/P3."); renderLog(); });
+  document.getElementById("clearProfilesAll").onclick = () => confirmAction("Xoa ALL Profile", `<b>Thao tac nguy hiem.</b><br>Tool ${selected} se xoa ho so trinh duyet cua P1/P2/P3. Trinh duyet can dong truoc khi xoa.`, "danger", () => { addLog(selected, "err", "PROFILE", "Da xac nhan Xoa ALL Profile P1/P2/P3."); renderLog(); });
+  document.getElementById("rounds").onchange = renderDetail;
+  setInterval(() => document.getElementById("clock").textContent = new Date().toLocaleTimeString("vi-VN", {hour12:false}), 1000);
+  render();
+</script>
+</body>
+</html>
+
+
+
+

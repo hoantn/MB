@@ -4,12 +4,13 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Callable, Tuple
 
 from core.logger import log
+from engine.ws_card_mapping import cards_to_tool_slot_order
 
 @dataclass(frozen=True)
 class WSUpdate:
     pid: str
     raw_cards: List[str]       # as received from ws_card_store
-    codes_slot_order: List[str]  # reversed like dashboard
+    codes_slot_order: List[str]  # slot 1..13 theo mapper WS chung
     hand_hash: str
     is_new_hand: bool
 
@@ -58,7 +59,7 @@ class WSIngest:
 
             # snapshot changed
             raw = list(cards)
-            codes = list(reversed(raw)) if self.reverse_like_dashboard else list(raw)
+            codes = cards_to_tool_slot_order(raw) if self.reverse_like_dashboard else list(raw)
 
             h = hand_hash_fn(codes)
             prev_h = last_hand_hash.get(pid)

@@ -4,6 +4,7 @@ from typing import List
 from PySide6.QtWidgets import QMessageBox
 
 from core.logger import log
+from engine.ws_card_mapping import cards_to_tool_slot_order
 from ui2.bridge.ws_card_store import ws_card_store
 
 
@@ -37,7 +38,7 @@ def poll_ws_cards_impl(self) -> None:
 
         # WS slot 1→13 (game) = dưới phải → trên trái
         # TOOL slot 0→12      = trên trái → dưới phải
-        codes = list(reversed(cards))  # rất quan trọng, đừng đổi
+        codes = cards_to_tool_slot_order(cards)
 
         confs = [1.0] * 13
         images = [None] * 13
@@ -77,7 +78,7 @@ def load_ws_cards_impl(self, profiles: List[str]) -> None:
         # Lưu snapshot để về sau _poll_ws_cards còn so sánh được
         self.ws_cards_snapshot[pid] = list(cards)
 
-        codes = list(reversed(cards))
+        codes = cards_to_tool_slot_order(cards)
         confs = [1.0] * 13
         images = [None] * 13
 

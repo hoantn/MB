@@ -1,6 +1,7 @@
-﻿const LOG_PREFIX = "[MB WS BG]";
+const LOG_PREFIX = "[MB WS BG]";
 const BRIDGE_BASE = "http://127.0.0.1:9534";
 const PROFILE_ID = "P2";  // extension nÃ y gáº¯n vá»›i profile P2
+const EXTENSION_VERSION = "0.2.0";
 
 // ===== CPU SAFETY SWITCHES =====
 // Táº¯t log toÃ n bá»™ frame Ä‘á»ƒ trÃ¡nh ngá»‘n CPU. Báº­t khi cáº§n debug.
@@ -117,6 +118,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } else {
       log("RECV", url, data);
     }
+  }
+
+  // cmd=606 la snapshot thu tu 13 slot do client gui dinh ky. Chi forward
+  // frame nay de Python xac nhan thao tac keo, khong forward moi SEND frame.
+  if (direction === "send") {
+    try {
+      let sentPayload = null;
+      const parsed = typeof data === "string" ? JSON.parse(data) : data;
+      if (Array.isArray(parsed)) {
+        for (let i = parsed.length - 1; i >= 0; i -= 1) {
+          if (parsed[i] && typeof parsed[i] === "object" && !Array.isArray(parsed[i])) {
+            sentPayload = parsed[i];
+            break;
+          }
+        }
+      } else if (parsed && typeof parsed === "object") {
+        sentPayload = parsed;
+      }
+      const cards = sentPayload?.cs;
+      if (
+        sentPayload?.cmd === 606 &&
+        Array.isArray(cards) &&
+        cards.length === 13 &&
+        new Set(cards).size === 13 &&
+        cards.every((value) => Number.isInteger(value) && value >= 0 && value <= 51)
+      ) {
+        sendEventToPython({
+          kind: "layout_snapshot",
+          sent_at_ms: Date.now(),
+          payload: { cmd: 606, cs: cards },
+        });
+      }
+    } catch (e) {}
   }
 
   // Chá»‰ parse khi lÃ  frame RECV Ä‘á»ƒ tÃ¬m cmd=300/200/202/606/205
@@ -288,6 +322,7 @@ async function pollCommandsLoop() {
   }
 }
 
+sendEventToPython({ kind: "extension_ready", version: EXTENSION_VERSION });
 pollCommandsLoop();
 log("service worker started");
 

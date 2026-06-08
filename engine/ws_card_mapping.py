@@ -82,9 +82,30 @@ def ws_codes_to_cards(codes: List[int]) -> List[str]:
     return [ws_code_to_card(c) for c in codes]
 
 
+def cards_to_tool_slot_order(cards: List[str]) -> List[str]:
+    """
+    Chuan hoa 13 la WS ve thu tu slot 1..13 cua tool.
+
+    HAR thuc te cho thay cmd=600 va cmd=606 dung chung raw order. Vi vay tat ca
+    nguon WS phai di qua cung mot rule; neu cmd600/cmd606 map khac nhau thi
+    repair se keo sai la lap lai.
+    """
+    values = list(cards or [])
+    if len(values) != 13:
+        return values
+    return list(reversed(values))
+
+
+def ws_codes_to_tool_slot_order(codes: List[int]) -> List[str]:
+    """Convert WS raw card codes 0..51 thanh slot order 1..13 cua tool."""
+    return cards_to_tool_slot_order(ws_codes_to_cards(list(codes or [])))
+
+
 __all__ = [
     "WS_CODE_TO_CARD",
     "CARD_TO_WS_CODE",
     "ws_code_to_card",
     "ws_codes_to_cards",
+    "cards_to_tool_slot_order",
+    "ws_codes_to_tool_slot_order",
 ]

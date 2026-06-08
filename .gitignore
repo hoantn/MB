@@ -31,3 +31,7 @@ logs/
 # SQLite temp files
 *.sqlite-shm
 *.sqlite-wal
+# Browser runtime profiles
+runtime/
+# HAR capture files
+*.har

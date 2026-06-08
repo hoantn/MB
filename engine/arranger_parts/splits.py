@@ -5,6 +5,7 @@ from typing import Iterable, List, Optional, Tuple
 
 from engine.card import Card
 from engine.arranger_parts.eval_utils import _eval_5, _eval_3, _map_eval_top_to_5scale, _rank_val
+from engine.foul_rules import is_no_foul
 def _generate_valid_splits(cards: List[Card]) -> Iterable[
     Tuple[List[Card], List[Card], List[Card], Tuple[int, ...], Tuple[int, ...], Tuple[int, ...]]
 ]:
@@ -74,11 +75,5 @@ def _best_strength_split(cards: List[Card]) -> Optional[Tuple[List[Card], List[C
             best = (chi1, chi2, chi3)
     return best
 def _validate_no_foul(chi1: List[Card], chi2: List[Card], chi3: List[Card]) -> bool:
-    e1 = _eval_5(chi1)
-    e2 = _eval_5(chi2)
-    e3 = _eval_3(chi3)
-    if _map_eval_top_to_5scale(e3) > e2:
-        return False
-    if e2 > e1:
-        return False
-    return True
+    """Compatibility wrapper; luật chuẩn nằm tại engine.foul_rules."""
+    return is_no_foul(chi1, chi2, chi3)
