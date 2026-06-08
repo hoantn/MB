@@ -115,7 +115,7 @@ class StrategyTab(QWidget):
         except Exception:
             log.exception('[Strategy2] ui_call handler error')
 
-    def __init__(self, browser_manager, parent=None):
+    def __init__(self, browser_manager, parent=None, card_store=None):
         super().__init__(parent)
 
         # Ensure ui_call is connected on the owning (UI) thread.
@@ -123,8 +123,11 @@ class StrategyTab(QWidget):
             self.ui_call.connect(self._on_ui_call)
         except Exception:
             pass
-            
+
         self.browser_manager = browser_manager
+        # card_store=None → dùng global singleton (Tool 1 / backward compat)
+        # card_store=<instance> → dùng per-tool store (Tool 2-4)
+        self._card_store = card_store if card_store is not None else ws_card_store
 
         self.capture_manager = (
             getattr(parent, "capture_manager", None)
@@ -698,7 +701,7 @@ class StrategyTab(QWidget):
 
     def _poll_ws(self) -> None:
         updates, waiting = self._ws_ingest.poll(
-            ws_get_last_cards=ws_card_store.get_last_cards,
+            ws_get_last_cards=self._card_store.get_last_cards,
             ws_snapshot=self._ws_snapshot,
             last_hand_hash=self._last_hand_hash,
             hand_hash_fn=self._hand_hash,

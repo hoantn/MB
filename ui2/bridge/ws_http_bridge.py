@@ -43,15 +43,20 @@ def enqueue_command(command: Dict[str, Any]) -> None:
 class _WSBridgeHandler(BaseHTTPRequestHandler):
     """
     HTTP handler:
+    - POST /mb-ws-event        : Extension gửi event
+    - POST /mb-ws-command-pop  : Extension lấy command
+    - POST /mb-proxy-creds     : Extension lấy proxy creds
 
-    - POST /mb-ws-event
-        Extension gửi event (room_list, room_snapshot, ...)
-
-    - POST /mb-ws-command-pop
-        Extension gọi định kỳ để lấy 1 command cho profile của nó.
+    Subclass binds per-tool queues qua class attribute _ev_q/_cmd_q/_slot.
+    Mặc định dùng global queues (backward compat cho Tool 1).
     """
 
     server_version = "MBWSBridge/1.0"
+
+    # Class-level defaults → global queues; factory sẽ override cho mỗi tool
+    _ev_q: "queue.Queue[Dict[str, Any]]" = WS_EVENT_QUEUE
+    _cmd_q: "queue.Queue[Dict[str, Any]]" = WS_COMMAND_QUEUE
+    _slot: int = 1
 
     # ------------------------------------------------------------------
     # Extension -> Python: gửi event
@@ -73,7 +78,7 @@ class _WSBridgeHandler(BaseHTTPRequestHandler):
             }
 
         try:
-            WS_EVENT_QUEUE.put_nowait(data)
+            self.__class__._ev_q.put_nowait(data)
         except queue.Full:
             if logger:
                 logger.warning("WS bridge event queue full, bỏ event: %s", data)
@@ -102,10 +107,11 @@ class _WSBridgeHandler(BaseHTTPRequestHandler):
 
         selected: Optional[Dict[str, Any]] = None
         kept: list[Dict[str, Any]] = []
+        cmd_q = self.__class__._cmd_q
 
         while True:
             try:
-                cmd = WS_COMMAND_QUEUE.get_nowait()
+                cmd = cmd_q.get_nowait()
             except queue.Empty:
                 break
 
@@ -117,12 +123,11 @@ class _WSBridgeHandler(BaseHTTPRequestHandler):
         # trả lại các command khác vào queue
         for cmd in kept:
             try:
-                WS_COMMAND_QUEUE.put_nowait(cmd)
+                cmd_q.put_nowait(cmd)
             except queue.Full:
                 break
 
         if not selected:
-            # không có command cho profile này
             self.send_response(204)
             self.end_headers()
             return
@@ -179,7 +184,6 @@ class _WSBridgeHandler(BaseHTTPRequestHandler):
                 profile_id = None
 
         if not profile_id:
-            # Thiếu profile_id -> bad request
             self.send_response(400)
             self.end_headers()
             return
@@ -188,7 +192,8 @@ class _WSBridgeHandler(BaseHTTPRequestHandler):
         password = ""
 
         try:
-            cfg = load_config()
+            # Đọc đúng slot config để lấy proxy creds của tool tương ứng
+            cfg = load_config(self.__class__._slot)
             profiles = cfg.get("profiles", {}) or {}
             p_cfg = profiles.get(profile_id) or {}
             proxy_cfg = p_cfg.get("proxy") or {}
@@ -199,7 +204,6 @@ class _WSBridgeHandler(BaseHTTPRequestHandler):
             password = ""
 
         if not username:
-            # Không có username -> không trả creds (extension sẽ bỏ qua)
             self.send_response(204)
             self.end_headers()
             return
@@ -213,13 +217,50 @@ class _WSBridgeHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body_bytes)
 
-def start_ws_http_bridge(host: str = "127.0.0.1", port: int = 9527) -> ThreadingHTTPServer:
+
+def start_ws_http_bridge(
+    host: str = "127.0.0.1",
+    port: int = 9527,
+    event_queue: "Optional[queue.Queue[Dict[str, Any]]]" = None,
+    command_queue: "Optional[queue.Queue[Dict[str, Any]]]" = None,
+    slot: int = 1,
+) -> ThreadingHTTPServer:
     """
-    Extension sẽ:
-        - POST /mb-ws-event        : gửi event
-        - POST /mb-ws-command-pop  : lấy command
+    Khởi động WS-HTTP bridge.
+
+    event_queue / command_queue:
+        None → dùng global WS_EVENT_QUEUE / WS_COMMAND_QUEUE (Tool 1, backward compat).
+        Truyền queue riêng cho mỗi tool từ slot 2 trở đi.
+
+    slot: config slot để đọc proxy creds đúng file.
     """
-    server = ThreadingHTTPServer((host, port), _WSBridgeHandler)
+    # Tạo subclass riêng để mỗi tool có queues độc lập (tránh chia sẻ class state)
+    _ev = event_queue if event_queue is not None else WS_EVENT_QUEUE
+    _cmd = command_queue if command_queue is not None else WS_COMMAND_QUEUE
+
+    class _BoundHandler(_WSBridgeHandler):
+        _ev_q = _ev
+        _cmd_q = _cmd
+        _slot = slot
+
+    server = ThreadingHTTPServer((host, port), _BoundHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server
+
+
+def enqueue_command_to(command: Dict[str, Any], cmd_queue: "queue.Queue[Dict[str, Any]]") -> None:
+    """
+    Đẩy command vào queue chỉ định (dùng cho Tool 2-4 với per-tool queue).
+    """
+    try:
+        cmd_queue.put_nowait(command)
+        if logger:
+            logger.info(
+                "WS bridge enqueue command (per-tool): action=%s profile=%s",
+                command.get("action"),
+                command.get("profile_id"),
+            )
+    except queue.Full:
+        if logger:
+            logger.warning("WS bridge command queue full, bỏ command: %s", command)

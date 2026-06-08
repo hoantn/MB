@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 from typing import Any, Dict, Optional, Tuple
@@ -145,18 +146,29 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 }
 
 
-def load_config() -> Dict[str, Any]:
-    if not os.path.exists(CONFIG_FILE):
-        save_config(DEFAULT_CONFIG)
-        return DEFAULT_CONFIG.copy()
+def _config_path(slot: int) -> str:
+    """Slot 1 dùng config.json (backward compat), slot 2-4 dùng config-tool{N}.json"""
+    if slot == 1:
+        return CONFIG_FILE
+    return os.path.join(CONFIG_DIR, f"config-tool{slot}.json")
 
+
+def load_config(slot: int = 1) -> Dict[str, Any]:
+    path = _config_path(slot)
+    if not os.path.exists(path):
+        default = copy.deepcopy(DEFAULT_CONFIG)
+        if slot > 1:
+            # Ghi tool_index vào config mới tạo cho slot 2-4
+            default.setdefault("ui", {})["tool_index"] = slot
+        save_config(default, slot)
+        return default
     try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         return data
     except Exception as e:
-        log.error(f"Failed to load config: {e}")
-        return DEFAULT_CONFIG.copy()
+        log.error(f"Failed to load config slot={slot}: {e}")
+        return copy.deepcopy(DEFAULT_CONFIG)
 
 
 def _atomic_write_json(path: str, data: Dict[str, Any]) -> None:
@@ -173,12 +185,23 @@ def _atomic_write_json(path: str, data: Dict[str, Any]) -> None:
     os.replace(tmp_path, path)
 
 
-def save_config(config: Dict[str, Any]) -> None:
+def save_config(config: Dict[str, Any], slot: int = 1) -> None:
     try:
         os.makedirs(CONFIG_DIR, exist_ok=True)
-        _atomic_write_json(CONFIG_FILE, config)
+        _atomic_write_json(_config_path(slot), config)
     except Exception as e:
-        log.error(f"Failed to save config: {e}")
+        log.error(f"Failed to save config slot={slot}: {e}")
+
+
+def ensure_slot_configs() -> None:
+    """Tạo config-tool2,3,4.json nếu chưa tồn tại với tool_index=slot tương ứng."""
+    for slot in range(2, 5):
+        path = _config_path(slot)
+        if not os.path.exists(path):
+            default = copy.deepcopy(DEFAULT_CONFIG)
+            default.setdefault("ui", {})["tool_index"] = slot
+            save_config(default, slot)
+            log.info("Đã tạo config cho slot %d: %s", slot, path)
 
 
 # ------------------------- GAME COORDS HELPERS (NEW) -------------------------

@@ -57,6 +57,7 @@ from ui2.tabs.config_tab import ConfigTab
 from ui2.tabs.capture_tab import CaptureTab
 from ui2.tabs.xao_vang_tab import XaoVangTab
 from ui2.tabs.auto_play_tab import AutoPlayTab
+from ui2.tabs.auto_four_tool_tab import AutoFourToolTab
 from ui2.tabs.auto_settings_tab import AutoSettingsTab
 from core.config import load_config, save_config
 from core.gold_threshold_notifier import GoldThresholdNotifier
@@ -649,8 +650,9 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
         tabs.addTab(self.strategy_room_splitter, "Chiến Thuật")
         tabs.addTab(self.xao_vang_tab, "Xào Vàng")
-        auto_play_placeholder = QWidget(self)
-        tabs.addTab(auto_play_placeholder, "Auto Play")
+        # Tab Auto Play: quản lý 4 tool slot đồng thời
+        self.auto_four_tool_tab = AutoFourToolTab(self)
+        tabs.addTab(self.auto_four_tool_tab, "Auto Play")
         tabs.addTab(self.auto_settings_tab, "Cài đặt Auto")
         tabs.currentChanged.connect(self._on_main_tab_changed)
         # tabs.addTab(self.poker_tab, "Poker")

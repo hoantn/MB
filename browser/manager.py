@@ -163,8 +163,10 @@ class BrowserManager:
     để không ghi đè mất phần capture.regions / capture.slots đã lưu.
     """
 
-    def __init__(self):
-        self.config = load_config()
+    def __init__(self, slot: int = 1):
+        # slot=1 → config.json (backward compat), slot 2-4 → config-tool{N}.json
+        self._slot = slot
+        self.config = load_config(slot)
         self.tabs: Dict[str, BrowserTab] = {}
         self.processes: Dict[str, subprocess.Popen] = {}
         self.local_proxies: dict[str, AuthHttpForwardProxy] = {}
@@ -425,7 +427,7 @@ class BrowserManager:
 
     def _get_saved_window_position(self, profile_id: str, win_w: int, win_h: int) -> Optional[tuple[int, int]]:
         """Read a per-tool, per-profile launch position and reject stale monitor layouts."""
-        cfg = load_config()
+        cfg = load_config(self._slot)
         ui = cfg.get("ui") or {}
         if not isinstance(ui, dict):
             return None
@@ -474,7 +476,7 @@ class BrowserManager:
             log.warning("Browser[%s] cannot read window position: %s", pid, e)
             return False, f"Không đọc được vị trí cửa sổ của {pid}."
 
-        cfg = load_config()
+        cfg = load_config(self._slot)
         ui = cfg.get("ui")
         if not isinstance(ui, dict):
             ui = {}
@@ -489,7 +491,7 @@ class BrowserManager:
             tool_positions = {}
             positions[tool_key] = tool_positions
         tool_positions[pid] = {"x": int(rect.left), "y": int(rect.top)}
-        save_config(cfg)
+        save_config(cfg, self._slot)
         log.info(
             "Browser[%s] saved window position for %s: x=%s y=%s",
             pid,
@@ -596,9 +598,8 @@ class BrowserManager:
         self._ensure_portable_runtime_settings(profile_id, runtime_dir, runtime_exe)
         return runtime_dir, runtime_exe
 
-    # luôn load lại config mới nhất trước khi xử lý
     def _load_config_fresh(self) -> dict:
-        self.config = load_config()
+        self.config = load_config(self._slot)
         return self.config
 
     def reload_config(self):
