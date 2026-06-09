@@ -679,7 +679,8 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # tabs.addTab(self.dashboard_tab, "Dashboard")
         tabs.addTab(self.config_tab, "Cấu hình")
         if ENABLE_CAPTURE_TAB and self.capture_tab is not None:
-            tabs.addTab(self.capture_tab, "Fix tọa độ")
+            # tabs.addTab(self.capture_tab, "Fix tọa độ")
+            self.capture_tab.hide()
         tabs.addTab(self.players_tab, "Người chơi")
         # tabs.addTab(self.ws_sim_tab, "Test Bài")
         
