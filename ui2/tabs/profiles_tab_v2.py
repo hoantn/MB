@@ -457,7 +457,7 @@ class ProfilesTabV2(ProfileTab):
 
         # Đồng bộ ô API key theo provider trong config
         try:
-            cfg = load_config()
+            cfg = load_config(self._slot)
             self._ensure_profiles_root(cfg)
             prof = (cfg.get("profiles") or {}).get(pid, {}) or {}
             proxy = prof.get("proxy", {}) or {}
@@ -671,7 +671,7 @@ class ProfilesTabV2(ProfileTab):
     # ------------------------------------------------------------------ Core: status & sidebar
 
     def _update_current_status_label(self, pid: str) -> None:
-        cfg = load_config()
+        cfg = load_config(self._slot)
         self._ensure_profiles_root(cfg)
         prof = (cfg.get("profiles") or {}).get(pid, {}) or {}
 
@@ -707,7 +707,7 @@ class ProfilesTabV2(ProfileTab):
         self._current_status_label.setText(f"Status: {text}")
 
     def _refresh_sidebar_status(self) -> None:
-        cfg = load_config()
+        cfg = load_config(self._slot)
         self._ensure_profiles_root(cfg)
         profiles = cfg.get("profiles") or {}
 
@@ -742,7 +742,7 @@ class ProfilesTabV2(ProfileTab):
     # ------------------------------------------------------------------ Proxy UI correctness (no-guess)
 
     def _ensure_no_proxy_display(self, pid: str) -> None:
-        cfg = load_config()
+        cfg = load_config(self._slot)
         self._ensure_profiles_root(cfg)
         prof = (cfg.get("profiles") or {}).get(pid, {}) or {}
         proxy = prof.get("proxy", {}) or {}
@@ -883,7 +883,7 @@ class ProfilesTabV2(ProfileTab):
         pid = self.profile_combo.currentText() or "P1"
 
         try:
-            cfg = load_config()
+            cfg = load_config(self._slot)
             self._ensure_profiles_root(cfg)
             prof = (cfg.get("profiles") or {}).get(pid, {}) or {}
             proxy = prof.get("proxy", {}) or {}
@@ -1014,7 +1014,7 @@ class ProfilesTabV2(ProfileTab):
         pid = str(pid or "P1")
 
         try:
-            cfg = load_config()
+            cfg = load_config(self._slot)
             self._ensure_profiles_root(cfg)
             prof = (cfg.get("profiles") or {}).get(pid, {}) or {}
             src = str(prof.get("user_data_dir", "") or "").strip()

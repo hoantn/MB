@@ -163,7 +163,8 @@ def load_config(slot: int = 1) -> Dict[str, Any]:
         save_config(default, slot)
         return default
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        # utf-8-sig tự động strip BOM nếu có, đọc được cả file có/không BOM
+        with open(path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
         return data
     except Exception as e:

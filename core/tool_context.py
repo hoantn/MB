@@ -124,6 +124,7 @@ class ToolContext:
         self.room_tab = None          # RoomControlTab
         self.room_engine = None       # RoomEngine
         self.strategy_tab = None      # StrategyTab
+        self.profiles_tab = None      # ProfilesTabV2 (cấu hình trình duyệt per-slot)
 
         # Activity log sink (set sau bởi AutoFourToolTab)
         self.log_sink = None
@@ -136,8 +137,15 @@ class ToolContext:
         from ui2.tabs.room_tab import RoomControlTab
         from ui2.tabs.strategy2.strategy_tab import StrategyTab
         from engine.room_engine import RoomEngine
+        from ui2.tabs.profiles_tab_v2 import ProfilesTabV2
 
-        self.gateway = ToolGateway(self.command_queue)
+        # Slot 1: extension polls main.py bridge (port 9527) → dùng global WS_COMMAND_QUEUE.
+        # Slot 2-4: per-tool bridge riêng → dùng per-tool command_queue.
+        if self.slot == 1:
+            from ui2.bridge.ws_http_bridge import WS_COMMAND_QUEUE as _GLOBAL_CMD_Q
+            self.gateway = ToolGateway(_GLOBAL_CMD_Q)
+        else:
+            self.gateway = ToolGateway(self.command_queue)
 
         # RoomControlTab — không cần visible, RoomEngine đọc panel signals từ nó
         self.room_tab = RoomControlTab(self.browser_manager, parent=parent)
@@ -154,6 +162,12 @@ class ToolContext:
             browser_manager=self.browser_manager,
             parent=parent,
             card_store=self.card_store,
+        )
+
+        # ProfilesTabV2 — cấu hình chrome_path/proxy/URL per-slot
+        self.profiles_tab = ProfilesTabV2(
+            browser_manager=self.browser_manager,
+            parent=parent,
         )
 
     def start(self) -> None:
@@ -211,34 +225,20 @@ class ToolContext:
                 cs = cs_p
 
         # --- extension_ready ---
+        # ws_layout_store global chỉ dành cho slot 1 (main.py). Không ghi vào đây từ ToolContext
+        # để tránh slot 2-4 ghi đè key "P1"/"P2"/"P3" của slot 1.
         if kind == "extension_ready":
-            try:
-                from ui2.bridge.ws_layout_store import ws_layout_store
-                version = evt.get("version")
-                if version is None and isinstance(payload, dict):
-                    version = payload.get("version")
-                ws_layout_store.mark_extension_ready(profile_id, str(version or "unknown"))
-            except Exception:
-                pass
             return
 
-        # --- cmd=606: layout sau kéo (chia sẻ ws_layout_store global, phân biệt qua profile_id) ---
-        if kind == "layout_snapshot" and cmd == 606 and isinstance(cs, list):
-            try:
-                from ui2.bridge.ws_layout_store import ws_layout_store
-                sent_at_ms = evt.get("sent_at_ms")
-                event_at = float(sent_at_ms) / 1000.0 if sent_at_ms is not None else None
-                ws_layout_store.update_layout(profile_id, cs, event_at=event_at)
-            except Exception:
-                log.exception("[ToolContext] cmd606 failed slot=%d", self.slot)
+        # --- cmd=606: layout sau kéo ---
+        # Không ghi vào ws_layout_store global — chỉ main.py (slot 1) dùng store đó cho apply.
+        if kind == "layout_snapshot" and cmd == 606:
             return
 
-        # --- cmd=600: 13 lá gốc → per-tool card_store + ws_layout_store begin_hand ---
+        # --- cmd=600: 13 lá gốc → per-tool card_store ---
         if cs is not None and cmd == 600:
             try:
                 self.card_store.update_cards(profile_id, cs)
-                from ui2.bridge.ws_layout_store import ws_layout_store
-                ws_layout_store.begin_hand(profile_id, cs)
             except Exception:
                 log.exception("[ToolContext] cmd600 card update failed slot=%d", self.slot)
 
@@ -249,12 +249,21 @@ class ToolContext:
                 except Exception:
                     pass
 
-        # --- cmd=100: self info ---
-        if isinstance(payload, dict) and cmd == 100 and self.room_engine is not None:
-            try:
-                self.room_engine.on_self_info_100(profile_id, payload)
-            except Exception:
-                pass
+        # --- cmd=100: self info (bỏ qua mini-game socket có id != 0 — giống main.py) ---
+        if isinstance(payload, dict) and cmd == 100:
+            msg_id = payload.get("id")
+            if msg_id is not None:
+                try:
+                    if int(msg_id) != 0:
+                        return
+                except Exception:
+                    return
+            if self.room_engine is not None:
+                try:
+                    self.room_engine.on_self_info_100(profile_id, payload)
+                except Exception:
+                    pass
+            return
 
         # --- cmd=200: vào/ra phòng ---
         if isinstance(payload, dict) and cmd == 200 and self.room_engine is not None:

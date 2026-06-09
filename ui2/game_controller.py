@@ -7,7 +7,6 @@ from PySide6.QtWidgets import QApplication
 
 from browser.devtools import DevToolsClient
 from core.apply_trace import apply_trace
-from core.config import load_config
 
 class GameController:
     """
@@ -46,6 +45,13 @@ class GameController:
 
     # ------------------------------------------------------------------ utils
 
+    @property
+    def _current_cfg(self) -> dict:
+        """Luôn đọc từ browser_manager.config (per-slot), không gọi load_config() toàn cục."""
+        if self._browser_manager is not None:
+            return self._browser_manager.config
+        return self._cfg
+
     def _client(self, profile_id: str) -> DevToolsClient:
         """
         Lấy DevToolsClient cho profile_id.
@@ -76,7 +82,7 @@ class GameController:
 
             config['game_ui']['bet_buttons'][str(bet)]
         """
-        cfg = load_config()
+        cfg = self._current_cfg
         game_ui = cfg.get("game_ui", {}) or {}
         bet_key = str(int(bet))
 
@@ -118,7 +124,7 @@ class GameController:
 
             config['game_ui']['exit_button']
         """
-        cfg = load_config()
+        cfg = self._current_cfg
         game_ui = cfg.get("game_ui", {}) or {}
 
         pos = None
@@ -152,7 +158,7 @@ class GameController:
             hoặc
           - config['game_ui']['exit_button2'] (global)
         """
-        cfg = load_config()
+        cfg = self._current_cfg
         game_ui = cfg.get("game_ui", {}) or {}
 
         pos = None
@@ -184,7 +190,7 @@ class GameController:
     def click_binh(self, profile_id: str) -> None:
         apply_trace("click_binh_enter", profile_id)
         """Click nút Báo binh sau khi game đã nhận hình bài đặc biệt."""
-        cfg = load_config()
+        cfg = self._current_cfg
         game_ui = cfg.get("game_ui", {}) or {}
         profile_map = game_ui.get("binh_button_profile") or {}
         pos = profile_map.get(profile_id)
@@ -202,7 +208,7 @@ class GameController:
     def click_done(self, profile_id: str) -> None:
         apply_trace("click_done_enter", profile_id)
         """Click nút Xong sau khi game đã nhận hình bài xếp thường."""
-        cfg = load_config()
+        cfg = self._current_cfg
         game_ui = cfg.get("game_ui", {}) or {}
         profile_map = game_ui.get("done_button_profile") or {}
         pos = profile_map.get(profile_id)
@@ -224,7 +230,7 @@ class GameController:
         Chỉ đọc:
             config['game_ui']['taixiu']['tx_bet_points_profile'][profile_id][str(bet)]
         """
-        cfg = load_config()
+        cfg = self._current_cfg
         game_ui = cfg.get("game_ui", {}) or {}
         taixiu = game_ui.get("taixiu", {}) or {}
         bet_key = str(int(bet))
@@ -247,7 +253,7 @@ class GameController:
         """
         Click nút TÀI theo profile.
         """
-        cfg = load_config()
+        cfg = self._current_cfg
         game_ui = cfg.get("game_ui", {}) or {}
         taixiu = game_ui.get("taixiu", {}) or {}
 
@@ -270,7 +276,7 @@ class GameController:
         """
         Click nút XỈU theo profile.
         """
-        cfg = load_config()
+        cfg = self._current_cfg
         game_ui = cfg.get("game_ui", {}) or {}
         taixiu = game_ui.get("taixiu", {}) or {}
 
@@ -293,7 +299,7 @@ class GameController:
         """
         Click nút ĐẶT CƯỢC theo profile.
         """
-        cfg = load_config()
+        cfg = self._current_cfg
         game_ui = cfg.get("game_ui", {}) or {}
         taixiu = game_ui.get("taixiu", {}) or {}
 
@@ -383,7 +389,7 @@ class GameController:
         - 'message_input_profile'
         - 'send_button_profile'
         """
-        cfg = load_config()
+        cfg = self._current_cfg
         game_ui = cfg.get("game_ui", {}) or {}
         auto_spam = game_ui.get("auto_spam", {}) or {}
 

@@ -60,9 +60,10 @@ class PanelPhongProfile(QWidget):
     yeu_cau_vao_cung_phong = Signal(str, str)  # (profile_hien_tai, profile_muc_tieu)
     yeu_cau_goi_team = Signal(str)  # host profile_id
 
-    def __init__(self, profile_id: str, parent=None):
+    def __init__(self, profile_id: str, slot: int = 1, parent=None):
         super().__init__(parent)
         self.profile_id = profile_id
+        self._slot = slot
 
         # ----- LABEL MY UID (CLICK COPY) -----
         self.nhan_my_uid = ClickCopyLabel("-")
@@ -95,7 +96,7 @@ class PanelPhongProfile(QWidget):
         self._init_bet_combo(self.combo_bet_tao)
 
         # ----- THỜI GIAN NGHỈ GIỮA 2 CHU KỲ (ANTI-SPAM) -----
-        cfg = load_config()
+        cfg = load_config(self._slot)
         ui_room = (cfg.setdefault('ui', {}) ).setdefault('room', {})
         delay_create_ms = int(ui_room.get('delay_create_ms', 500) or 0)
         delay_join_ms = int(ui_room.get('delay_join_ms', 500) or 0)
@@ -405,12 +406,12 @@ class PanelPhongProfile(QWidget):
             self.yeu_cau_dung_tac_vu.emit(self.profile_id)
         
     def _save_room_delay(self, key: str, value: int) -> None:
-        """Lưu cấu hình thời gian nghỉ vào config.json (an toàn, best-effort)."""
+        """Lưu cấu hình thời gian nghỉ vào config đúng slot (an toàn, best-effort)."""
         try:
-            cfg = load_config()
+            cfg = load_config(self._slot)
             ui_room = (cfg.setdefault("ui", {})).setdefault("room", {})
             ui_room[key] = int(value)
-            save_config(cfg)
+            save_config(cfg, self._slot)
         except Exception:
             # không làm crash UI
             pass
@@ -691,7 +692,7 @@ class RoomControlTab(QWidget):
 
         # Build panels + nav items
         for pid in ("P1", "P2", "P3"):
-            p = PanelPhongProfile(pid)
+            p = PanelPhongProfile(pid, slot=getattr(self.browser_manager, "_slot", 1))
             self.panels[pid] = p
             # Keep room controls at usable sizes when the combined view is compact.
             # The profile sidebar stays visible while only the selected detail scrolls.

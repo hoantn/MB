@@ -109,10 +109,10 @@ def pick_default_suggestion(suggestions: List[dict]) -> int:
     return 0
 
 
-def _read_apply_timing_config() -> tuple[float, bool, int, int, int]:
+def _read_apply_timing_config(slot: int = 1) -> tuple[float, bool, int, int, int]:
     """Doc cau hinh apply chung cho ca thu cong va auto."""
     try:
-        cfg = load_config()
+        cfg = load_config(slot)
         ui_cfg = cfg.get("ui") or {}
         ui_apply = ui_cfg.get("apply") or {}
         delay_ms = int(ui_apply.get("delay_between_drag_ms") or 0)
@@ -287,7 +287,9 @@ def apply_suggestion_dashboard_style(
                 double_pass_gap_ms,
                 layout606_timeout_retry_count,
                 layout606_timeout_retry_ms,
-            ) = _read_apply_timing_config()
+            ) = _read_apply_timing_config(
+                slot=getattr(getattr(tab, "browser_manager", None), "_slot", 1)
+            )
 
             # Chốt layout đầu vào trong suốt một phiên kéo. Sau khi DevTools gửi
             # toàn bộ thao tác không lỗi, kết quả mô phỏng của compute_moves là

@@ -374,11 +374,11 @@ def proxyno1_get_proxy_info_for_profile(profile_id: str) -> Tuple[bool, str, Opt
     msg = data.get("message") or "Lấy proxy ProxyNo1 thành công."
     return True, msg, info
 
-def proxyno1_change_ip_for_profile(profile_id: str) -> Tuple[bool, str]:
+def proxyno1_change_ip_for_profile(profile_id: str, slot: int = 1) -> Tuple[bool, str]:
     """
-    Đổi IP ProxyNo1 cho 1 profile dựa trên config.json.
+    Đổi IP ProxyNo1 cho 1 profile dựa trên config của slot tương ứng.
 
-    - Đọc config.
+    - Đọc config theo slot (1→config.json, 2→config-tool2.json, ...).
     - Lấy proxyno1_api_key (ưu tiên theo profile, fallback global).
     - Gọi API change-key-ip.
     - Ghi lại thời gian + message cuối cùng vào config (để UI hiển thị).
@@ -386,7 +386,7 @@ def proxyno1_change_ip_for_profile(profile_id: str) -> Tuple[bool, str]:
 
     Trả về: (ok: bool, message: str)
     """
-    cfg = load_config()
+    cfg = load_config(slot)
     try:
         profile_dict, proxy = _get_profile_proxy_dict(cfg, profile_id)
     except KeyError as e:
@@ -429,11 +429,11 @@ def proxyno1_change_ip_for_profile(profile_id: str) -> Tuple[bool, str]:
     else:
         proxy["proxyno1_last_error"] = error
 
-    # Lưu config
+    # Lưu config đúng slot
     try:
-        save_config(cfg)
+        save_config(cfg, slot)
     except Exception as e:
-        log.error("[ProxyNo1] Lỗi khi save_config sau change_ip: %s", e)
+        log.error("[ProxyNo1] Lỗi khi save_config sau change_ip slot=%d: %s", slot, e)
 
     if ok:
         return True, f"Đổi IP ProxyNo1 cho {profile_id} thành công: {msg}"

@@ -648,7 +648,8 @@ class MainWindow(QMainWindow, WebSocketGateway):
         )
         self._apply_strategy_room_splitter_layout()
 
-        tabs.addTab(self.strategy_room_splitter, "Chiến Thuật")
+        # tabs.addTab(self.strategy_room_splitter, "Chiến Thuật")  # đã nhúng vào Auto Play
+        self.strategy_room_splitter.hide()
         tabs.addTab(self.xao_vang_tab, "Xào Vàng")
         # Tab Auto Play: quản lý 4 tool slot đồng thời
         try:
@@ -673,7 +674,8 @@ class MainWindow(QMainWindow, WebSocketGateway):
             tabs.addTab(self.telegram_tab, "Đọc Lệnh TG")
 
         # tabs.addTab(self.profile_tab, "Hồ sơ & Trình duyệt")
-        tabs.addTab(self.profiles_tab_v2, "Trình duyệt v2")
+        # tabs.addTab(self.profiles_tab_v2, "Trình duyệt v2")  # đã nhúng vào Auto Play
+        self.profiles_tab_v2.hide()
         # tabs.addTab(self.dashboard_tab, "Dashboard")
         tabs.addTab(self.config_tab, "Cấu hình")
         if ENABLE_CAPTURE_TAB and self.capture_tab is not None:
@@ -1334,6 +1336,17 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
         kind = evt.get("kind")
 
+        # Relay event sang AutoFourToolTab slot 1 context để mirror room/strategy view.
+        # Việc relay xảy ra TRƯỚC khi main.py xử lý để ctx nhận payload gốc (chưa unwrap).
+        try:
+            aft = getattr(self, "auto_four_tool_tab", None)
+            if aft is not None:
+                ctxs = getattr(aft, "_contexts", [])
+                if ctxs and ctxs[0] is not None:
+                    ctxs[0].event_queue.put_nowait(evt)
+        except Exception:
+            pass
+
         # Chỉ chặn các event cần RoomEngine khi RoomEngine chưa sẵn sàng.
         # Các event độc lập (poker/phom/self/cards) vẫn cho chạy để UI realtime.
         if self.room_engine is None and kind in ("room_list", "room_snapshot", "room_event", "room_balance"):
@@ -1807,6 +1820,9 @@ class MainWindow(QMainWindow, WebSocketGateway):
             payload = evt.get("payload") or {}
             if isinstance(payload, dict):
                 self.handle_ws_room_snapshot(profile_id, payload)
+
+        elif kind == "cards_snapshot":
+            pass  # Already handled above via cmd=600 block
 
         else:
             log.debug("Nhận event WS chưa hỗ trợ (kind=%r): %s", kind, evt)

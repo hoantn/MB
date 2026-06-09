@@ -215,8 +215,21 @@ class BrowserManager:
 
         raise FileNotFoundError(f"Đường dẫn trình duyệt không hợp lệ: {chrome_path}")
 
+    @property
+    def _tool_index(self) -> int:
+        """Tool index từ config của slot này (không đọc config.json mặc định)."""
+        try:
+            return int((self.config.get("ui") or {}).get("tool_index") or self._slot)
+        except Exception:
+            return self._slot
+
     def _get_runtime_profile_dir(self, profile_id: str) -> str:
-        return os.path.join(RUNTIME_BROWSER_DIR, str(profile_id or "P1"))
+        tool_idx = self._tool_index
+        pid = str(profile_id or "P1")
+        if tool_idx == 1:
+            # backward compat: tool 1 vẫn dùng runtime/P{x}
+            return os.path.join(RUNTIME_BROWSER_DIR, pid)
+        return os.path.join(RUNTIME_BROWSER_DIR, f"tool{tool_idx}", pid)
 
     def _ensure_portable_runtime_settings(self, profile_id: str, runtime_dir: str, runtime_exe: str) -> None:
         """Keep Portable Chrome cache inside its per-profile runtime tree."""
@@ -434,7 +447,7 @@ class BrowserManager:
         positions = ui.get("browser_window_positions") or {}
         if not isinstance(positions, dict):
             return None
-        tool_positions = positions.get(f"tool{get_tool_index()}") or {}
+        tool_positions = positions.get(f"tool{self._tool_index}") or {}
         if not isinstance(tool_positions, dict):
             return None
         saved = tool_positions.get(str(profile_id or "P1")) or {}
@@ -485,7 +498,7 @@ class BrowserManager:
         if not isinstance(positions, dict):
             positions = {}
             ui["browser_window_positions"] = positions
-        tool_key = f"tool{get_tool_index()}"
+        tool_key = f"tool{self._tool_index}"
         tool_positions = positions.get(tool_key)
         if not isinstance(tool_positions, dict):
             tool_positions = {}
@@ -619,7 +632,7 @@ class BrowserManager:
 
         profiles[profile_id] = d
         cfg["profiles"] = profiles
-        save_config(cfg)
+        save_config(cfg, self._slot)
         self.config = cfg
 
         return ProfileConfig.from_dict(d)
@@ -633,12 +646,12 @@ class BrowserManager:
         profiles = cfg.get("profiles", {})
         profiles[profile_id] = profile_dict
         cfg["profiles"] = profiles
-        save_config(cfg)
+        save_config(cfg, self._slot)
         self.config = cfg
         log.info("Updated profile config for %s", profile_id)
 
     def _get_port(self, profile_id: str) -> int:
-        return get_profile_port(profile_id)
+        return get_profile_port(profile_id, tool_index=self._tool_index)
 
     def ensure_tab(self, profile_id: str) -> Optional[BrowserTab]:
         """
@@ -847,7 +860,7 @@ chrome.webRequest.onAuthRequired.addListener(
         """Mở Chrome cho profile_id với cấu hình window + proxy per-profile,
         sau đó bảo đảm (nếu có) DevTools được attach lại."""
         port = self._get_port(profile_id)
-        tool_index = get_tool_index()
+        tool_index = self._tool_index
         tool_name = get_tool_name(tool_index)
 
         # Chrome Portable may leave the launcher process while the real browser

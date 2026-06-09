@@ -63,7 +63,7 @@ class WebSocketGateway:
 class RoomEngine(QObject):
     """
     - Vào phòng / tạo phòng solo = CLICK Bet theo toạ độ (GameController).
-    - Thoát phòng = CLICK Exit 2 lần (GameController.click_exit_room).
+    - Thoát phòng = gửi WS frame [4,"Simms",-1] qua ws_gateway.
     - 202 (room_snapshot) dùng làm baseline + đổi phòng + ARM.
     - 200 (room_event) dùng để realtime join/leave/update danh sách người chơi theo mô hình "chỉ 202+200".
     """
@@ -92,10 +92,11 @@ class RoomEngine(QObject):
         self.ws_gateway = ws_gateway
         self.game = game_controller
         self.sig_join_click_error.connect(self._on_join_click_error)
-        # Delay giữa 2 lần click thoát phòng (click 2 lần) - lấy từ config
+        # Delay giữa 2 lần click thoát phòng (click 2 lần) - lấy từ config đúng slot
         self._exit_double_click_ms: int = 130
         try:
-            cfg = load_config()
+            _slot = getattr(getattr(game_controller, "_browser_manager", None), "_slot", 1)
+            cfg = load_config(_slot)
             ui = cfg.get("ui") or {}
             ui_room = ui.get("room") or {}
             v = int(ui_room.get("exit_double_click_ms", 130) or 0)
@@ -475,8 +476,7 @@ class RoomEngine(QObject):
 
         delay_ms = max(int(tv.delay_ms or 0), 100)
         if exit_first:
-            self._double_click_exit(profile_id)
-            delay_ms += int(getattr(self, "_exit_double_click_ms", 130) or 0)
+            self.ws_gateway.gui_lenh_thoat_phong(profile_id)
         QTimer.singleShot(delay_ms, lambda pid=profile_id: self._click_bet_join(pid))
 
     def _ui_auto_find_guest(self, profile_id: str, params: dict) -> None:
@@ -774,9 +774,8 @@ class RoomEngine(QObject):
                 "Phòng không còn solo. Đang thoát và tìm bàn khác...",
                 dang_chay=True,
             )
-            self._double_click_exit(profile_id)
-            total_delay = int(getattr(self, "_exit_double_click_ms", 130) or 0) + max(tv.delay_ms, 100)
-            QTimer.singleShot(total_delay, lambda pid=profile_id: self._click_bet_tao(pid))
+            self.ws_gateway.gui_lenh_thoat_phong(profile_id)
+            QTimer.singleShot(max(tv.delay_ms, 300), lambda pid=profile_id: self._click_bet_tao(pid))
             return
 
         if tv.che_do == "join":
@@ -796,9 +795,8 @@ class RoomEngine(QObject):
                 f"Phòng hiện tại không có UID {target_uid}. Đang thoát và tìm lại...",
                 dang_chay=True,
             )
-            self._double_click_exit(profile_id)
-            total_delay = int(getattr(self, "_exit_double_click_ms", 130) or 0) + max(tv.delay_ms, 100)
-            QTimer.singleShot(total_delay, lambda pid=profile_id: self._click_bet_join(pid))
+            self.ws_gateway.gui_lenh_thoat_phong(profile_id)
+            QTimer.singleShot(max(tv.delay_ms, 300), lambda pid=profile_id: self._click_bet_join(pid))
             return
 
         if False and tv.che_do == "join_rid":
@@ -862,9 +860,8 @@ class RoomEngine(QObject):
                     "Đang thoát và tìm bàn khác...",
                     dang_chay=True,
                 )
-            self._double_click_exit(profile_id)
-            total_delay = int(getattr(self, "_exit_double_click_ms", 130) or 0) + max(tv.delay_ms, 100)
-            QTimer.singleShot(total_delay, lambda pid=profile_id: self._click_bet_find_guest(pid))
+            self.ws_gateway.gui_lenh_thoat_phong(profile_id)
+            QTimer.singleShot(max(tv.delay_ms, 300), lambda pid=profile_id: self._click_bet_find_guest(pid))
 
     def on_trang_thai_phong(self, profile_id: str, trang_thai: TrangThaiPhong) -> None:
         try:

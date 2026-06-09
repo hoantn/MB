@@ -341,10 +341,11 @@ def apply_arrangement(
         log.warning("apply_arrangement: tab %s chưa có DevTools client", profile_id)
         return
 
-    # 2) Lấy game_region + slots từ config
-    cfg = load_config()
-    game_region = get_game_region(profile_id)
-    slots = get_slots(profile_id)
+    # 2) Lấy game_region + slots từ config đúng slot
+    _slot = getattr(browser_manager, "_slot", 1)
+    cfg = load_config(_slot)
+    game_region = get_game_region(profile_id, slot=_slot)
+    slots = get_slots(profile_id, slot=_slot)
 
     # ---- UI apply: thời gian chờ sau mỗi lần kéo (drag_duration_ms) ----
     ui_cfg = cfg.get("ui") or {}
@@ -388,7 +389,7 @@ def apply_arrangement(
 
     # 4) Tính toạ độ click kéo bài (ABS trên page)
     # Đọc vị trí click tương đối trong từng slot từ config để dễ tinh chỉnh.
-    cfg = load_config()
+    cfg = load_config(_slot)
     ui_cfg = cfg.get("ui") or {}
     click_cfg = ui_cfg.get("apply_click") or {}
 

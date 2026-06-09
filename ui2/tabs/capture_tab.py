@@ -41,6 +41,7 @@ class CaptureTab(QWidget):
         super().__init__(parent)
         self.browser_manager = browser_manager
         self.capture_manager = capture_manager
+        self._slot: int = getattr(browser_manager, "_slot", 1)
 
         self.current_profile = "P1"
         self.current_full_pixmap: Optional[QPixmap] = None
@@ -237,7 +238,7 @@ class CaptureTab(QWidget):
             return
 
         try:
-            cfg = load_config()
+            cfg = load_config(self._slot)
             game_ui = cfg.get("game_ui", {})
             bet_cfg = game_ui.get("bet_buttons", {})
             if not bet_cfg:
@@ -302,7 +303,7 @@ class CaptureTab(QWidget):
             return
 
         try:
-            cfg = load_config()
+            cfg = load_config(self._slot)
             game_ui = cfg.setdefault("game_ui", {})
             taixiu = game_ui.setdefault("taixiu", {})
 
@@ -555,7 +556,7 @@ class CaptureTab(QWidget):
             return
 
         try:
-            cfg = load_config()
+            cfg = load_config(self._slot)
 
             # ----------------- profiles.window: scale + size -----------------
             profiles = cfg.setdefault("profiles", {})
@@ -664,7 +665,7 @@ class CaptureTab(QWidget):
                     tx_xiu_profile[pid] = copy.deepcopy(src_xiu)
                 if isinstance(src_confirm, dict):
                     tx_confirm_profile[pid] = copy.deepcopy(src_confirm)
-            save_config(cfg)
+            save_config(cfg, self._slot)
 
             QMessageBox.information(
                 self,
@@ -690,7 +691,7 @@ class CaptureTab(QWidget):
             )
 
     def _load_existing_region(self) -> None:
-        region = get_game_region(self.current_profile)
+        region = get_game_region(self.current_profile, slot=self._slot)
         if not region:
             self.current_selection = None
             return
@@ -768,7 +769,7 @@ class CaptureTab(QWidget):
         cy = int(y + h / 2)
 
         try:
-            cfg = load_config()
+            cfg = load_config(self._slot)
             game_ui = cfg.setdefault("game_ui", {})
 
             if self._bet_pick_target == "taixiu":
@@ -785,7 +786,7 @@ class CaptureTab(QWidget):
 
             per_profile = profile_bets.setdefault(pid, {})
             per_profile[str(bet_key)] = {"x": cx, "y": cy}
-            save_config(cfg)
+            save_config(cfg, self._slot)
 
             msg = (
                 f"Profile {pid} – đã lưu tọa độ cho Bet {bet_key}:\n"
@@ -832,7 +833,7 @@ class CaptureTab(QWidget):
         cy = int(y + h / 2)
 
         try:
-            cfg = load_config()
+            cfg = load_config(self._slot)
             game_ui = cfg.setdefault("game_ui", {})
             taixiu = game_ui.setdefault("taixiu", {})
 
@@ -849,7 +850,7 @@ class CaptureTab(QWidget):
             profile_map = taixiu.setdefault(key, {"P1": None, "P2": None, "P3": None})
             profile_map[pid] = {"x": cx, "y": cy}
 
-            save_config(cfg)
+            save_config(cfg, self._slot)
 
             self._taixiu_pick_mode = False
             self._taixiu_pick_side = ""
@@ -888,7 +889,7 @@ class CaptureTab(QWidget):
         cy = int(y + h / 2)
 
         try:
-            cfg = load_config()
+            cfg = load_config(self._slot)
             game_ui = cfg.setdefault("game_ui", {})
 
             # phân biệt EXIT #1 / EXIT #2
@@ -900,7 +901,7 @@ class CaptureTab(QWidget):
                 box_title = "Fix tọa độ thoát phòng 1"
 
             exit_profiles[pid] = {"x": cx, "y": cy}
-            save_config(cfg)
+            save_config(cfg, self._slot)
 
             self._exit_pick_mode = False
 
@@ -929,14 +930,14 @@ class CaptureTab(QWidget):
         cy = int(y + h / 2)
 
         try:
-            cfg = load_config()
+            cfg = load_config(self._slot)
             game_ui = cfg.setdefault("game_ui", {})
             profile_map = game_ui.setdefault(
                 "binh_button_profile",
                 {"P1": None, "P2": None, "P3": None},
             )
             profile_map[pid] = {"x": cx, "y": cy}
-            save_config(cfg)
+            save_config(cfg, self._slot)
             self._binh_pick_mode = False
             QMessageBox.information(
                 self,
@@ -957,14 +958,14 @@ class CaptureTab(QWidget):
         cy = int(y + h / 2)
 
         try:
-            cfg = load_config()
+            cfg = load_config(self._slot)
             game_ui = cfg.setdefault("game_ui", {})
             profile_map = game_ui.setdefault(
                 "done_button_profile",
                 {"P1": None, "P2": None, "P3": None},
             )
             profile_map[pid] = {"x": cx, "y": cy}
-            save_config(cfg)
+            save_config(cfg, self._slot)
             self._done_pick_mode = False
             QMessageBox.information(
                 self,
@@ -999,7 +1000,7 @@ class CaptureTab(QWidget):
 
         x, y, w, h = self.current_selection
         region = {"x": int(x), "y": int(y), "width": int(w), "height": int(h)}
-        set_game_region(self.current_profile, region)
+        set_game_region(self.current_profile, region, slot=self._slot)
         QMessageBox.information(
             self,
             "Đã lưu vùng game",
@@ -1009,7 +1010,7 @@ class CaptureTab(QWidget):
     def load_slot_config(self) -> None:
         pid = self.current_profile
         idx = str(self.slot_index_spin.value())
-        slots_cfg = get_slots(pid)
+        slots_cfg = get_slots(pid, slot=self._slot)
         slot = slots_cfg.get(idx)
         if not slot:
             QMessageBox.information(self, "Slot trống", f"Chưa có config cho slot {idx} của {pid}.")
@@ -1029,7 +1030,7 @@ class CaptureTab(QWidget):
             "width": int(self.slot_w_spin.value()),
             "height": int(self.slot_h_spin.value()),
         }
-        set_slot(pid, idx, rect)
+        set_slot(pid, idx, rect, slot=self._slot)
         QMessageBox.information(
             self,
             "Đã lưu slot",

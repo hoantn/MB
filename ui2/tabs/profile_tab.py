@@ -38,6 +38,7 @@ class ProfileTab(QWidget):
     def __init__(self, browser_manager: BrowserManager, parent=None) -> None:
         super().__init__(parent)
         self.browser_manager = browser_manager
+        self._slot: int = getattr(browser_manager, "_slot", 1)
 
         self.profile_combo = QComboBox()
         self.profile_combo.addItems(["P1", "P2", "P3"])
@@ -278,7 +279,7 @@ class ProfileTab(QWidget):
     # ------------------------------------------------------------------ Slots: load/save
 
     def load_profile(self, profile_id: str) -> None:
-        cfg = load_config()
+        cfg = load_config(self._slot)
         self._ensure_profiles_root(cfg)
         prof = cfg["profiles"].get(profile_id, {}) or {}
 
@@ -384,7 +385,7 @@ class ProfileTab(QWidget):
 
     def save_profile(self) -> None:
         pid = self.profile_combo.currentText()
-        cfg = load_config()
+        cfg = load_config(self._slot)
         self._ensure_profiles_root(cfg)
 
         prof = cfg["profiles"][pid]
@@ -502,7 +503,7 @@ class ProfileTab(QWidget):
             "provider": provider,
         }
 
-        save_config(cfg)
+        save_config(cfg, self._slot)
         if hasattr(self.browser_manager, "reload_config"):
             self.browser_manager.reload_config()
 
@@ -649,7 +650,7 @@ class ProfileTab(QWidget):
         # Branch ProxyNo1: dùng protocol do người dùng chọn (HTTPS / SOCKS5)
         if idx == 5:
             # 1) Lưu API key + provider vào config
-            cfg = load_config()
+            cfg = load_config(self._slot)
             self._ensure_profiles_root(cfg)
             prof = cfg["profiles"].get(pid, {}) or {}
             proxy = prof.get("proxy", {}) or {}
@@ -657,7 +658,7 @@ class ProfileTab(QWidget):
             proxy["provider"] = "proxyno1"
             prof["proxy"] = proxy
             cfg["profiles"][pid] = prof
-            save_config(cfg)
+            save_config(cfg, self._slot)
 
             # 2) Gọi key-status → lấy host + cả 2 port HTTP/SOCKS5
             self._set_tmproxy_status("ProxyNo1: đang lấy thông tin proxy...", "orange")
@@ -763,7 +764,7 @@ class ProfileTab(QWidget):
 
         # ProxyNo1 branch
         if idx == 5:
-            cfg = load_config()
+            cfg = load_config(self._slot)
             self._ensure_profiles_root(cfg)
             prof = cfg["profiles"].get(pid, {}) or {}
             proxy = prof.get("proxy", {}) or {}
@@ -771,10 +772,10 @@ class ProfileTab(QWidget):
             proxy["provider"] = "proxyno1"
             prof["proxy"] = proxy
             cfg["profiles"][pid] = prof
-            save_config(cfg)
+            save_config(cfg, self._slot)
 
             self._set_tmproxy_status("ProxyNo1: đang đổi IP (Reset)...", "orange")
-            ok, msg = proxyno1_change_ip_for_profile(pid)
+            ok, msg = proxyno1_change_ip_for_profile(pid, slot=self._slot)
             if ok:
                 self._set_tmproxy_status(f"ProxyNo1: {msg}", "green")
             else:

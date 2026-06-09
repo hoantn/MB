@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="vi">
 <head>
   <meta charset="utf-8">
@@ -23,16 +23,14 @@
       --cyan: #42b8c4;
     }
     body {
-      margin: 0;
-      min-width: 1040px;
-      min-height: 100vh;
-      overflow: hidden;
-      background: var(--bg);
-      color: var(--text);
+      margin: 0; min-width: 1040px; min-height: 100vh; overflow: hidden;
+      background: var(--bg); color: var(--text);
       font: 12px/1.35 "Segoe UI", Arial, sans-serif;
     }
     button, input, select { font: inherit; }
     button { cursor: pointer; }
+
+    /* ── App shell ── */
     .app { height: 100vh; display: grid; grid-template-rows: 48px 1fr 28px; }
     .topbar {
       display: flex; align-items: center; gap: 12px; padding: 0 14px;
@@ -51,23 +49,26 @@
       background: var(--panel3); color: var(--text); padding: 0 8px;
     }
     input[type=number] { width: 66px; }
+
+    /* ── Buttons ── */
     .btn {
       height: 30px; border: 1px solid transparent; border-radius: 4px;
       padding: 0 11px; color: #fff; background: #343b45; font-weight: 700;
     }
     .btn:hover { filter: brightness(1.12); }
-    .btn.start { background: var(--green2); border-color: var(--green); }
-    .btn.stop { background: #532e32; border-color: #98444b; }
-    .btn.ghost { background: var(--panel2); border-color: var(--line); color: #dbe1e7; }
-    .btn.blue { background: #254c7d; border-color: var(--blue); }
-    .btn.cyan { background: #1d5560; border-color: var(--cyan); }
-    .btn.amber { background: #5d4218; border-color: var(--amber); color: #ffe1a3; }
+    .btn.start  { background: var(--green2); border-color: var(--green); }
+    .btn.stop   { background: #532e32; border-color: #98444b; }
+    .btn.ghost  { background: var(--panel2); border-color: var(--line); color: #dbe1e7; }
+    .btn.blue   { background: #254c7d; border-color: var(--blue); }
+    .btn.amber  { background: #5d4218; border-color: var(--amber); color: #ffe1a3; }
     .btn.danger { background: #622b31; border-color: var(--red); }
+
+    /* ── 3-column layout ── */
     .body { min-height: 0; display: grid; grid-template-columns: 250px minmax(620px, 1fr) 310px; }
     .sidebar, .detail, .activity { min-height: 0; overflow: hidden; }
+
+    /* ── Sidebar ── */
     .sidebar { border-right: 1px solid var(--line); background: #12161a; padding: 10px; }
-    .detail { padding: 10px; overflow: auto; }
-    .activity { border-left: 1px solid var(--line); background: #12161a; display: grid; grid-template-rows: auto 1fr; }
     .section-head {
       display: flex; align-items: center; justify-content: space-between; gap: 8px;
       min-height: 28px; margin-bottom: 7px; font-weight: 800;
@@ -84,7 +85,7 @@
     .dot { width: 8px; height: 8px; border-radius: 50%; background: #69737e; flex: none; }
     .dot.run { background: var(--green); box-shadow: 0 0 0 3px rgba(47,177,113,.13); }
     .dot.wait { background: var(--amber); }
-    .dot.err { background: var(--red); }
+    .dot.err  { background: var(--red); }
     .switch {
       width: 32px; height: 17px; border: 1px solid #4a535e; border-radius: 9px;
       background: #242a31; padding: 2px; display: flex; align-items: center;
@@ -100,18 +101,23 @@
     }
     .mini-p i { width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
     .mini-p i.wait { background: var(--amber); }
-    .mini-p i.err { background: var(--red); }
+    .mini-p i.err  { background: var(--red); }
     .sidebar-foot {
       margin-top: 10px; border: 1px solid var(--line); background: var(--panel); border-radius: 5px; padding: 9px;
     }
     .health { display: grid; grid-template-columns: 1fr auto; gap: 6px; color: var(--muted); }
     .health b { color: var(--text); }
+
+    /* ── Detail (3-row grid) ── */
+    .detail { padding: 0; overflow: hidden; display: grid; grid-template-rows: auto auto 1fr; }
+
+    /* ── Detail header ── */
     .detail-head {
       display: grid; grid-template-columns: 1fr auto; align-items: start; gap: 12px;
-      border-bottom: 1px solid var(--line); padding: 1px 1px 10px; margin-bottom: 10px;
+      border-bottom: 1px solid var(--line); padding: 10px; background: var(--bg);
     }
     .detail-title { display: flex; align-items: center; gap: 9px; }
-    .detail-title h1 { font-size: 17px; margin: 0; letter-spacing: 0; }
+    .detail-title h1 { font-size: 17px; margin: 0; }
     .status-badge {
       border: 1px solid #32664f; background: #173b2c; color: #86e0b2;
       border-radius: 4px; padding: 3px 7px; font-weight: 700;
@@ -119,40 +125,40 @@
     .status-badge.off { border-color: var(--line); background: var(--panel2); color: var(--muted); }
     .detail-sub { color: var(--muted); margin-top: 4px; }
     .detail-actions { display: flex; gap: 6px; }
+
+    /* ── Inner tab bar ── */
+    .inner-tabs {
+      display: flex; align-items: center;
+      padding: 0 10px; border-bottom: 1px solid var(--line); background: #13171c;
+    }
+    .inner-tab {
+      height: 36px; padding: 0 14px; border: none; background: transparent;
+      color: var(--muted); font-weight: 700; border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .inner-tab:hover { color: #c8d2db; }
+    .inner-tab.on { color: var(--text); border-bottom-color: var(--blue); }
+
+    /* ── Scrollable panes ── */
+    .detail-pane { display: none; padding: 10px; overflow: auto; height: 100%; }
+    .detail-pane.show { display: block; }
+
+    /* ── Tags ── */
+    .tag {
+      display: inline-block; border: 1px solid var(--line); background: var(--panel3);
+      color: #c9d1d9; border-radius: 3px; padding: 2px 5px; font-size: 11px;
+    }
+    .tag.green  { border-color: #32664f; background: #183b2d; color: #86e0b2; }
+    .tag.amber  { border-color: #72582a; background: #3d301b; color: #f3c46f; }
+    .tag.red    { border-color: #783b40; background: #402326; color: #f09aa0; }
+
+    /* ── OVERVIEW pane ── */
     .metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin-bottom: 10px; }
     .metric { border: 1px solid var(--line); border-radius: 5px; background: var(--panel); padding: 8px; min-width: 0; }
     .metric span { color: var(--muted); display: block; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .metric b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .metric b.green { color: #6dd39f; }
     .metric b.amber { color: #f0bd63; }
-    .profiles-table { border: 1px solid var(--line); border-radius: 5px; overflow: hidden; margin-bottom: 10px; }
-    .p-row {
-      display: grid; grid-template-columns: 1.25fr .78fr 1.45fr .78fr .9fr;
-      align-items: center; min-height: 48px; border-bottom: 1px solid var(--line2); background: var(--panel);
-    }
-    .p-row:last-child { border-bottom: 0; }
-    .p-row.header { min-height: 30px; background: #20262d; color: var(--muted); font-weight: 700; }
-    .p-row > div { min-width: 0; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .pid { font-weight: 900; font-size: 13px; display: flex; align-items: center; gap: 7px; }
-    .state { color: #c8d0d8; }
-    .state strong { display: block; color: var(--text); }
-    .state small { color: var(--muted); }
-    .bar { height: 5px; border-radius: 3px; background: #2c333b; overflow: hidden; margin-top: 5px; }
-    .bar i { display: block; height: 100%; width: 0; background: var(--green); transition: width .35s ease; }
-    .tag {
-      display: inline-block; border: 1px solid var(--line); background: var(--panel3);
-      color: #c9d1d9; border-radius: 3px; padding: 2px 5px; font-size: 11px;
-    }
-    .tag.green { border-color: #32664f; background: #183b2d; color: #86e0b2; }
-    .tag.amber { border-color: #72582a; background: #3d301b; color: #f3c46f; }
-    .tag.red { border-color: #783b40; background: #402326; color: #f09aa0; }
-    .plan-grid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 10px; }
-    .panel { border: 1px solid var(--line); border-radius: 5px; background: var(--panel); padding: 9px; }
-    .p-row.opp { background: #182129; box-shadow: inset 3px 0 var(--cyan); }
-    .p-row.opp .pid { color: #7ed6df; }
-    .room-table-wrap { display: grid; grid-template-columns: 1fr 250px; gap: 10px; align-items: stretch; }
-    .room-side { border: 1px solid var(--line); border-radius: 5px; background: var(--panel); padding: 9px; }
-    .room-side .flow { margin-top: 6px; }
     .room-ops {
       border: 1px solid var(--line); border-radius: 5px; background: var(--panel);
       padding: 9px; margin-bottom: 10px;
@@ -167,16 +173,26 @@
     }
     .pick.on { border-color: var(--green); background: #173b2c; color: #8de3b6; }
     .room-status {
-      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px;
-      margin-top: 8px;
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-top: 8px;
     }
     .room-stat { border: 1px solid var(--line2); border-radius: 4px; background: var(--panel3); padding: 7px; }
     .room-stat span { color: var(--muted); display: block; margin-bottom: 2px; }
     .room-stat b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .plan-line { display: grid; grid-template-columns: 104px 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line2); }
-    .plan-line:last-child { border-bottom: 0; }
-    .plan-line span { color: var(--muted); }
-    .plan-line b { font-weight: 700; }
+    .profiles-table { border: 1px solid var(--line); border-radius: 5px; overflow: hidden; margin-bottom: 10px; }
+    .p-row {
+      display: grid; grid-template-columns: 1.25fr .78fr 1.45fr .78fr .9fr;
+      align-items: center; min-height: 48px; border-bottom: 1px solid var(--line2); background: var(--panel);
+    }
+    .p-row:last-child { border-bottom: 0; }
+    .p-row.header { min-height: 30px; background: #20262d; color: var(--muted); font-weight: 700; }
+    .p-row > div { min-width: 0; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pid { font-weight: 900; font-size: 13px; display: flex; align-items: center; gap: 7px; }
+    .state strong { display: block; color: var(--text); }
+    .state small  { color: var(--muted); }
+    .p-row.opp { background: #182129; box-shadow: inset 3px 0 var(--cyan); }
+    .p-row.opp .pid { color: #7ed6df; }
+    .room-table-wrap { display: grid; grid-template-columns: 1fr 250px; gap: 10px; align-items: stretch; }
+    .room-side { border: 1px solid var(--line); border-radius: 5px; background: var(--panel); padding: 9px; }
     .flow { display: grid; gap: 7px; }
     .flow-step { display: grid; grid-template-columns: 21px 1fr auto; align-items: center; gap: 7px; color: var(--muted); }
     .flow-step i {
@@ -185,8 +201,105 @@
     }
     .flow-step.done { color: #d9e0e7; }
     .flow-step.done i { border-color: var(--green); background: #1a5038; color: #9ce2bc; }
-    .flow-step.now { color: #f0bd63; font-weight: 700; }
+    .flow-step.now  { color: #f0bd63; font-weight: 700; }
     .flow-step.now i { border-color: var(--amber); background: #4c3716; color: #f2c56f; }
+
+    /* ── CHIẾN THUẬT pane — y hệt tab hiện tại ── */
+
+    /* group box wrapper */
+    .ct-group {
+      border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .ct-group-title {
+      font-size: 11px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase;
+      color: var(--muted); padding: 5px 9px 4px; border-bottom: 1px solid var(--line2);
+      background: #1c2128;
+    }
+    .ct-group-body { padding: 8px; flex: 1; display: flex; flex-direction: column; }
+
+    /* Top half: 2 card boxes side-by-side */
+    .ct-top { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+
+    /* card rows inside group */
+    .ct-status { font-size: 11px; color: #aaa; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+    .ct-chi-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+    .ct-chi-row:last-child { margin-bottom: 0; }
+    .ct-chi-label {
+      width: 42px; font-size: 11px; font-weight: 900; color: var(--muted); flex: none;
+    }
+    .ct-special {
+      font-size: 11px; font-weight: 900; color: #facc15; margin-left: 4px; white-space: nowrap;
+    }
+
+    /* individual card box */
+    .card-box {
+      width: 52px; height: 66px; border: 1px solid #3a434e; border-radius: 5px;
+      background: #1c2229; display: inline-flex; flex-direction: column;
+      align-items: center; justify-content: center; flex: none;
+      font-size: 11px; font-weight: 900; line-height: 1.2;
+    }
+    .card-box.empty { border-style: dashed; opacity: .35; }
+    .card-box .rank { font-size: 14px; }
+    .card-box .suit { font-size: 12px; }
+    .card-box.r { color: #f08080; }  /* heart/diamond */
+    .card-box.b { color: #8bbde0; }  /* spade/club */
+
+    /* Bottom half: 2 list boxes + actions */
+    .ct-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .ct-list-wrap { flex: 1; overflow-y: auto; min-height: 120px; max-height: 200px; }
+    .ct-list { display: flex; flex-direction: column; gap: 2px; }
+    .ct-item {
+      padding: 5px 8px; border-radius: 4px; border: 1px solid var(--line2);
+      background: var(--panel2); cursor: pointer; line-height: 1.45;
+      border-left: 3px solid transparent;
+    }
+    .ct-item:hover { background: #232a33; }
+    .ct-item.selected { border-left-color: var(--blue); background: #192130; }
+    .ct-item .score { font-weight: 900; }
+    .ct-item .combo { color: var(--muted); font-size: 11px; }
+    .ct-item .cards-line { font-size: 11px; }
+    .ct-item .s { color: #8bbde0; } .ct-item .h { color: #f08080; }
+    .ct-item .d { color: #f08080; } .ct-item .c { color: #8bbde0; }
+
+    /* retry button inside group title row */
+    .ct-group-title-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 5px 9px 4px; border-bottom: 1px solid var(--line2); background: #1c2128;
+    }
+    .ct-group-title-row .title { font-size: 11px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .btn-retry {
+      height: 22px; width: 26px; border: 1px solid var(--line); border-radius: 4px;
+      background: var(--panel2); color: #9ba5b0; font-size: 13px; padding: 0;
+    }
+    .btn-retry:hover { color: var(--text); }
+
+    /* action column (right side of P suggestion box) */
+    .ct-p-body { display: flex; gap: 8px; flex: 1; }
+    .ct-p-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; padding-top: 2px; flex: none; }
+    .btn-xepbai {
+      height: 44px; min-width: 130px; border: none; border-radius: 10px;
+      background: var(--blue); color: #fff; font-size: 13px; font-weight: 900;
+    }
+    .btn-xepbai:hover { filter: brightness(1.12); }
+    .btn-xepbai:disabled { background: #2a3240; color: #4a5568; cursor: default; }
+    .pill-row { display: flex; gap: 5px; }
+    .pill {
+      height: 26px; padding: 0 10px; border: 1px solid var(--line); border-radius: 13px;
+      background: var(--panel2); color: #c2cad3; font-weight: 700;
+    }
+    .pill.on { background: #254c7d; border-color: var(--blue); color: #b3d4f8; }
+    .btn-all {
+      height: 26px; padding: 0 12px; border: 1px solid var(--line); border-radius: 13px;
+      background: var(--panel2); color: #c2cad3; font-weight: 700;
+    }
+    .btn-sap-lang {
+      height: 27px; padding: 0 12px; border-radius: 13px; border: none;
+      background: #f59e0b; color: #111827; font-weight: 900; display: none;
+    }
+
+    /* ── Activity ── */
+    .activity { border-left: 1px solid var(--line); background: #12161a; display: grid; grid-template-rows: auto 1fr; }
     .activity-head { padding: 10px; border-bottom: 1px solid var(--line); }
     .activity-tabs { display: flex; gap: 4px; }
     .activity-tab { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 4px; padding: 5px 8px; }
@@ -194,25 +307,25 @@
     .log { min-height: 0; overflow: auto; padding: 8px 10px 18px; }
     .log-entry { position: relative; padding: 7px 3px 7px 19px; border-bottom: 1px solid var(--line2); color: #bbc4cd; }
     .log-entry::before { content: ""; position: absolute; left: 3px; top: 11px; width: 6px; height: 6px; border-radius: 50%; background: #66727f; }
-    .log-entry.ok::before { background: var(--green); }
+    .log-entry.ok::before   { background: var(--green); }
     .log-entry.warn::before { background: var(--amber); }
-    .log-entry.err::before { background: var(--red); }
+    .log-entry.err::before  { background: var(--red); }
     .log-entry b { color: var(--text); }
     .time { color: #697581; font-variant-numeric: tabular-nums; margin-right: 4px; }
+
+    /* ── Footer ── */
     .footer {
       display: flex; align-items: center; justify-content: space-between; padding: 0 10px;
       border-top: 1px solid var(--line); background: #15191e; color: var(--muted);
     }
     .footer b { color: #bfc7cf; }
-    .modal-backdrop {
-      position: fixed; inset: 0; display: none; place-items: center;
-      background: rgba(0,0,0,.58); z-index: 20;
-    }
+
+    /* ── Confirm modal ── */
+    .modal-backdrop { position: fixed; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.58); z-index: 20; }
     .modal-backdrop.show { display: grid; }
     .confirm-box {
       width: min(420px, calc(100vw - 28px)); border: 1px solid var(--line);
-      border-radius: 6px; background: #171b20; box-shadow: 0 24px 70px rgba(0,0,0,.48);
-      overflow: hidden;
+      border-radius: 6px; background: #171b20; box-shadow: 0 24px 70px rgba(0,0,0,.48); overflow: hidden;
     }
     .confirm-head { padding: 11px 13px; border-bottom: 1px solid var(--line); font-weight: 900; }
     .confirm-body { padding: 13px; color: #c6ced6; }
@@ -221,6 +334,7 @@
       display: flex; justify-content: flex-end; gap: 8px; padding: 10px 13px;
       border-top: 1px solid var(--line); background: #12161a;
     }
+
     @media (max-width: 1280px) {
       .body { grid-template-columns: 220px minmax(610px, 1fr) 270px; }
       .summary { display: none; }
@@ -228,268 +342,633 @@
   </style>
 </head>
 <body>
-  <div class="app">
-    <header class="topbar">
-      <div class="brand">MB CONTROL <span>/ AUTO PLAY</span></div>
-      <div class="sep"></div>
-      <div class="summary"><span>Tool chay <b id="runningCount">3/4</b></span><span>Profile online <b>11/12</b></span><span>He thong <b>4/4</b></span></div>
-      <div class="spacer"></div>
-      <div class="control"><label>So van</label><input id="rounds" type="number" value="999" min="1"></div>
-      <div class="control"><label>Delay</label><input type="number" value="5" min="0"><span class="muted">-</span><input type="number" value="10" min="0"><span class="muted">giay</span></div>
-      <button class="btn start" id="startAll">Chay tat ca</button>
-      <button class="btn stop" id="stopAll">Dung tat ca</button>
-    </header>
+<div class="app">
 
-    <main class="body">
-      <aside class="sidebar">
-        <div class="section-head"><span>Danh sach Tool</span><span class="muted">4 cum / 12P</span></div>
-        <div class="tool-list" id="toolList"></div>
-        <div class="sidebar-foot">
-          <div class="section-head"><span>Suc khoe he thong</span><span class="tag green">On dinh</span></div>
-          <div class="health"><span>He thong</span><b>4/4 san sang</b><span>Profile ket noi</span><b>12 ho so</b><span>Tac vu cho</span><b>2 tac vu</b><span>Loi xac minh</span><b style="color:#f09aa0">1</b></div>
+  <!-- ── Topbar ── -->
+  <header class="topbar">
+    <div class="brand">MB CONTROL <span>/ AUTO PLAY</span></div>
+    <div class="sep"></div>
+    <div class="summary">
+      <span>Tool chạy <b id="runningCount">3/4</b></span>
+      <span>Profile online <b>11/12</b></span>
+      <span>Hệ thống <b>4/4</b></span>
+    </div>
+    <div class="spacer"></div>
+    <div class="control"><label>Số ván</label><input id="rounds" type="number" value="999" min="1"></div>
+    <div class="control">
+      <label>Delay</label>
+      <input type="number" value="5" min="0"><span class="muted">-</span>
+      <input type="number" value="10" min="0"><span class="muted">giây</span>
+    </div>
+    <button class="btn start" id="startAll">Chạy tất cả</button>
+    <button class="btn stop"  id="stopAll">Dừng tất cả</button>
+  </header>
+
+  <main class="body">
+
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar">
+      <div class="section-head"><span>Danh sách Tool</span><span class="muted">4 cụm / 12P</span></div>
+      <div class="tool-list" id="toolList"></div>
+      <div class="sidebar-foot">
+        <div class="section-head"><span>Sức khoẻ hệ thống</span><span class="tag green">Ổn định</span></div>
+        <div class="health">
+          <span>Hệ thống</span><b>4/4 sẵn sàng</b>
+          <span>Profile kết nối</span><b>12 hồ sơ</b>
+          <span>Tác vụ chờ</span><b>2 tác vụ</b>
+          <span>Lỗi xác minh</span><b style="color:#f09aa0">1</b>
         </div>
-      </aside>
+      </div>
+    </aside>
 
-      <section class="detail">
-        <div class="detail-head">
-          <div>
-            <div class="detail-title"><span class="dot run" id="detailDot"></span><h1 id="detailName">Tool 1</h1><span class="status-badge" id="detailStatus">AUTO dang chay</span></div>
-            <div class="detail-sub" id="detailSub">He thong san sang - 3 ho so trinh duyet - Tool 1</div>
+    <!-- ── Detail ── -->
+    <section class="detail">
+
+      <!-- Row 1: Header -->
+      <div class="detail-head">
+        <div>
+          <div class="detail-title">
+            <span class="dot run" id="detailDot"></span>
+            <h1 id="detailName">Tool 1</h1>
+            <span class="status-badge" id="detailStatus">AUTO đang chạy</span>
           </div>
-          <div class="detail-actions">
-            <button class="btn ghost" id="openBrowsers">Mo 3 trinh duyet</button>
-            <button class="btn blue" id="reconnectAll">Ket noi lai ALL</button>
-            <button class="btn amber" id="resetProxyAll">Reset Proxy ALL</button>
-            <button class="btn danger" id="clearProfilesAll">Xoa ALL Profile</button>
-            <button class="btn start" id="toggleSelected">Tam dung</button>
-          </div>
+          <div class="detail-sub" id="detailSub">Hệ thống sẵn sàng - 3 hồ sơ trình duyệt - Tool 1</div>
         </div>
+        <div class="detail-actions">
+          <button class="btn ghost"   id="openBrowsers">Mở 3 trình duyệt</button>
+          <button class="btn blue"    id="reconnectAll">Kết nối lại ALL</button>
+          <button class="btn amber"   id="resetProxyAll">Reset Proxy ALL</button>
+          <button class="btn danger"  id="clearProfilesAll">Xoá ALL Profile</button>
+          <button class="btn start"   id="toggleSelected">Tạm dừng</button>
+        </div>
+      </div>
 
+      <!-- Row 2: Inner tab bar -->
+      <div class="inner-tabs">
+        <button class="inner-tab on" id="tabOverview">Tổng quan</button>
+        <button class="inner-tab"    id="tabStrategy">Chiến Thuật</button>
+      </div>
+
+      <!-- Row 3a: Tổng quan pane -->
+      <div class="detail-pane show" id="paneOverview">
         <div class="metrics">
-          <div class="metric"><span>Boi canh ban</span><b class="green" id="roomKind">Co doi thu</b></div>
-          <div class="metric"><span>Ke hoach hien tai</span><b id="planKind">Toi uu OPP 3P</b></div>
-          <div class="metric"><span>Van con lai</span><b id="remain">996 / 999</b></div>
-          <div class="metric"><span>Tien trinh van</span><b class="amber" id="roundState">Dang xac minh</b></div>
-          <div class="metric"><span>Loi gan nhat</span><b id="lastError">Khong co</b></div>
+          <div class="metric"><span>Bối cảnh bàn</span><b class="green" id="roomKind">Có đối thủ</b></div>
+          <div class="metric"><span>Kế hoạch hiện tại</span><b id="planKind">Tối ưu OPP 3P</b></div>
+          <div class="metric"><span>Ván còn lại</span><b id="remain">996 / 999</b></div>
+          <div class="metric"><span>Tiến trình ván</span><b class="amber" id="roundState">Đang xác minh</b></div>
+          <div class="metric"><span>Lỗi gần nhất</span><b id="lastError">Không có</b></div>
         </div>
 
         <div class="room-ops">
-          <div class="section-head"><span>Dieu phoi phong</span><span class="muted">Tao / join / tim khach / goi P trong cung context Tool</span></div>
+          <div class="section-head"><span>Điều phối phòng</span><span class="muted">Tạo / join / tìm khách / gọi P trong cùng context Tool</span></div>
           <div class="room-controls">
             <select id="roomBet"><option>100</option><option>500</option><option>1000</option><option>5000</option><option>10000</option></select>
             <div class="profile-picks"><span class="pick on">P1</span><span class="pick on">P2</span><span class="pick on">P3</span></div>
-            <input id="targetUid" value="1_298845021" title="UID muc tieu hoac UID host">
+            <input id="targetUid" value="1_298845021">
             <div class="room-actions">
-              <button class="btn start" id="createRoom">Tao phong</button>
-              <button class="btn ghost" id="callTeam">Goi P khac</button>
+              <button class="btn start" id="createRoom">Tạo phòng</button>
+              <button class="btn ghost" id="callTeam">Gọi P khác</button>
               <button class="btn ghost" id="joinRoom">Join UID</button>
-              <button class="btn ghost" id="findGuest">Tim khach</button>
-              <button class="btn stop" id="leaveRoom">Thoat</button>
+              <button class="btn ghost" id="findGuest">Tìm khách</button>
+              <button class="btn stop"  id="leaveRoom">Thoát</button>
             </div>
           </div>
           <div class="room-status">
-            <div class="room-stat"><span>Room hien tai</span><b id="currentRoom">38122 - 4 nguoi</b></div>
-            <div class="room-stat"><span>Host / muc tieu</span><b id="roomTarget">OPP 1_298845021</b></div>
-            <div class="room-stat"><span>Kiem tra vao phong</span><b id="joinGuard">Xac nhan UID + bet</b></div>
-            <div class="room-stat"><span>Tac vu phong</span><b id="roomTask">Dang on dinh phong</b></div>
+            <div class="room-stat"><span>Room hiện tại</span><b id="currentRoom">38122 - 4 người</b></div>
+            <div class="room-stat"><span>Host / mục tiêu</span><b id="roomTarget">OPP 1_298845021</b></div>
+            <div class="room-stat"><span>Kiểm tra vào phòng</span><b id="joinGuard">Xác nhận UID + bet</b></div>
+            <div class="room-stat"><span>Tác vụ phòng</span><b id="roomTask">Đang ổn định phòng</b></div>
           </div>
         </div>
 
-        <div class="section-head"><span>Thong tin phong hien tai</span><span class="muted">Gon nhu bang phong cu de danh cho Chien thuat AUTO</span></div>
+        <div class="section-head"><span>Thông tin phòng hiện tại</span></div>
         <div class="room-table-wrap">
           <div class="profiles-table" id="profilesTable"></div>
           <div class="room-side">
-            <div class="section-head"><span>Trang thai van</span><span class="muted">hand g184</span></div>
+            <div class="section-head"><span>Trạng thái ván</span><span class="muted" id="handGen">hand g184</span></div>
             <div class="flow" id="flow"></div>
           </div>
         </div>
-
-        <div style="display:none">
-          <span id="planTag"></span>
-          <span id="roomMembers"></span>
-          <span id="strategy"></span>
-          <span id="applyOrder"></span>
-          <div id="flowHidden"></div>
-        </div>
-      </section>
-
-      <aside class="activity">
-        <div class="activity-head">
-          <div class="section-head"><span>Hoat dong</span><button class="btn ghost" id="clearLog">Xoa log</button></div>
-          <div class="activity-tabs"><button class="activity-tab on">Tool dang chon</button><button class="activity-tab">Tat ca</button><button class="activity-tab">Chi loi</button></div>
-        </div>
-        <div class="log" id="log"></div>
-      </aside>
-    </main>
-
-    <footer class="footer"><span>License: <b>Da kich hoat</b></span><span>Ho so tach biet: <b>Tool 1-4 / P1-P3</b></span><span id="clock">--:--:--</span></footer>
-  </div>
-
-  <div class="modal-backdrop" id="confirmModal">
-    <div class="confirm-box">
-      <div class="confirm-head" id="confirmTitle">Xac nhan thao tac</div>
-      <div class="confirm-body" id="confirmBody"></div>
-      <div class="confirm-actions">
-        <button class="btn ghost" id="confirmCancel">Huy</button>
-        <button class="btn danger" id="confirmOk">Dong y</button>
       </div>
+
+      <!-- Row 3b: Chiến Thuật pane — layout y hệt tab hiện tại -->
+      <div class="detail-pane" id="paneStrategy">
+
+        <!-- TOP: 2 card boxes (ĐỐI THỦ | P ACTIVE) -->
+        <div class="ct-top">
+
+          <!-- ĐỐI THỦ card box -->
+          <div class="ct-group">
+            <div class="ct-group-title">ĐỐI THỦ</div>
+            <div class="ct-group-body">
+              <div class="ct-status" id="ctNguStatus">Chờ đủ 3P để suy ĐỐI THỦ…</div>
+              <div class="ct-chi-row">
+                <span class="ct-chi-label">Chi 3</span>
+                <div id="nguChi3" class="ct-chi-cards-wrap" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;"></div>
+                <span class="ct-special" id="nguSpecial"></span>
+              </div>
+              <div class="ct-chi-row">
+                <span class="ct-chi-label">Chi 2</span>
+                <div id="nguChi2" style="display:flex;gap:4px;"></div>
+              </div>
+              <div class="ct-chi-row">
+                <span class="ct-chi-label">Chi 1</span>
+                <div id="nguChi1" style="display:flex;gap:4px;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- P ACTIVE card box -->
+          <div class="ct-group">
+            <div class="ct-group-title-row">
+              <span class="title" id="ctPTitle">P1 (ACTIVE)</span>
+              <button class="btn-retry" title="Quét lại gợi ý">⟳</button>
+            </div>
+            <div class="ct-group-body">
+              <div class="ct-status" id="ctPStatus">Chờ bài…</div>
+              <div class="ct-chi-row">
+                <span class="ct-chi-label">Chi 3</span>
+                <div id="pChi3" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;"></div>
+                <span class="ct-special" id="pSpecial"></span>
+              </div>
+              <div class="ct-chi-row">
+                <span class="ct-chi-label">Chi 2</span>
+                <div id="pChi2" style="display:flex;gap:4px;"></div>
+              </div>
+              <div class="ct-chi-row">
+                <span class="ct-chi-label">Chi 1</span>
+                <div id="pChi1" style="display:flex;gap:4px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BOTTOM: 2 suggestion lists -->
+        <div class="ct-bottom">
+
+          <!-- ĐỐI THỦ suggestion list -->
+          <div class="ct-group" style="min-height:0">
+            <div class="ct-group-title">ĐỐI THỦ</div>
+            <div class="ct-group-body">
+              <div class="ct-list-wrap">
+                <div class="ct-list" id="ctNguList"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- P ACTIVE suggestion list + actions -->
+          <div class="ct-group" style="min-height:0">
+            <div class="ct-group-title-row">
+              <span class="title">P (ACTIVE)</span>
+              <button class="btn-retry" title="Quét lại gợi ý">⟳</button>
+            </div>
+            <div class="ct-group-body">
+              <div class="ct-p-body">
+                <div class="ct-list-wrap" style="flex:1">
+                  <div class="ct-list" id="ctPList"></div>
+                </div>
+                <!-- action column -->
+                <div class="ct-p-actions">
+                  <button class="btn-xepbai" id="btnXepBai">XẾP BÀI</button>
+                  <div class="pill-row">
+                    <button class="pill on"  id="pillP1" onclick="switchProfile('P1')">P1</button>
+                    <button class="pill"     id="pillP2" onclick="switchProfile('P2')">P2</button>
+                    <button class="pill"     id="pillP3" onclick="switchProfile('P3')">P3</button>
+                  </div>
+                  <button class="btn-all">ALL</button>
+                  <button class="btn-sap-lang" id="btnSapLang">Bẻ Sập Làng (P1)</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div><!-- /paneStrategy -->
+
+    </section>
+
+    <!-- ── Activity log ── -->
+    <aside class="activity">
+      <div class="activity-head">
+        <div class="section-head"><span>Hoạt động</span><button class="btn ghost" id="clearLog">Xoá log</button></div>
+        <div class="activity-tabs">
+          <button class="activity-tab on">Tool đang chọn</button>
+          <button class="activity-tab">Tất cả</button>
+          <button class="activity-tab">Chỉ lỗi</button>
+        </div>
+      </div>
+      <div class="log" id="log"></div>
+    </aside>
+
+  </main>
+
+  <footer class="footer">
+    <span>License: <b>Đã kích hoạt</b></span>
+    <span>Hồ sơ tách biệt: <b>Tool 1-4 / P1-P3</b></span>
+    <span id="clock">--:--:--</span>
+  </footer>
+</div>
+
+<!-- ── Confirm modal ── -->
+<div class="modal-backdrop" id="confirmModal">
+  <div class="confirm-box">
+    <div class="confirm-head" id="confirmTitle">Xác nhận thao tác</div>
+    <div class="confirm-body" id="confirmBody"></div>
+    <div class="confirm-actions">
+      <button class="btn ghost"  id="confirmCancel">Huỷ</button>
+      <button class="btn danger" id="confirmOk">Đồng ý</button>
     </div>
   </div>
+</div>
 
-  <script>
-  const tools = [
-    { id: 1, running: true, kind: "Co doi thu", plan: "Toi uu doi thu 3P", remain: 996, state: "Dang xac minh", error: "Khong co", meta: "Room 38122 - Bet 100 - 4 nguoi", opp: ["nguoichoi_8842", "1_298845021", "286.400", "Danh sach phong + bai chia", "13 la - hop le", "Auto Money - diem +18"], profiles: [
-      ["P1", "ready", "Online - ket noi on dinh", "128.400", "13 la - 8 goi y", "Da xep - cho click Xong", 100],
-      ["P2", "ready", "Online - ket noi on dinh", "92.700", "13 la - 7 goi y", "Da xac minh xep bai", 100],
-      ["P3", "wait", "Online - ket noi on dinh", "347.200", "13 la - 9 goi y", "Dang xac minh xep bai", 82]
-    ]},
-    { id: 2, running: true, kind: "Ban noi bo 3P", plan: "Can vang noi bo", remain: 482, state: "Cho bai moi", error: "Khong co", meta: "Room 19408 - Bet 500 - 3 nguoi", opp: null, profiles: [
-      ["P1", "ready", "Online - ket noi on dinh", "418.300", "Cho bai moi", "Hoan tat van truoc", 100],
-      ["P2", "ready", "Online - ket noi on dinh", "73.500", "Cho bai moi", "Hoan tat van truoc", 100],
-      ["P3", "ready", "Online - ket noi on dinh", "201.900", "Cho bai moi", "Hoan tat van truoc", 100]
-    ]},
-    { id: 3, running: false, kind: "Chua xac dinh", plan: "Money doc lap", remain: 120, state: "Da tam dung", error: "Phong chua on dinh", meta: "P1/P2 cung ban - P3 rieng", opp: null, profiles: [
-      ["P1", "ready", "Online - ket noi on dinh", "55.300", "13 la - 6 goi y", "Da tam dung", 0],
-      ["P2", "ready", "Online - ket noi on dinh", "81.200", "13 la - 6 goi y", "Da tam dung", 0],
-      ["P3", "wait", "Online - cho ket noi", "39.700", "Chua co bai", "Da tam dung", 0]
-    ]},
-    { id: 4, running: true, kind: "Ban noi bo 2P", plan: "Can 2P + Money rieng", remain: 738, state: "Dang xep bai", error: "P3: loi xac minh van truoc", meta: "P1/P2 cung ban - P3 ban rieng", opp: null, profiles: [
-      ["P1", "ready", "Online - ket noi on dinh", "244.600", "13 la - 7 goi y", "Dang xep bai", 48],
-      ["P2", "ready", "Online - ket noi on dinh", "126.800", "13 la - 8 goi y", "Cho luot xep", 18],
-      ["P3", "err", "Online - ket noi on dinh", "307.100", "13 la - 8 goi y", "Money rieng - cho xep", 8]
-    ]}
-  ];
+<script>
+// ── Data ────────────────────────────────────────────────────────────────────
 
-  let selected = 1;
-  const flowSteps = ["Nhan du bai", "Tinh goi y P1-P3 / OPP", "Phan loai ban choi", "Chon ke hoach AUTO", "Xep bai tung profile", "Xac minh xep bai", "Click Xong / Bao binh"];
-  const logs = {
-    1: [["ok","12:18:31","P2","Da xac minh xep bai, chuan bi click Xong."],["warn","12:18:30","P3","Dang cho xac minh xep bai moi nhat."],["ok","12:18:28","P1","Xep bai hoan tat, bo cuc khop muc tieu."],["","12:18:21","AUTO","Chon doi thu #1, toi uu 3P, diem +18."],["","12:18:18","PHONG","Co doi thu - P1,P2,P3 cung ban - 1 khach ngoai"],["ok","12:18:14","BAI","Da nhan du bai P1-P3 va suy ra doi thu."]],
-    2: [["","12:17:55","AUTO","Da hoan tat van, con 482 van."],["ok","12:17:54","P1-P3","Da click Xong toan bo profile."],["","12:17:43","AUTO","Can vang noi bo: P2 < P3 < P1."]],
-    3: [["warn","12:16:10","AUTO","Da tam dung theo thao tac nguoi dung."],["warn","12:16:05","PHONG","Phong chua on dinh, dung Money doc lap."]],
-    4: [["warn","12:18:27","P3","Money ban rieng, cho xep."],["","12:18:25","P1","Dang xep bai theo can vang noi bo."],["err","12:17:02","P3","Khong xac minh duoc xep bai, he thong da chan click Xong."],["","12:16:48","PHONG","Ban noi bo 2P: P1,P2 cung ban; P3 chay Money rieng."]]
-  };
+const tools = [
+  { id:1, running:true,  kind:"Có đối thủ",    plan:"Tối ưu đối thủ 3P",   remain:996, state:"Đang xác minh",  error:"Không có",                   meta:"Room 38122 - Bet 100 - 4 người",
+    opp:["nguoichoi_8842","1_298845021","286.400","Danh sách phòng + bài chia","13 lá - hợp lệ","Auto Money - điểm +18"],
+    profiles:[["P1","ready","Online - kết nối ổn định","128.400","13 lá - 8 gợi ý","Đã xếp - chờ click Xong",100],
+              ["P2","ready","Online - kết nối ổn định","92.700","13 lá - 7 gợi ý","Đã xác minh xếp bài",100],
+              ["P3","wait","Online - kết nối ổn định","347.200","13 lá - 9 gợi ý","Đang xác minh xếp bài",82]] },
+  { id:2, running:true,  kind:"Bàn nội bộ 3P", plan:"Cân vàng nội bộ",      remain:482, state:"Chờ bài mới",    error:"Không có",                   meta:"Room 19408 - Bet 500 - 3 người",
+    opp:null,
+    profiles:[["P1","ready","Online - kết nối ổn định","418.300","Chờ bài mới","Hoàn tất ván trước",100],
+              ["P2","ready","Online - kết nối ổn định","73.500","Chờ bài mới","Hoàn tất ván trước",100],
+              ["P3","ready","Online - kết nối ổn định","201.900","Chờ bài mới","Hoàn tất ván trước",100]] },
+  { id:3, running:false, kind:"Chưa xác định",  plan:"Money độc lập",         remain:120, state:"Đã tạm dừng",   error:"Phòng chưa ổn định",         meta:"P1/P2 cùng bàn - P3 riêng",
+    opp:null,
+    profiles:[["P1","ready","Online - kết nối ổn định","55.300","13 lá - 6 gợi ý","Đã tạm dừng",0],
+              ["P2","ready","Online - kết nối ổn định","81.200","13 lá - 6 gợi ý","Đã tạm dừng",0],
+              ["P3","wait","Online - chờ kết nối","39.700","Chưa có bài","Đã tạm dừng",0]] },
+  { id:4, running:true,  kind:"Bàn nội bộ 2P", plan:"Cân 2P + Money riêng",  remain:738, state:"Đang xếp bài",  error:"P3: lỗi xác minh ván trước", meta:"P1/P2 cùng bàn - P3 bàn riêng",
+    opp:null,
+    profiles:[["P1","ready","Online - kết nối ổn định","244.600","13 lá - 7 gợi ý","Đang xếp bài",48],
+              ["P2","ready","Online - kết nối ổn định","126.800","13 lá - 8 gợi ý","Chờ lượt xếp",18],
+              ["P3","err","Online - kết nối ổn định","307.100","13 lá - 8 gợi ý","Money riêng - chờ xếp",8]] },
+];
 
-  function renderTools() {
-    document.getElementById("toolList").innerHTML = tools.map(t => `
-      <button class="tool ${t.running ? "running" : ""} ${selected === t.id ? "active" : ""}" data-tool="${t.id}">
-        <div class="tool-top"><div class="tool-title"><span class="dot ${t.running ? "run" : ""}"></span>Tool ${t.id}</div><span class="switch"></span></div>
-        <div class="tool-meta">${t.meta}</div>
-        <div class="mini-profiles">${t.profiles.map(p => `<span class="mini-p">${p[0]}<i class="${p[1] === "err" ? "err" : p[1] === "wait" ? "wait" : ""}"></i></span>`).join("")}</div>
-      </button>`).join("");
-    document.querySelectorAll(".tool").forEach(el => el.onclick = () => { selected = +el.dataset.tool; render(); });
-    document.getElementById("runningCount").textContent = `${tools.filter(t => t.running).length}/4`;
+// strategy data per tool — per-profile, y hệt dữ liệu thực
+const stratData = {
+  1: { // external_opp
+    ngu: {
+      status: "Suy ĐỐI THỦ từ bài dư — 1_298845021",
+      chi3: [["As","b"],["Kd","r"],["Qh","r"]], special3: "Đôi",
+      chi2: [["Jh","r"],["Th","r"],["9c","b"],["7c","b"],["5d","r"]],
+      chi1: [["Ah","r"],["Kc","b"],["Qd","r"],["Jd","r"],["Tc","b"]],
+    },
+    profiles: {
+      P1: {
+        status: "13 lá — 8 gợi ý — đã chọn #1",
+        chi3: [["Qc","b"],["Qd","r"],["2h","r"]], special3: "Đôi",
+        chi2: [["9h","r"],["8d","r"],["7c","b"],["6h","r"],["5s","b"]],
+        chi1: [["As","b"],["Ks","b"],["Ts","b"],["8s","b"],["3s","b"]], special1: "Thùng",
+        suggestions: [
+          { score:"+7", combo:"Thùng / Sảnh / Đôi", c1:"As Ks Ts 8s 3s", c2:"9h 8d 7c 6h 5s", c3:"Qc Qd 2h" },
+          { score:"+5", combo:"Thùng / Đôi đôi / Đôi", c1:"As Ks Ts 8s 3s", c2:"Qc Qd 9h 8d 3d", c3:"7c 6h 5s" },
+          { score:"+3", combo:"Sảnh / Thùng / Cao", c1:"9h 8d 7c 6h 5s", c2:"As Ks Ts 8s 3s", c3:"Qc Qd 2h" },
+        ]
+      },
+      P2: {
+        status: "13 lá — 7 gợi ý — đã chọn #1",
+        chi3: [["Kh","r"],["Jd","r"],["4s","b"]], special3: "Cao",
+        chi2: [["9c","b"],["7c","b"],["5c","b"],["3c","b"],["2c","b"]],
+        chi1: [["Ah","r"],["Kd","r"],["Qc","b"],["Jh","r"],["Th","r"]], special1: "Sảnh",
+        suggestions: [
+          { score:"+8", combo:"Sảnh / Thùng / Cao", c1:"Ah Kd Qc Jh Th", c2:"9c 7c 5c 3c 2c", c3:"Kh Jd 4s" },
+          { score:"+6", combo:"Thùng / Sảnh / Cao", c1:"9c 7c 5c 3c 2c", c2:"Ah Kd Qc Jh Th", c3:"Kh Jd 4s" },
+        ]
+      },
+      P3: {
+        status: "13 lá — 9 gợi ý — đang xác minh",
+        chi3: [["Td","r"],["7s","b"],["4d","r"]], special3: "Cao",
+        chi2: [["Qh","r"],["Qs","b"],["Jd","r"],["8c","b"],["6h","r"]],
+        chi1: [["Ad","r"],["Ac","b"],["Kh","r"],["Kc","b"],["2d","r"]], special1: "Đôi đôi",
+        suggestions: [
+          { score:"+3", combo:"Đôi đôi / Đôi / Cao", c1:"Ad Ac Kh Kc 2d", c2:"Qh Qs Jd 8c 6h", c3:"Td 7s 4d" },
+          { score:"+1", combo:"Đôi / Cao / Cao", c1:"Ad Kh Qh Jd 2d", c2:"Ac Qs 8c 6h 4d", c3:"Kc Td 7s" },
+        ]
+      }
+    },
+    nguSuggestions: [
+      { score:"Đánh giá", combo:"Sảnh / Thùng / Đôi", c1:"Ah Kc Qd Jd Tc", c2:"Jh Th 9c 7c 5d", c3:"As Kd Qh" },
+      { score:"Đánh giá", combo:"Đôi / Thùng / Cao",  c1:"Ah Kc Qd Jd 9c", c2:"Jh Th 7c 5d Tc", c3:"As Kd Qh" },
+    ]
+  },
+  2: { // internal_3p — chờ bài mới, chưa có gợi ý
+    ngu: { status: "Bàn nội bộ — không suy ĐỐI THỦ", chi3:[], chi2:[], chi1:[], special3:"" },
+    profiles: {
+      P1: { status:"Chờ bài mới…", chi3:[], chi2:[], chi1:[], suggestions:[] },
+      P2: { status:"Chờ bài mới…", chi3:[], chi2:[], chi1:[], suggestions:[] },
+      P3: { status:"Chờ bài mới…", chi3:[], chi2:[], chi1:[], suggestions:[] },
+    },
+    nguSuggestions: []
+  },
+  3: { // unknown — tạm dừng
+    ngu: { status:"AUTO đã tạm dừng — không suy ĐỐI THỦ", chi3:[], chi2:[], chi1:[], special3:"" },
+    profiles: {
+      P1: { status:"AUTO đã tạm dừng", chi3:[], chi2:[], chi1:[], suggestions:[] },
+      P2: { status:"AUTO đã tạm dừng", chi3:[], chi2:[], chi1:[], suggestions:[] },
+      P3: { status:"Chờ kết nối…",     chi3:[], chi2:[], chi1:[], suggestions:[] },
+    },
+    nguSuggestions: []
+  },
+  4: { // internal_2p sập hầm
+    ngu: { status:"Bàn nội bộ 2P — không suy ĐỐI THỦ", chi3:[], chi2:[], chi1:[], special3:"" },
+    profiles: {
+      P1: {
+        status: "13 lá — 7 gợi ý — P_max (sập hầm)",
+        chi3: [["Qd","r"],["Td","r"],["3s","b"]], special3: "Cao",
+        chi2: [["8h","r"],["8c","b"],["6d","r"],["4h","r"],["2c","b"]],
+        chi1: [["Kd","r"],["Jh","r"],["9c","b"],["7s","b"],["5d","r"]],
+        suggestions: [
+          { score:"−3/3", combo:"Cao / Đôi / Cao  [sập hầm P2]", c1:"Kd Jh 9c 7s 5d", c2:"8h 8c 6d 4h 2c", c3:"Qd Td 3s" },
+          { score:"+2",   combo:"Đôi / Đôi / Cao  [bình thường]", c1:"8h 8c Kd Jh 5d", c2:"9c 7s 6d 4h 2c", c3:"Qd Td 3s" },
+        ]
+      },
+      P2: {
+        status: "13 lá — 5 gợi ý — P_min (thắng)",
+        chi3: [["Ts","b"],["Tc","b"],["6d","r"]], special3: "Đôi",
+        chi2: [["Js","b"],["9s","b"],["7s","b"],["5s","b"],["3s","b"]],
+        chi1: [["Ah","r"],["Ad","r"],["Ac","b"],["Ks","b"],["Qh","r"]], special1: "Xám bua",
+        suggestions: [
+          { score:"+3/3 ×2", combo:"Xám bua / Thùng / Đôi  [nhận sập hầm]", c1:"Ah Ad Ac Ks Qh", c2:"Js 9s 7s 5s 3s", c3:"Ts Tc 6d" },
+          { score:"+6",      combo:"Xám bua / Đôi / Cao  [bình thường]",    c1:"Ah Ad Ac Ks Qh", c2:"Js Tc 9s 6d 3s", c3:"Ts 7s 5s" },
+        ]
+      },
+      P3: {
+        status: "13 lá — 8 gợi ý — Money độc lập",
+        chi3: [["9h","r"],["7d","r"],["2c","b"]], special3: "Cao",
+        chi2: [["As","b"],["Kc","b"],["Td","r"],["8s","b"],["6c","b"]],
+        chi1: [["Qc","b"],["Qd","r"],["Jh","r"],["Jd","r"],["4s","b"]], special1: "Đôi đôi",
+        suggestions: [
+          { score:"+2", combo:"Đôi đôi / Cao / Cao", c1:"Qc Qd Jh Jd 4s", c2:"As Kc Td 8s 6c", c3:"9h 7d 2c" },
+          { score:"+1", combo:"Đôi / Đôi / Cao",     c1:"Qc Qd As Kc 4s", c2:"Jh Jd Td 8s 6c", c3:"9h 7d 2c" },
+        ]
+      }
+    },
+    nguSuggestions: []
+  }
+};
+
+let selected = 1;
+let activeProfile = "P1";
+let activeInnerTab = "overview";
+
+const flowSteps = ["Nhận đủ bài","Tính gợi ý P1-P3 / OPP","Phân loại bàn chơi","Chọn kế hoạch AUTO","Xếp bài từng profile","Xác minh xếp bài","Click Xong / Báo bình"];
+const logs = {
+  1:[["ok","12:18:31","P2","Đã xác minh xếp bài, chuẩn bị click Xong."],["warn","12:18:30","P3","Đang chờ xác minh xếp bài mới nhất."],["ok","12:18:28","P1","Xếp bài hoàn tất, bố cục khớp mục tiêu."],["","12:18:21","AUTO","Chọn đối thủ #1, tối ưu 3P, điểm +18."],["","12:18:18","PHÒNG","Có đối thủ - P1,P2,P3 cùng bàn - 1 khách ngoài"],["ok","12:18:14","BÀI","Đã nhận đủ bài P1-P3 và suy ra đối thủ."]],
+  2:[["","12:17:55","AUTO","Đã hoàn tất ván, còn 482 ván."],["ok","12:17:54","P1-P3","Đã click Xong toàn bộ profile."],["","12:17:43","AUTO","Cân vàng nội bộ: P2 < P3 < P1."]],
+  3:[["warn","12:16:10","AUTO","Đã tạm dừng theo thao tác người dùng."],["warn","12:16:05","PHÒNG","Phòng chưa ổn định, dùng Money độc lập."]],
+  4:[["warn","12:18:27","P3","Money bàn riêng, chờ xếp."],["","12:18:25","P1","Đang xếp bài theo sập hầm 2P."],["err","12:17:02","P3","Không xác minh được xếp bài, hệ thống đã chặn click Xong."],["","12:16:48","PHÒNG","Bàn nội bộ 2P: P1,P2 cùng bàn; P3 chạy Money riêng."]]
+};
+
+// ── Card rendering ─────────────────────────────────────────────────────────
+
+const SUIT_CHAR = { s:"♠", h:"♥", d:"♦", c:"♣" };
+function cardHtml(code, suitClass) {
+  const rank = code.slice(0, -1);
+  const suit = code.slice(-1).toLowerCase();
+  const sc = (suit === "h" || suit === "d") ? "r" : "b";
+  return `<div class="card-box ${sc}"><span class="rank">${rank}</span><span class="suit">${SUIT_CHAR[suit]||suit}</span></div>`;
+}
+function emptyCard() {
+  return `<div class="card-box empty"></div>`;
+}
+function renderChiCards(containerId, cards, n) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  let html = "";
+  for (let i = 0; i < n; i++) {
+    if (cards && i < cards.length) html += cardHtml(cards[i][0], cards[i][1]);
+    else html += emptyCard();
+  }
+  el.innerHTML = html;
+}
+
+// ── Suggestion item rendering ─────────────────────────────────────────────
+
+function colorCards(line) {
+  return line.replace(/\b([2-9TJQKA][shdc])\b/g, m => {
+    const suit = m.slice(-1);
+    const cls = (suit==="h"||suit==="d") ? "h" : "c";
+    return `<span class="${cls}">${m}</span>`;
+  });
+}
+function suggestionHtml(s, idx, selectedIdx) {
+  const sel = idx === selectedIdx ? " selected" : "";
+  return `<div class="ct-item${sel}" onclick="selectSuggestion(${idx})">
+    <span class="score">${s.score}</span>
+    <span class="combo"> — ${s.combo}</span><br>
+    <span class="cards-line">${colorCards(s.c1)} │ ${colorCards(s.c2)} │ ${colorCards(s.c3)}</span>
+  </div>`;
+}
+function nguSuggestionHtml(s, idx) {
+  return `<div class="ct-item${idx===0?" selected":""}" onclick="">
+    <span class="score">${s.score}</span>
+    <span class="combo"> — ${s.combo}</span><br>
+    <span class="cards-line">${colorCards(s.c1)} │ ${colorCards(s.c2)} │ ${colorCards(s.c3)}</span>
+  </div>`;
+}
+
+let selectedSuggestionIdx = 0;
+function selectSuggestion(idx) {
+  selectedSuggestionIdx = idx;
+  renderStrategyPane();
+}
+
+// ── Render Chiến Thuật pane ───────────────────────────────────────────────
+
+function renderStrategyPane() {
+  const sd = stratData[selected];
+  if (!sd) return;
+
+  const pd = sd.profiles[activeProfile] || sd.profiles["P1"];
+
+  // Status labels
+  document.getElementById("ctNguStatus").textContent = sd.ngu.status;
+  document.getElementById("ctPStatus").textContent = pd.status;
+  document.getElementById("ctPTitle").textContent = `${activeProfile} (ACTIVE)`;
+
+  // NGU cards
+  renderChiCards("nguChi3", sd.ngu.chi3, 3);
+  renderChiCards("nguChi2", sd.ngu.chi2, 5);
+  renderChiCards("nguChi1", sd.ngu.chi1, 5);
+  document.getElementById("nguSpecial").textContent = sd.ngu.special3 || "";
+
+  // P ACTIVE cards
+  renderChiCards("pChi3", pd.chi3, 3);
+  renderChiCards("pChi2", pd.chi2, 5);
+  renderChiCards("pChi1", pd.chi1, 5);
+  document.getElementById("pSpecial").textContent = pd.special1 || pd.special3 || "";
+
+  // NGU suggestions
+  const nguList = document.getElementById("ctNguList");
+  nguList.innerHTML = sd.nguSuggestions.length
+    ? sd.nguSuggestions.map((s,i) => nguSuggestionHtml(s,i)).join("")
+    : `<div style="color:var(--muted);padding:8px;font-size:11px">${sd.ngu.chi1.length ? "Chọn một gợi ý…" : "Chưa có bài đối thủ"}</div>`;
+
+  // P suggestions
+  const pList = document.getElementById("ctPList");
+  if (!pd.suggestions || pd.suggestions.length === 0) {
+    pList.innerHTML = `<div style="color:var(--muted);padding:8px;font-size:11px">Chưa có bài / đang chờ…</div>`;
+  } else {
+    if (selectedSuggestionIdx >= pd.suggestions.length) selectedSuggestionIdx = 0;
+    pList.innerHTML = pd.suggestions.map((s,i) => suggestionHtml(s, i, selectedSuggestionIdx)).join("");
   }
 
-  function renderProfiles(t) {
-    const names = { P1: "Profile 1", P2: "Profile 2", P3: "Profile 3" };
-    const uids = { P1: "43_819818", P2: "1_276568235", P3: "1_285364925" };
-    const oppRow = Array.isArray(t.opp) ? `<div class="p-row opp">
-        <div class="pid"><span class="dot run"></span>${t.opp[0]}</div>
-        <div><b>${t.opp[2]}</b></div>
-        <div class="state"><strong>${t.opp[1]}</strong><small>${t.opp[3]}</small></div>
-        <div><span class="tag green">OPP</span></div>
-        <div>${t.opp[5]}</div>
-      </div>` : `<div class="p-row opp">
-        <div class="pid"><span class="dot ${t.kind === "Chua xac dinh" ? "wait" : ""}"></span>${t.kind === "Chua xac dinh" ? "Chua ro OPP" : "Khong co OPP"}</div>
-        <div><b>-</b></div>
-        <div class="state"><strong>${t.kind === "Chua xac dinh" ? "Phong chua on dinh" : "Ban noi bo"}</strong><small>${t.kind === "Chua xac dinh" ? "Dang cho lam moi phong" : "Chi gom profile kiem soat"}</small></div>
-        <div><span class="tag ${t.kind === "Chua xac dinh" ? "amber" : ""}">${t.kind === "Chua xac dinh" ? "Cho" : "Noi bo"}</span></div>
-        <div>Khong dung benchmark OPP</div>
-      </div>`;
-    document.getElementById("profilesTable").innerHTML = `
-      <div class="p-row header"><div>Ten</div><div>Vang</div><div>UID / nguon</div><div>Vai tro</div><div>Trang thai</div></div>
-      ${t.profiles.map(p => `<div class="p-row">
-        <div class="pid"><span class="dot ${p[1] === "err" ? "err" : p[1] === "wait" ? "wait" : "run"}"></span>${names[p[0]]} (${p[0]})</div>
-        <div><b>${p[3]}</b></div>
-        <div class="state"><strong>${uids[p[0]]}</strong><small>${p[2]}</small></div>
-        <div><span class="tag ${p[1] === "err" ? "red" : p[1] === "wait" ? "amber" : "green"}">3P</span></div>
-        <div>${p[4]} - ${p[5]}</div>
-      </div>`).join("")}${oppRow}`;
-  }
+  // XẾP BÀI enable/disable
+  const hasCards = pd.chi1 && pd.chi1.length > 0;
+  document.getElementById("btnXepBai").disabled = !hasCards;
 
-  function renderFlow(t) {
-    let now = t.state.includes("xac minh") ? 5 : t.state.includes("xep") ? 4 : t.state.includes("Cho bai") ? 0 : 3;
-    document.getElementById("flow").innerHTML = flowSteps.map((s,i) => `<div class="flow-step ${i < now ? "done" : i === now ? "now" : ""}"><i>${i < now ? "ok" : i + 1}</i><span>${s}</span><small>${i < now ? "xong" : i === now ? "dang chay" : ""}</small></div>`).join("");
-  }
+  // Bẻ Sập Làng: hiện với tool 4
+  document.getElementById("btnSapLang").style.display = (selected === 4) ? "block" : "none";
+}
 
-  function renderLog() {
-    document.getElementById("log").innerHTML = (logs[selected] || []).map(l => `<div class="log-entry ${l[0]}"><span class="time">${l[1]}</span><b>${l[2]}</b><br>${l[3]}</div>`).join("");
-  }
+function switchProfile(pid) {
+  activeProfile = pid;
+  selectedSuggestionIdx = 0;
+  ["P1","P2","P3"].forEach(p => {
+    document.getElementById("pill"+p).classList.toggle("on", p === pid);
+  });
+  renderStrategyPane();
+}
 
-  function renderDetail() {
-    const t = tools[selected - 1];
-    document.getElementById("detailName").textContent = `Tool ${t.id}`;
-    document.getElementById("detailStatus").textContent = t.running ? "AUTO dang chay" : "AUTO da tam dung";
-    document.getElementById("detailStatus").className = `status-badge ${t.running ? "" : "off"}`;
-    document.getElementById("detailDot").className = `dot ${t.running ? "run" : ""}`;
-    document.getElementById("detailSub").textContent = `He thong san sang - 3 ho so trinh duyet - Tool ${t.id}`;
-    document.getElementById("roomKind").textContent = t.kind;
-    document.getElementById("planKind").textContent = t.plan;
-    document.getElementById("remain").textContent = `${t.remain} / ${document.getElementById("rounds").value || 999}`;
-    document.getElementById("roundState").textContent = t.state;
-    document.getElementById("lastError").textContent = t.error;
-    document.getElementById("currentRoom").textContent = t.meta.includes("Room") ? t.meta : "Chua co dinh";
-    document.getElementById("roomTarget").textContent = Array.isArray(t.opp) ? `OPP ${t.opp[1]}` : t.kind === "Ban noi bo 3P" ? "Ban noi bo 3P" : t.kind === "Ban noi bo 2P" ? "P1/P2 cung ban - P3 rieng" : "Dang cho xac nhan";
-    document.getElementById("joinGuard").textContent = t.kind === "Chua xac dinh" ? "Can lam moi phong" : "Xac nhan UID + bet";
-    document.getElementById("roomTask").textContent = t.running ? (t.kind === "Co doi thu" ? "Giu ban co OPP" : "Theo doi ban noi bo") : "Da dung";
-    document.getElementById("toggleSelected").textContent = t.running ? "Tam dung" : "Tiep tuc";
-    document.getElementById("toggleSelected").className = `btn ${t.running ? "stop" : "start"}`;
-    const hasOpp = t.kind === "Co doi thu";
-    document.getElementById("roomMembers").textContent = hasOpp ? "P1, P2, P3 + 1 doi thu" : t.kind === "Ban noi bo 3P" ? "P1, P2, P3 cung ban" : t.kind === "Ban noi bo 2P" ? "P1, P2 cung ban - P3 ban rieng" : "Phong chua on dinh";
-    document.getElementById("strategy").textContent = hasOpp ? "Danh theo Auto Money OPP, toi uu dong thoi 3 profile" : t.plan;
-    document.getElementById("applyOrder").textContent = t.kind === "Ban noi bo 2P" ? "P1/P2 theo nhom - P3 doc lap" : "P2 -> P1 -> P3, delay doc lap";
-    document.getElementById("planTag").textContent = hasOpp ? "doi thu - diem +18" : t.kind;
-    renderProfiles(t); renderFlow(t); renderLog();
-  }
+// ── Render overview pane ──────────────────────────────────────────────────
 
-  function addLog(toolId, type, source, message) {
-    const d = new Date(); const tm = d.toLocaleTimeString("vi-VN", {hour12:false});
-    logs[toolId].unshift([type, tm, source, message]);
-  }
+function renderProfiles(t) {
+  const names = {P1:"Profile 1",P2:"Profile 2",P3:"Profile 3"};
+  const uids  = {P1:"43_819818",P2:"1_276568235",P3:"1_285364925"};
+  const oppRow = Array.isArray(t.opp)
+    ? `<div class="p-row opp"><div class="pid"><span class="dot run"></span>${t.opp[0]}</div><div><b>${t.opp[2]}</b></div><div class="state"><strong>${t.opp[1]}</strong><small>${t.opp[3]}</small></div><div><span class="tag green">OPP</span></div><div>${t.opp[5]}</div></div>`
+    : `<div class="p-row opp"><div class="pid"><span class="dot ${t.kind==="Chưa xác định"?"wait":""}"></span>${t.kind==="Chưa xác định"?"Chưa rõ OPP":"Không có OPP"}</div><div><b>-</b></div><div class="state"><strong>${t.kind==="Chưa xác định"?"Phòng chưa ổn định":"Bàn nội bộ"}</strong><small>${t.kind==="Chưa xác định"?"Đang chờ làm mới phòng":"Chỉ gồm profile kiểm soát"}</small></div><div><span class="tag ${t.kind==="Chưa xác định"?"amber":""}">${t.kind==="Chưa xác định"?"Chờ":"Nội bộ"}</span></div><div>Không dùng benchmark OPP</div></div>`;
+  document.getElementById("profilesTable").innerHTML =
+    `<div class="p-row header"><div>Tên</div><div>Vàng</div><div>UID / nguồn</div><div>Vai trò</div><div>Trạng thái</div></div>`
+    + t.profiles.map(p =>
+      `<div class="p-row"><div class="pid"><span class="dot ${p[1]==="err"?"err":p[1]==="wait"?"wait":"run"}"></span>${names[p[0]]} (${p[0]})</div><div><b>${p[3]}</b></div><div class="state"><strong>${uids[p[0]]}</strong><small>${p[2]}</small></div><div><span class="tag ${p[1]==="err"?"red":p[1]==="wait"?"amber":"green"}">3P</span></div><div>${p[4]} - ${p[5]}</div></div>`
+    ).join("") + oppRow;
+}
 
-  function setAll(value) {
-    tools.forEach(t => { t.running = value; t.state = value ? "Cho bai / goi y" : "Da tam dung"; addLog(t.id, value ? "ok" : "warn", "AUTO", value ? "Da bat AUTO tu dieu khien tong." : "Da dung AUTO tu dieu khien tong."); });
+function renderFlow(t) {
+  let now = t.state.includes("xác minh") ? 5 : t.state.includes("xếp") ? 4 : t.state.includes("Chờ bài") ? 0 : 3;
+  document.getElementById("flow").innerHTML = flowSteps.map((s,i) =>
+    `<div class="flow-step ${i<now?"done":i===now?"now":""}"><i>${i<now?"✓":i+1}</i><span>${s}</span><small>${i<now?"xong":i===now?"đang chạy":""}</small></div>`
+  ).join("");
+  document.getElementById("handGen").textContent = t.running ? "hand g184" : "—";
+}
+
+function renderDetail() {
+  const t = tools[selected - 1];
+  document.getElementById("detailName").textContent = `Tool ${t.id}`;
+  document.getElementById("detailStatus").textContent = t.running ? "AUTO đang chạy" : "AUTO đã tạm dừng";
+  document.getElementById("detailStatus").className = `status-badge ${t.running ? "" : "off"}`;
+  document.getElementById("detailDot").className = `dot ${t.running ? "run" : ""}`;
+  document.getElementById("detailSub").textContent = `Hệ thống sẵn sàng - 3 hồ sơ trình duyệt - Tool ${t.id}`;
+  document.getElementById("roomKind").textContent = t.kind;
+  document.getElementById("planKind").textContent = t.plan;
+  document.getElementById("remain").textContent = `${t.remain} / ${document.getElementById("rounds").value || 999}`;
+  document.getElementById("roundState").textContent = t.state;
+  document.getElementById("lastError").textContent = t.error;
+  document.getElementById("currentRoom").textContent = t.meta.includes("Room") ? t.meta : "Chưa có định";
+  document.getElementById("roomTarget").textContent = Array.isArray(t.opp) ? `OPP ${t.opp[1]}` : t.kind === "Bàn nội bộ 3P" ? "Bàn nội bộ 3P" : t.kind === "Bàn nội bộ 2P" ? "P1/P2 cùng bàn - P3 riêng" : "Đang chờ xác nhận";
+  document.getElementById("joinGuard").textContent = t.kind === "Chưa xác định" ? "Cần làm mới phòng" : "Xác nhận UID + bet";
+  document.getElementById("roomTask").textContent = t.running ? (t.kind === "Có đối thủ" ? "Giữ bàn có OPP" : "Theo dõi bàn nội bộ") : "Đã dừng";
+  document.getElementById("toggleSelected").textContent = t.running ? "Tạm dừng" : "Tiếp tục";
+  document.getElementById("toggleSelected").className = `btn ${t.running ? "stop" : "start"}`;
+  renderProfiles(t);
+  renderFlow(t);
+  renderLog();
+  if (activeInnerTab === "strategy") renderStrategyPane();
+}
+
+// ── Tool sidebar ──────────────────────────────────────────────────────────
+
+function renderTools() {
+  document.getElementById("toolList").innerHTML = tools.map(t => `
+    <button class="tool ${t.running?"running":""} ${selected===t.id?"active":""}" data-tool="${t.id}">
+      <div class="tool-top"><div class="tool-title"><span class="dot ${t.running?"run":""}"></span>Tool ${t.id}</div><span class="switch"></span></div>
+      <div class="tool-meta">${t.meta}</div>
+      <div class="mini-profiles">${t.profiles.map(p=>`<span class="mini-p">${p[0]}<i class="${p[1]==="err"?"err":p[1]==="wait"?"wait":""}"></i></span>`).join("")}</div>
+    </button>`).join("");
+  document.querySelectorAll(".tool").forEach(el => el.onclick = () => {
+    selected = +el.dataset.tool;
+    selectedSuggestionIdx = 0;
+    activeProfile = "P1";
+    ["P1","P2","P3"].forEach(p => document.getElementById("pill"+p).classList.toggle("on", p==="P1"));
     render();
-  }
+  });
+  document.getElementById("runningCount").textContent = `${tools.filter(t=>t.running).length}/4`;
+}
 
-  function confirmAction(title, body, okClass, onOk) {
-    const modal = document.getElementById("confirmModal");
-    const ok = document.getElementById("confirmOk");
-    const cancel = document.getElementById("confirmCancel");
-    document.getElementById("confirmTitle").textContent = title;
-    document.getElementById("confirmBody").innerHTML = body;
-    ok.className = `btn ${okClass || "danger"}`;
-    modal.classList.add("show");
-    const cleanup = () => { modal.classList.remove("show"); ok.onclick = null; cancel.onclick = null; };
-    cancel.onclick = cleanup;
-    ok.onclick = () => { cleanup(); if (typeof onOk === "function") onOk(); };
-  }
+// ── Log ──────────────────────────────────────────────────────────────────
 
-  function render() { renderTools(); renderDetail(); }
+function renderLog() {
+  document.getElementById("log").innerHTML = (logs[selected]||[]).map(l =>
+    `<div class="log-entry ${l[0]}"><span class="time">${l[1]}</span><b>${l[2]}</b><br>${l[3]}</div>`
+  ).join("");
+}
 
-  document.getElementById("startAll").onclick = () => setAll(true);
-  document.getElementById("stopAll").onclick = () => setAll(false);
-  document.getElementById("toggleSelected").onclick = () => {
-    const t = tools[selected - 1]; t.running = !t.running; t.state = t.running ? "Cho bai / goi y" : "Da tam dung";
-    addLog(t.id, t.running ? "ok" : "warn", "AUTO", t.running ? "Da tiep tuc AUTO." : "Da tam dung AUTO."); render();
-  };
-  document.getElementById("clearLog").onclick = () => { logs[selected] = []; renderLog(); };
-  document.getElementById("createRoom").onclick = () => { addLog(selected, "ok", "PHONG", `Tao phong bet ${document.getElementById("roomBet").value} cho Tool ${selected}.`); renderLog(); };
-  document.getElementById("callTeam").onclick = () => { addLog(selected, "ok", "PHONG", "Goi P con lai vao cung phong theo UID host."); renderLog(); };
-  document.getElementById("joinRoom").onclick = () => { addLog(selected, "", "PHONG", `Join theo UID ${document.getElementById("targetUid").value}.`); renderLog(); };
-  document.getElementById("findGuest").onclick = () => { addLog(selected, "warn", "PHONG", "Bat dau tim khach, AUTO se cho phong co OPP."); renderLog(); };
-  document.getElementById("leaveRoom").onclick = () => { addLog(selected, "warn", "PHONG", "Thoat phong cho cac P da chon."); renderLog(); };
-  document.getElementById("openBrowsers").onclick = () => { addLog(selected, "ok", "TRINH DUYET", `Mo 3 trinh duyet cho Tool ${selected}: P1/P2/P3.`); renderLog(); };
-  document.getElementById("reconnectAll").onclick = () => confirmAction("Ket noi lai ALL", `<b>Tool ${selected}</b> se ket noi lai toan bo P1/P2/P3. AUTO hien tai se giu nguyen trang thai.`, "blue", () => { addLog(selected, "ok", "HE THONG", "Da ket noi lai ALL P1/P2/P3."); renderLog(); });
-  document.getElementById("resetProxyAll").onclick = () => confirmAction("Reset Proxy ALL", `<b>Tool ${selected}</b> se reset proxy cho P1/P2/P3. Co the can mo lai trinh duyet sau khi doi IP.`, "amber", () => { addLog(selected, "warn", "PROXY", "Da gui yeu cau Reset Proxy ALL P1/P2/P3."); renderLog(); });
-  document.getElementById("clearProfilesAll").onclick = () => confirmAction("Xoa ALL Profile", `<b>Thao tac nguy hiem.</b><br>Tool ${selected} se xoa ho so trinh duyet cua P1/P2/P3. Trinh duyet can dong truoc khi xoa.`, "danger", () => { addLog(selected, "err", "PROFILE", "Da xac nhan Xoa ALL Profile P1/P2/P3."); renderLog(); });
-  document.getElementById("rounds").onchange = renderDetail;
-  setInterval(() => document.getElementById("clock").textContent = new Date().toLocaleTimeString("vi-VN", {hour12:false}), 1000);
+function addLog(toolId, type, source, message) {
+  const tm = new Date().toLocaleTimeString("vi-VN",{hour12:false});
+  logs[toolId].unshift([type, tm, source, message]);
+}
+
+// ── Inner tab switch ──────────────────────────────────────────────────────
+
+document.getElementById("tabOverview").onclick = () => {
+  activeInnerTab = "overview";
+  document.getElementById("tabOverview").classList.add("on");
+  document.getElementById("tabStrategy").classList.remove("on");
+  document.getElementById("paneOverview").classList.add("show");
+  document.getElementById("paneStrategy").classList.remove("show");
+};
+document.getElementById("tabStrategy").onclick = () => {
+  activeInnerTab = "strategy";
+  document.getElementById("tabStrategy").classList.add("on");
+  document.getElementById("tabOverview").classList.remove("on");
+  document.getElementById("paneStrategy").classList.add("show");
+  document.getElementById("paneOverview").classList.remove("show");
+  renderStrategyPane();
+};
+
+// ── Global controls ───────────────────────────────────────────────────────
+
+function setAll(value) {
+  tools.forEach(t => { t.running = value; t.state = value ? "Chờ bài / gợi ý" : "Đã tạm dừng"; addLog(t.id, value?"ok":"warn","AUTO", value?"Đã bật AUTO từ điều khiển tổng.":"Đã dừng AUTO từ điều khiển tổng."); });
   render();
+}
+function confirmAction(title, body, okClass, onOk) {
+  const modal = document.getElementById("confirmModal");
+  const ok = document.getElementById("confirmOk");
+  const cancel = document.getElementById("confirmCancel");
+  document.getElementById("confirmTitle").textContent = title;
+  document.getElementById("confirmBody").innerHTML = body;
+  ok.className = `btn ${okClass||"danger"}`;
+  modal.classList.add("show");
+  const cleanup = () => { modal.classList.remove("show"); ok.onclick = null; cancel.onclick = null; };
+  cancel.onclick = cleanup;
+  ok.onclick = () => { cleanup(); if(typeof onOk==="function") onOk(); };
+}
+function render() { renderTools(); renderDetail(); }
+
+document.getElementById("startAll").onclick = () => setAll(true);
+document.getElementById("stopAll").onclick  = () => setAll(false);
+document.getElementById("toggleSelected").onclick = () => {
+  const t = tools[selected-1]; t.running = !t.running; t.state = t.running ? "Chờ bài / gợi ý" : "Đã tạm dừng";
+  addLog(t.id, t.running?"ok":"warn","AUTO", t.running?"Đã tiếp tục AUTO.":"Đã tạm dừng AUTO."); render();
+};
+document.getElementById("clearLog").onclick = () => { logs[selected]=[]; renderLog(); };
+document.getElementById("createRoom").onclick = () => { addLog(selected,"ok","PHÒNG",`Tạo phòng bet ${document.getElementById("roomBet").value} cho Tool ${selected}.`); renderLog(); };
+document.getElementById("callTeam").onclick   = () => { addLog(selected,"ok","PHÒNG","Gọi P còn lại vào cùng phòng theo UID host."); renderLog(); };
+document.getElementById("joinRoom").onclick   = () => { addLog(selected,"","PHÒNG",`Join theo UID ${document.getElementById("targetUid").value}.`); renderLog(); };
+document.getElementById("findGuest").onclick  = () => { addLog(selected,"warn","PHÒNG","Bắt đầu tìm khách, AUTO sẽ chờ phòng có OPP."); renderLog(); };
+document.getElementById("leaveRoom").onclick  = () => { addLog(selected,"warn","PHÒNG","Thoát phòng cho các P đã chọn."); renderLog(); };
+document.getElementById("openBrowsers").onclick = () => { addLog(selected,"ok","TRÌNH DUYỆT",`Mở 3 trình duyệt cho Tool ${selected}: P1/P2/P3.`); renderLog(); };
+document.getElementById("reconnectAll").onclick  = () => confirmAction("Kết nối lại ALL",`<b>Tool ${selected}</b> sẽ kết nối lại toàn bộ P1/P2/P3.`,"blue", ()=>{ addLog(selected,"ok","HỆ THỐNG","Đã kết nối lại ALL P1/P2/P3."); renderLog(); });
+document.getElementById("resetProxyAll").onclick = () => confirmAction("Reset Proxy ALL",`<b>Tool ${selected}</b> sẽ reset proxy cho P1/P2/P3.`,"amber", ()=>{ addLog(selected,"warn","PROXY","Đã gửi yêu cầu Reset Proxy ALL P1/P2/P3."); renderLog(); });
+document.getElementById("clearProfilesAll").onclick = () => confirmAction("Xoá ALL Profile",`<b>Thao tác nguy hiểm.</b><br>Tool ${selected} sẽ xoá hồ sơ trình duyệt P1/P2/P3.`,"danger", ()=>{ addLog(selected,"err","PROFILE","Đã xác nhận Xoá ALL Profile P1/P2/P3."); renderLog(); });
+document.getElementById("rounds").onchange = renderDetail;
+setInterval(() => document.getElementById("clock").textContent = new Date().toLocaleTimeString("vi-VN",{hour12:false}), 1000);
+render();
 </script>
 </body>
 </html>
-
-
-
-

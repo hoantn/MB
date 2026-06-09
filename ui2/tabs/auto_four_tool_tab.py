@@ -1,492 +1,902 @@
 """
 ui2/tabs/auto_four_tool_tab.py
 
-Tab "Auto Play" quản lý 4 tool slot đồng thời.
+Tab "Auto Play" quản lý 4 tool slot.
+Layout 3 cột: [Sidebar 250px] | [Detail flexible] | [Activity 310px]
 
-Layout 3 cột:
-  [Sidebar 4 tool] | [Header + Inner tabs: Tổng quan | Phòng | Chiến Thuật] | [Activity log]
-
-Tool 1 reuse existing StrategyTab từ MainWindow (tránh đụng WS queue global).
-Tool 2-4 dùng ToolContext riêng với per-tool WS bridge, queue, card_store.
+Tổng quan   → nhúng ctx.room_tab  (RoomControlTab đang hoạt động)
+Chiến Thuật → nhúng ctx.strategy_tab (StrategyTab đang hoạt động)
 """
 from __future__ import annotations
 
 import queue
+import threading
+from datetime import datetime
 from typing import List, Optional
 
 from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QSplitter, QStackedWidget, QTextEdit, QFrame, QScrollArea,
-    QSizePolicy, QTabWidget,
+    QSplitter, QStackedWidget, QFrame, QTextEdit,
+    QSizePolicy, QSpinBox,
 )
-from PySide6.QtGui import QFont, QColor
 
 from core.logger import log
 
+# ── Màu demo ──────────────────────────────────────────────────────
+_BG     = "#0f1216"
+_PANEL  = "#171b20"
+_PANEL2 = "#1d2229"
+_PANEL3 = "#12161b"
+_LINE   = "#303741"
+_LINE2  = "#242a32"
+_TEXT   = "#edf1f5"
+_MUTED  = "#929ca8"
+_GREEN  = "#2fb171"
+_GREEN2 = "#1e704b"
+_BLUE   = "#4e8bd9"
+_AMBER  = "#e3a53b"
+_RED    = "#dc5b62"
 
-# ============================================================
-# ToolSlotCard — card nhỏ bên sidebar đại diện 1 tool
-# ============================================================
 
-class ToolSlotCard(QWidget):
-    """Card hiển thị trạng thái 1 tool.
-    clicked: chọn tool (click lên card body)
-    toggle_requested: bật/tắt bridge (click nút ▶/■)
-    """
+def _lbl(text: str, style: str = "") -> QLabel:
+    w = QLabel(text)
+    if style:
+        w.setStyleSheet(style)
+    return w
 
-    clicked = Signal(int)           # slot (1-4) — chọn tool
-    toggle_requested = Signal(int)  # slot (1-4) — bật/tắt bridge
+
+def _circle(size: int, color: str) -> QLabel:
+    """QLabel hình tròn thuần CSS — thay thế QLabel('●')."""
+    w = QLabel()
+    w.setFixedSize(size, size)
+    r = size // 2
+    w.setStyleSheet(f"background:{color}; border-radius:{r}px;")
+    return w
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ToggleSwitch — iOS-style toggle khớp demo HTML (.switch)
+# ═══════════════════════════════════════════════════════════════════
+
+class ToggleSwitch(QWidget):
+    """Toggle switch vẽ bằng paintEvent — knob di chuyển trái/phải."""
+
+    clicked = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._on = False
+        self.setFixedSize(32, 17)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def setChecked(self, v: bool):
+        if self._on != v:
+            self._on = v
+            self.update()
+
+    def isChecked(self) -> bool:
+        return self._on
+
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+        super().mousePressEvent(event)
+
+    def paintEvent(self, _event):
+        from PySide6.QtGui import QPainter, QColor, QPen, QBrush
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        r = h / 2
+
+        if self._on:
+            track_c  = QColor("#174f38")
+            border_c = QColor("#2fb171")
+            knob_c   = QColor("#68d6a0")
+            knob_x   = w - h + 2
+        else:
+            track_c  = QColor("#242a31")
+            border_c = QColor("#4a535e")
+            knob_c   = QColor("#87919d")
+            knob_x   = 2
+
+        pen = QPen(border_c)
+        pen.setWidthF(1.0)
+        p.setPen(pen)
+        p.setBrush(QBrush(track_c))
+        p.drawRoundedRect(0.5, 0.5, w - 1, h - 1, r, r)
+
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(knob_c))
+        ks = h - 4
+        p.drawEllipse(knob_x, 2, ks, ks)
+        p.end()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ToolSlotCard — card sidebar
+# ═══════════════════════════════════════════════════════════════════
+
+class ToolSlotCard(QFrame):
+    """Card 1 tool trong sidebar. Click body = chọn, click switch = toggle bridge."""
+
+    selected_changed = Signal(int)   # slot
+    toggle_requested = Signal(int)   # slot
+
+    _COL_OFF  = "#69737e"
+    _COL_RUN  = "#2fb171"
+    _COL_WAIT = "#e3a53b"
+    _COL_ERR  = "#dc5b62"
 
     def __init__(self, slot: int, parent=None):
         super().__init__(parent)
         self.slot = slot
-        self._active = False
-        self._running = False
         self._selected = False
-
+        self._running = False
+        self._p_dots: dict[str, QLabel] = {}
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setMinimumHeight(72)
+        self.setMinimumHeight(90)
         self.setCursor(Qt.PointingHandCursor)
-        self._build_ui()
-        self._refresh_style()
+        self._build()
+        self._refresh()
 
-    def _build_ui(self):
-        root = QHBoxLayout(self)
-        root.setContentsMargins(10, 8, 10, 8)
-        root.setSpacing(8)
+    def _build(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(9, 9, 9, 9)
+        root.setSpacing(6)
 
-        # Indicator dot
-        self._dot = QLabel("●")
-        self._dot.setFixedWidth(14)
-        font_dot = QFont()
-        font_dot.setPointSize(10)
-        self._dot.setFont(font_dot)
+        # Row 1: dot(8px) + name + toggle switch
+        top = QHBoxLayout()
+        top.setSpacing(7)
 
-        # Text block
-        text_col = QVBoxLayout()
-        text_col.setSpacing(2)
+        self._dot = _circle(8, self._COL_OFF)
+
         self._lbl_name = QLabel(f"Tool {self.slot}")
-        font_name = QFont()
-        font_name.setBold(True)
-        font_name.setPointSize(9)
-        self._lbl_name.setFont(font_name)
+        f = QFont(); f.setBold(True); f.setPointSize(10)
+        self._lbl_name.setFont(f)
+        self._lbl_name.setStyleSheet(f"color:{_TEXT};")
 
-        self._lbl_status = QLabel("Chưa khởi động")
-        font_status = QFont()
-        font_status.setPointSize(8)
-        self._lbl_status.setFont(font_status)
+        self._switch = ToggleSwitch(self)
+        self._switch.clicked.connect(lambda: self.toggle_requested.emit(self.slot))
 
-        text_col.addWidget(self._lbl_name)
-        text_col.addWidget(self._lbl_status)
+        top.addWidget(self._dot)
+        top.addWidget(self._lbl_name, 1)
+        top.addWidget(self._switch)
 
-        # Start/Stop button
-        self._btn = QPushButton("▶ Bắt đầu")
-        self._btn.setFixedWidth(90)
-        self._btn.setFixedHeight(28)
-        self._btn.clicked.connect(self._on_btn_clicked)
-
-        root.addWidget(self._dot)
-        root.addLayout(text_col, 1)
-        root.addWidget(self._btn)
-
-    def _refresh_style(self):
-        dot_color = "#22c55e" if self._running else "#6b7280"
-        self._dot.setStyleSheet(f"color: {dot_color};")
-
-        border = "2px solid #3b82f6" if self._selected else "1px solid #3C3C3C"
-        bg = "#1f2937" if self._selected else "transparent"
-        self.setStyleSheet(
-            f"ToolSlotCard {{ border: {border}; border-radius: 6px;"
-            f" background: {bg}; }}"
+        # Row 2: meta
+        self._lbl_meta = QLabel("Chưa khởi động")
+        self._lbl_meta.setStyleSheet(
+            f"color:{_MUTED}; font-size:11px;"
+            " white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
         )
 
-        btn_text = "■ Dừng" if self._running else "▶ Bắt đầu"
-        btn_bg = "#dc2626" if self._running else "#2563eb"
-        self._btn.setText(btn_text)
-        self._btn.setStyleSheet(
-            f"QPushButton {{ background: {btn_bg}; color: white;"
-            f" border-radius: 4px; border: none; font-size: 8pt; }}"
-            f"QPushButton:hover {{ background: {'#b91c1c' if self._running else '#1d4ed8'}; }}"
-        )
+        # Row 3: mini P1/P2/P3  — label bên trái, dot 5px bên phải
+        grid_row = QHBoxLayout()
+        grid_row.setSpacing(4)
+        for pid in ("P1", "P2", "P3"):
+            cell = QWidget()
+            cell.setFixedHeight(26)
+            cell.setStyleSheet(
+                f"background:{_PANEL3}; border:1px solid {_LINE2}; border-radius:3px;"
+            )
+            cl = QHBoxLayout(cell)
+            cl.setContentsMargins(5, 2, 5, 2)
+            cl.setSpacing(0)
+            plbl = QLabel(pid)
+            plbl.setStyleSheet("color:#b9c1ca; font-size:10px; font-weight:800;")
+            dot_p = _circle(5, self._COL_OFF)
+            cl.addWidget(plbl)
+            cl.addStretch()
+            cl.addWidget(dot_p)
+            self._p_dots[pid] = dot_p
+            grid_row.addWidget(cell)
+        grid_row.addStretch()
 
-    def set_selected(self, selected: bool):
-        self._selected = selected
-        self._refresh_style()
+        root.addLayout(top)
+        root.addWidget(self._lbl_meta)
+        root.addLayout(grid_row)
 
-    def set_running(self, running: bool):
-        self._running = running
-        self._refresh_style()
+    def set_selected(self, v: bool):
+        self._selected = v
+        self._refresh()
 
-    def set_status_text(self, text: str):
-        self._lbl_status.setText(text)
+    def set_running(self, v: bool):
+        self._running = v
+        self._switch.setChecked(v)
+        self._refresh()
 
-    def _on_btn_clicked(self):
-        # Nút bắt/dừng: không chọn tool, chỉ toggle bridge
-        self.toggle_requested.emit(self.slot)
+    def set_meta(self, text: str):
+        self._lbl_meta.setText(text)
+
+    def set_profile_status(self, pid: str, status: str):
+        dot = self._p_dots.get(pid)
+        if not dot:
+            return
+        color = {
+            "run":  self._COL_RUN,
+            "wait": self._COL_WAIT,
+            "err":  self._COL_ERR,
+        }.get(status, self._COL_OFF)
+        dot.setStyleSheet(f"background:{color}; border-radius:2px;")
+
+    def _refresh(self):
+        # Dot trạng thái (circle thuần màu)
+        col = self._COL_RUN if self._running else self._COL_OFF
+        self._dot.setStyleSheet(f"background:{col}; border-radius:4px;")
+
+        # Card border: active = sọc xanh bên trái + bg sáng hơn
+        # Dùng QFrame selector để không ảnh hưởng child widgets
+        if self._selected:
+            self.setStyleSheet(
+                f"ToolSlotCard {{"
+                f"border-top:1px solid {_BLUE};"
+                f"border-right:1px solid {_BLUE};"
+                f"border-bottom:1px solid {_BLUE};"
+                f"border-left:3px solid {_BLUE};"
+                f"border-radius:5px; background:#1b2633;"
+                f"}}"
+            )
+        else:
+            self.setStyleSheet(
+                f"ToolSlotCard {{"
+                f"border:1px solid {_LINE}; border-radius:5px; background:{_PANEL};"
+                f"}}"
+            )
 
     def mousePressEvent(self, event):
-        self.clicked.emit(self.slot)
+        self.selected_changed.emit(self.slot)
         super().mousePressEvent(event)
 
 
-# ============================================================
+# ═══════════════════════════════════════════════════════════════════
 # AutoFourToolTab — tab chính
-# ============================================================
+# ═══════════════════════════════════════════════════════════════════
 
 class AutoFourToolTab(QWidget):
-    """
-    Tab quản lý 4 tool auto play.
+    """Tab quản lý 4 tool auto play — layout khớp demo HTML."""
 
-    Tất cả 4 slot đều dùng ToolContext riêng.
-    Slot 1 dùng global ws_card_store để nhận cards từ bridge hiện có (main.py).
-    Slot 2-4 dùng per-tool WSCardStore + per-tool WS bridge.
-    """
+    # Signal thread-safe: background thread emit → _log chạy trên UI thread
+    _bg_log = Signal(int, str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setStyleSheet(f"background:{_BG}; color:{_TEXT};")
 
-        # ToolContext cho cả 4 slot — index 0 = slot 1, ... index 3 = slot 4
         self._contexts: List = []
         self._current_slot = 1
         self._cards: List[ToolSlotCard] = []
-        self._strategy_stack = QStackedWidget()
-        self._room_stack = QStackedWidget()
-        self._log_edit = QTextEdit()
-        self._log_edit.setReadOnly(True)
-        self._log_edit.setPlaceholderText("Activity log...")
+        self._overview_stack  = QStackedWidget()
+        self._strategy_stack  = QStackedWidget()
+        self._browser_stack   = QStackedWidget()
+        self._log_html: List[str] = []
 
-        # Tạo ToolContext cho slot 1-4
+        # Log filter: "sel" | "all" | "err"
+        self._log_filter = "sel"
+
+        self._bg_log.connect(self._log)
         self._init_tool_contexts()
 
-        # Build UI — bọc try/except để không bị blank khi có lỗi khởi tạo
         try:
             self._build_ui()
             self._select_slot(1)
         except Exception:
             log.exception("[AutoFourToolTab] _build_ui lỗi")
-            # Hiển thị thông báo lỗi thay vì blank
-            from PySide6.QtWidgets import QLabel
-            err_lbl = QLabel("Lỗi khởi tạo Auto Play tab — xem logs/tool.log")
-            err_lbl.setStyleSheet("color: #ef4444; padding: 20px;")
-            QVBoxLayout(self).addWidget(err_lbl)
+            err = QLabel("Lỗi khởi tạo — xem log console")
+            err.setStyleSheet(f"color:{_RED}; padding:20px;")
+            QVBoxLayout(self).addWidget(err)
             return
 
-        # Timer poll events cho slot 2-4 (slot 1 được poll bởi main.py)
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(100)
         self._poll_timer.timeout.connect(self._poll_tool_events)
         self._poll_timer.start()
 
-    # ------------------------------------------------------------------
-    # Khởi tạo ToolContext cho tất cả 4 slot
-    # ------------------------------------------------------------------
+    # ── Init contexts ──────────────────────────────────────────────
 
     def _init_tool_contexts(self):
         from core.config import ensure_slot_configs
         from core.tool_context import ToolContext
-        from ui2.bridge.ws_card_store import ws_card_store as global_card_store
-
-        # Đảm bảo config-tool2,3,4.json tồn tại
         ensure_slot_configs()
-
         for slot in range(1, 5):
             try:
-                if slot == 1:
-                    # Slot 1 dùng global card_store để nhận cards từ bridge đang chạy ở main.py
-                    # Không start bridge riêng (tránh port conflict với bridge Tool 1 hiện có)
-                    ctx = ToolContext(slot, card_store=global_card_store)
-                else:
-                    ctx = ToolContext(slot)
+                # Mỗi slot có WSCardStore riêng — KHÔNG chia sẻ global_cs.
+                # Slot 1 nhận event qua relay từ main.py._handle_bridge_event.
+                # Slots 2-4 nhận event qua per-tool bridge riêng.
+                # Tránh double-processing: nếu slot 1 dùng global_cs,
+                # cả 2 strategy_tab (main.py + ctx) cùng poll global_cs → double compute.
+                ctx = ToolContext(slot, card_store=None)
                 ctx.build_widgets(parent=self)
                 self._contexts.append(ctx)
             except Exception:
-                log.exception("[AutoFourToolTab] Lỗi khởi tạo ToolContext slot=%d", slot)
+                log.exception("[AutoFourToolTab] ToolContext slot=%d lỗi", slot)
                 self._contexts.append(None)
 
-    # ------------------------------------------------------------------
-    # Build layout
-    # ------------------------------------------------------------------
+    # ── Build UI ───────────────────────────────────────────────────
 
     def _build_ui(self):
-        root = QHBoxLayout(self)
+        root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.setHandleWidth(4)
+        root.addWidget(self._build_topbar())
 
-        # --- LEFT: sidebar ---
+        body = QSplitter(Qt.Horizontal)
+        body.setHandleWidth(1)
+        body.setStyleSheet(f"QSplitter::handle {{ background:{_LINE}; }}")
+
         sidebar = self._build_sidebar()
-        sidebar.setMinimumWidth(180)
-        sidebar.setMaximumWidth(210)
-        splitter.addWidget(sidebar)
+        sidebar.setFixedWidth(250)
+        body.addWidget(sidebar)
+        body.addWidget(self._build_detail())
+        body.addWidget(self._build_activity())
 
-        # --- CENTER: inner tabs ---
-        center = self._build_center()
-        splitter.addWidget(center)
+        body.setStretchFactor(0, 0)
+        body.setStretchFactor(1, 1)
+        body.setStretchFactor(2, 0)
 
-        # --- RIGHT: activity log ---
-        log_panel = self._build_log_panel()
-        log_panel.setMinimumWidth(160)
-        log_panel.setMaximumWidth(240)
-        splitter.addWidget(log_panel)
+        root.addWidget(body, 1)
 
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setStretchFactor(2, 0)
+    # ── Topbar ─────────────────────────────────────────────────────
 
-        root.addWidget(splitter)
+    def _build_topbar(self) -> QWidget:
+        bar = QWidget()
+        bar.setFixedHeight(44)
+        bar.setStyleSheet(f"background:#15191e; border-bottom:1px solid {_LINE};")
+        lay = QHBoxLayout(bar)
+        lay.setContentsMargins(12, 0, 12, 0)
+        lay.setSpacing(10)
+
+        brand = QLabel("MB CONTROL")
+        brand.setStyleSheet(f"color:{_TEXT}; font-size:14px; font-weight:900;")
+        lay.addWidget(brand)
+        tag = QLabel("/ AUTO PLAY")
+        tag.setStyleSheet(f"color:{_GREEN}; font-size:14px; font-weight:900;")
+        lay.addWidget(tag)
+
+        sep = QFrame(); sep.setFrameShape(QFrame.VLine)
+        sep.setStyleSheet(f"color:{_LINE};"); lay.addWidget(sep)
+
+        lay.addWidget(_lbl("Số ván", f"color:{_MUTED};"))
+        self._spn_rounds = QSpinBox()
+        self._spn_rounds.setRange(1, 9999); self._spn_rounds.setValue(999)
+        self._spn_rounds.setFixedWidth(68)
+        self._spn_rounds.setStyleSheet(
+            f"QSpinBox {{ background:{_PANEL3}; color:{_TEXT}; border:1px solid {_LINE};"
+            " border-radius:4px; padding:0 4px; height:28px; }}"
+        )
+        lay.addWidget(self._spn_rounds)
+
+        lay.addWidget(_lbl("Delay", f"color:{_MUTED};"))
+        spn_style = self._spn_rounds.styleSheet()
+        self._spn_dmin = QSpinBox()
+        self._spn_dmin.setRange(0, 120); self._spn_dmin.setValue(5)
+        self._spn_dmin.setFixedWidth(52)
+        self._spn_dmin.setStyleSheet(spn_style)
+        self._spn_dmax = QSpinBox()
+        self._spn_dmax.setRange(0, 120); self._spn_dmax.setValue(10)
+        self._spn_dmax.setFixedWidth(52)
+        self._spn_dmax.setStyleSheet(spn_style)
+        lay.addWidget(self._spn_dmin)
+        lay.addWidget(_lbl("–", f"color:{_MUTED};"))
+        lay.addWidget(self._spn_dmax)
+        lay.addWidget(_lbl("giây", f"color:{_MUTED};"))
+
+        lay.addStretch()
+
+        self._btn_start_all = self._topbtn("Chạy tất cả", _GREEN2, _GREEN)
+        self._btn_stop_all  = self._topbtn("Dừng tất cả", "#532e32", "#98444b")
+        self._btn_start_all.clicked.connect(self.start_all)
+        self._btn_stop_all.clicked.connect(self.stop_all)
+        lay.addWidget(self._btn_start_all)
+        lay.addWidget(self._btn_stop_all)
+        return bar
+
+    def _topbtn(self, text: str, bg: str, border: str) -> QPushButton:
+        b = QPushButton(text)
+        b.setFixedHeight(30)
+        b.setStyleSheet(
+            f"QPushButton {{ background:{bg}; color:#fff; border:1px solid {border};"
+            " border-radius:4px; padding:0 12px; font-weight:700; }}"
+        )
+        return b
+
+    # ── Sidebar ────────────────────────────────────────────────────
 
     def _build_sidebar(self) -> QWidget:
-        frame = QFrame()
-        frame.setFrameShape(QFrame.NoFrame)
-        frame.setStyleSheet("background: #252526; border-right: 1px solid #3C3C3C;")
+        frame = QWidget()
+        frame.setStyleSheet(f"background:#12161a; border-right:1px solid {_LINE};")
+        lay = QVBoxLayout(frame)
+        lay.setContentsMargins(10, 10, 10, 10)
+        lay.setSpacing(7)
 
-        vlay = QVBoxLayout(frame)
-        vlay.setContentsMargins(6, 8, 6, 8)
-        vlay.setSpacing(6)
-
-        header = QLabel("Quản lý Tool")
-        font = QFont()
-        font.setBold(True)
-        font.setPointSize(9)
-        header.setFont(font)
-        header.setStyleSheet("color: #B0B0B0; padding-bottom: 4px;")
-        vlay.addWidget(header)
+        hdr = QHBoxLayout()
+        hdr.addWidget(_lbl("Danh sách Tool", f"color:{_TEXT}; font-weight:800;"))
+        hdr.addStretch()
+        hdr.addWidget(_lbl("4 cụm / 12P", f"color:{_MUTED}; font-size:11px;"))
+        lay.addLayout(hdr)
 
         for slot in range(1, 5):
             card = ToolSlotCard(slot, self)
-            card.clicked.connect(self._on_card_select)
-            card.toggle_requested.connect(self._on_card_toggle)
+            card.selected_changed.connect(self._select_slot)
+            card.toggle_requested.connect(self._on_toggle)
             self._cards.append(card)
-            vlay.addWidget(card)
+            lay.addWidget(card)
 
-        vlay.addStretch()
+        lay.addStretch()
+
+        # System health footer
+        foot = QWidget()
+        foot.setStyleSheet(
+            f"background:{_PANEL}; border:1px solid {_LINE}; border-radius:5px;"
+        )
+        fl = QVBoxLayout(foot)
+        fl.setContentsMargins(9, 8, 9, 8)
+        fl.setSpacing(4)
+
+        fh = QHBoxLayout()
+        fh.addWidget(_lbl("Sức khoẻ hệ thống", f"color:{_TEXT}; font-weight:800;"))
+        fh.addStretch()
+        health_tag = _lbl("Ổn định",
+            f"background:#183b2d; color:#86e0b2;"
+            f" border:1px solid #32664f; border-radius:3px;"
+            f" padding:2px 5px; font-size:11px;")
+        fh.addWidget(health_tag)
+        fl.addLayout(fh)
+        fl.addWidget(_lbl("Hệ thống: 4/4 sẵn sàng", f"color:{_TEXT}; font-size:11px;"))
+        fl.addWidget(_lbl("Profiles: 12 hồ sơ", f"color:{_MUTED}; font-size:11px;"))
+        lay.addWidget(foot)
         return frame
 
-    def _build_center(self) -> QWidget:
+    # ── Detail panel ───────────────────────────────────────────────
+
+    def _build_detail(self) -> QWidget:
         frame = QWidget()
-        vlay = QVBoxLayout(frame)
-        vlay.setContentsMargins(0, 0, 0, 0)
-        vlay.setSpacing(0)
+        frame.setStyleSheet(f"background:{_BG};")
+        lay = QVBoxLayout(frame)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
 
-        # Header: tên tool đang chọn
-        self._center_header = QLabel("Tool 1")
-        font_h = QFont()
-        font_h.setBold(True)
-        font_h.setPointSize(10)
-        self._center_header.setFont(font_h)
-        self._center_header.setStyleSheet(
-            "color: #E6E6E6; background: #252526;"
-            " padding: 6px 12px; border-bottom: 1px solid #3C3C3C;"
-        )
-        vlay.addWidget(self._center_header)
+        # Header row
+        hdr = QWidget()
+        hdr.setStyleSheet(f"background:{_BG}; border-bottom:1px solid {_LINE};")
+        hdr.setFixedHeight(62)
+        hl = QHBoxLayout(hdr)
+        hl.setContentsMargins(10, 8, 10, 8)
+        hl.setSpacing(10)
 
-        # Inner tab widget
-        self._inner_tabs = QTabWidget()
-        self._inner_tabs.setDocumentMode(True)
-        self._inner_tabs.setStyleSheet(
-            "QTabWidget::pane { border: none; }"
-            "QTabBar::tab { background: #2D2D30; color: #B0B0B0;"
-            " padding: 5px 14px; border: none; }"
-            "QTabBar::tab:selected { background: #1E1E1E; color: #E6E6E6;"
-            " border-bottom: 2px solid #3b82f6; }"
-        )
+        # Left: dot + title + badge + sub
+        info_col = QVBoxLayout(); info_col.setSpacing(3)
+        top_row = QHBoxLayout(); top_row.setSpacing(8)
+        self._hdr_dot   = _lbl("●", f"color:{_GREEN}; font-size:10px;")
+        self._hdr_title = _lbl("Tool 1", f"color:{_TEXT}; font-size:17px; font-weight:900;")
+        self._hdr_badge = _lbl("Chưa khởi động",
+            f"background:{_PANEL2}; color:{_MUTED}; border:1px solid {_LINE};"
+            " border-radius:4px; padding:3px 7px; font-weight:700; font-size:11px;")
+        top_row.addWidget(self._hdr_dot)
+        top_row.addWidget(self._hdr_title)
+        top_row.addWidget(self._hdr_badge)
+        top_row.addStretch()
+        self._hdr_sub = _lbl("Chọn tool để xem chi tiết",
+            f"color:{_MUTED}; font-size:11px;")
+        info_col.addLayout(top_row)
+        info_col.addWidget(self._hdr_sub)
 
-        # Tab Tổng quan
-        overview_stack = self._build_overview_stack()
-        self._inner_tabs.addTab(overview_stack, "Tổng quan")
+        # Right: 5 action buttons (khớp demo)
+        act_row = QHBoxLayout(); act_row.setSpacing(6)
+        self._btn_open_browsers  = self._detailbtn("Mở 3 trình duyệt",  "#343b45")
+        self._btn_reconnect_all  = self._detailbtn("Kết nối lại ALL",    "#254c7d", _BLUE)
+        self._btn_reset_proxy    = self._detailbtn("Reset Proxy ALL",    "#5d4218", _AMBER)
+        self._btn_clear_profiles = self._detailbtn("Xoá ALL Profile",    "#622b31", _RED)
+        self._btn_open_browsers.clicked.connect(self._on_open_browsers)
+        self._btn_reconnect_all.clicked.connect(self._on_reconnect_all)
+        self._btn_reset_proxy.clicked.connect(self._on_reset_proxy)
+        self._btn_clear_profiles.clicked.connect(self._on_clear_profiles)
+        for b in (self._btn_open_browsers, self._btn_reconnect_all,
+                  self._btn_reset_proxy, self._btn_clear_profiles):
+            act_row.addWidget(b)
 
-        # Tab Phòng — QStackedWidget chứa 4 RoomControlTab
-        self._inner_tabs.addTab(self._room_stack, "Phòng")
-        self._build_room_stack()
+        hl.addLayout(info_col, 1)
+        hl.addLayout(act_row)
+        lay.addWidget(hdr)
 
-        # Tab Chiến Thuật — QStackedWidget chứa 4 StrategyTab
-        self._inner_tabs.addTab(self._strategy_stack, "Chiến Thuật")
-        self._build_strategy_stack()
+        # Inner tab bar (2 tabs — khớp demo)
+        tab_bar = QWidget()
+        tab_bar.setFixedHeight(36)
+        tab_bar.setStyleSheet(f"background:#13171c; border-bottom:1px solid {_LINE};")
+        tbl = QHBoxLayout(tab_bar)
+        tbl.setContentsMargins(10, 0, 10, 0)
+        tbl.setSpacing(0)
+        self._btn_overview  = self._innertab("Phòng",   True)
+        self._btn_strategy  = self._innertab("Chiến Thuật", False)
+        self._btn_browser   = self._innertab("Trình duyệt", False)
+        self._btn_overview.clicked.connect(lambda: self._switch_inner(0))
+        self._btn_strategy.clicked.connect(lambda: self._switch_inner(1))
+        self._btn_browser.clicked.connect(lambda:  self._switch_inner(2))
+        tbl.addWidget(self._btn_overview)
+        tbl.addWidget(self._btn_strategy)
+        tbl.addWidget(self._btn_browser)
+        tbl.addStretch()
+        lay.addWidget(tab_bar)
 
-        vlay.addWidget(self._inner_tabs, 1)
+        # Stacked panes
+        self._inner_stack = QStackedWidget()
+        self._inner_stack.setStyleSheet(f"background:{_BG};")
+
+        # Pane 0: Tổng quan = ctx.room_tab (RoomControlTab)
+        self._inner_stack.addWidget(self._overview_stack)
+        self._build_overview_pages()
+
+        # Pane 1: Chiến Thuật = ctx.strategy_tab (StrategyTab)
+        self._inner_stack.addWidget(self._strategy_stack)
+        self._build_strategy_pages()
+
+        # Pane 2: Trình duyệt = ctx.profiles_tab (ProfilesTabV2)
+        self._inner_stack.addWidget(self._browser_stack)
+        self._build_browser_pages()
+
+        lay.addWidget(self._inner_stack, 1)
         return frame
 
-    def _build_overview_stack(self) -> QStackedWidget:
-        """Tổng quan đơn giản: tên tool + tool_index + bridge port."""
-        stack = QStackedWidget()
+    def _detailbtn(self, text: str, bg: str, border: str = "transparent") -> QPushButton:
+        b = QPushButton(text)
+        b.setFixedHeight(29)
+        b.setStyleSheet(
+            f"QPushButton {{ background:{bg}; color:#fff; border:1px solid {border};"
+            " border-radius:4px; padding:0 9px; font-weight:700; }}"
+            f"QPushButton:pressed {{ background:{bg}; opacity:0.8; }}"
+        )
+        return b
+
+    def _innertab(self, text: str, active: bool) -> QPushButton:
+        b = QPushButton(text)
+        b.setCheckable(True)
+        b.setChecked(active)
+        b.setFixedHeight(36)
+        b.setStyleSheet(
+            f"QPushButton {{ background:transparent; color:{_MUTED}; border:none;"
+            f" border-bottom:2px solid transparent; padding:0 14px;"
+            f" font-weight:700; font-size:12px; margin-bottom:-1px; }}"
+            f"QPushButton:checked {{ color:{_TEXT}; border-bottom-color:{_BLUE}; }}"
+        )
+        return b
+
+    # ── Pane builders ──────────────────────────────────────────────
+
+    def _build_overview_pages(self):
+        """Pane Tổng quan = nhúng ctx.room_tab (RoomControlTab đang hoạt động)."""
         for slot in range(1, 5):
-            w = QWidget()
-            lay = QVBoxLayout(w)
-            lay.setAlignment(Qt.AlignTop)
-            lay.setContentsMargins(16, 16, 16, 16)
-            lay.setSpacing(8)
-
             ctx = self._contexts[slot - 1]
-            if ctx is not None:
-                tool_index = ctx.tool_index
-                port = ctx._bridge_port
-            else:
-                tool_index = slot
-                port = 9526 + slot
-
-            lbl = QLabel(f"<b>Tool {slot}</b>")
-            lbl.setStyleSheet("color: #E6E6E6; font-size: 14pt;")
-            lay.addWidget(lbl)
-
-            info = QLabel(
-                f"Tool index: {tool_index}\n"
-                f"Bridge port: {port}\n"
-                f"Config: {'config.json' if slot == 1 else f'config-tool{slot}.json'}"
-            )
-            info.setStyleSheet("color: #B0B0B0; font-size: 9pt;")
-            lay.addWidget(info)
-            lay.addStretch()
-
-            stack.addWidget(w)
-        return stack
-
-    def _build_room_stack(self):
-        """Nhúng RoomControlTab của 4 slot vào room_stack."""
-        for i, ctx in enumerate(self._contexts):
-            slot = i + 1
             if ctx is not None and ctx.room_tab is not None:
-                self._room_stack.addWidget(ctx.room_tab)
+                self._overview_stack.addWidget(ctx.room_tab)
             else:
-                placeholder = QLabel(f"Phòng Tool {slot} (lỗi khởi tạo)")
-                placeholder.setAlignment(Qt.AlignCenter)
-                self._room_stack.addWidget(placeholder)
+                ph = QLabel(f"Room Tool {slot} — lỗi khởi tạo")
+                ph.setAlignment(Qt.AlignCenter)
+                ph.setStyleSheet(f"color:{_MUTED};")
+                self._overview_stack.addWidget(ph)
 
-    def _build_strategy_stack(self):
-        """Nhúng StrategyTab của 4 slot vào strategy_stack."""
-        for i, ctx in enumerate(self._contexts):
-            slot = i + 1
+    def _build_strategy_pages(self):
+        """Pane Chiến Thuật = nhúng ctx.strategy_tab (StrategyTab đang hoạt động)."""
+        for slot in range(1, 5):
+            ctx = self._contexts[slot - 1]
             if ctx is not None and ctx.strategy_tab is not None:
                 self._strategy_stack.addWidget(ctx.strategy_tab)
             else:
-                placeholder = QLabel(f"Chiến Thuật Tool {slot} (lỗi khởi tạo)")
-                placeholder.setAlignment(Qt.AlignCenter)
-                self._strategy_stack.addWidget(placeholder)
+                ph = QLabel(f"Chiến Thuật Tool {slot} — lỗi khởi tạo")
+                ph.setAlignment(Qt.AlignCenter)
+                ph.setStyleSheet(f"color:{_MUTED};")
+                self._strategy_stack.addWidget(ph)
 
-    def _build_log_panel(self) -> QFrame:
-        frame = QFrame()
-        frame.setFrameShape(QFrame.NoFrame)
-        frame.setStyleSheet("background: #1C1C1C; border-left: 1px solid #3C3C3C;")
+    def _build_browser_pages(self):
+        """Pane Trình duyệt = nhúng ctx.profiles_tab (ProfilesTabV2 per-slot)."""
+        from PySide6.QtWidgets import QScrollArea
+        for slot in range(1, 5):
+            ctx = self._contexts[slot - 1]
+            if ctx is not None and ctx.profiles_tab is not None:
+                scroll = QScrollArea()
+                scroll.setWidgetResizable(True)
+                scroll.setFrameShape(QScrollArea.NoFrame)
+                scroll.setWidget(ctx.profiles_tab)
+                self._browser_stack.addWidget(scroll)
+            else:
+                ph = QLabel(f"Trình duyệt Tool {slot} — lỗi khởi tạo")
+                ph.setAlignment(Qt.AlignCenter)
+                ph.setStyleSheet(f"color:{_MUTED};")
+                self._browser_stack.addWidget(ph)
 
-        vlay = QVBoxLayout(frame)
-        vlay.setContentsMargins(6, 8, 6, 8)
-        vlay.setSpacing(4)
+    # ── Activity log ───────────────────────────────────────────────
 
-        header = QLabel("Activity")
-        font = QFont()
-        font.setBold(True)
-        font.setPointSize(9)
-        header.setFont(font)
-        header.setStyleSheet("color: #B0B0B0;")
-        vlay.addWidget(header)
+    def _build_activity(self) -> QWidget:
+        frame = QWidget()
+        frame.setFixedWidth(310)
+        frame.setStyleSheet(f"background:#12161a; border-left:1px solid {_LINE};")
+        lay = QVBoxLayout(frame)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
 
-        self._log_edit.setStyleSheet(
-            "QTextEdit { background: #1C1C1C; color: #B0B0B0;"
-            " border: none; font-size: 8pt; font-family: Consolas, monospace; }"
+        # Header
+        ah = QWidget()
+        ah.setStyleSheet(f"background:#12161a; border-bottom:1px solid {_LINE};")
+        ahl = QVBoxLayout(ah)
+        ahl.setContentsMargins(10, 8, 10, 8)
+        ahl.setSpacing(6)
+
+        hrow = QHBoxLayout()
+        hrow.addWidget(_lbl("Hoạt động", f"color:{_TEXT}; font-weight:800;"))
+        hrow.addStretch()
+        btn_clr = QPushButton("Xoá log")
+        btn_clr.setFixedHeight(24)
+        btn_clr.setStyleSheet(
+            f"QPushButton {{ background:{_PANEL2}; color:{_MUTED}; border:1px solid {_LINE};"
+            " border-radius:4px; padding:0 8px; font-size:11px; }}"
         )
-        self._log_edit.setMaximumWidth(10000)  # reset max trong panel
-        vlay.addWidget(self._log_edit, 1)
+        btn_clr.clicked.connect(self._clear_log)
+        hrow.addWidget(btn_clr)
+        ahl.addLayout(hrow)
 
+        # 3 sub-tabs (khớp demo)
+        tabs_row = QHBoxLayout(); tabs_row.setSpacing(4)
+        self._btn_log_sel = self._logtab("Tool đang chọn", True)
+        self._btn_log_all = self._logtab("Tất cả", False)
+        self._btn_log_err = self._logtab("Chỉ lỗi", False)
+        self._btn_log_sel.clicked.connect(lambda: self._switch_log_filter("sel"))
+        self._btn_log_all.clicked.connect(lambda: self._switch_log_filter("all"))
+        self._btn_log_err.clicked.connect(lambda: self._switch_log_filter("err"))
+        for b in (self._btn_log_sel, self._btn_log_all, self._btn_log_err):
+            tabs_row.addWidget(b)
+        ahl.addLayout(tabs_row)
+        lay.addWidget(ah)
+
+        self._log_view = QTextEdit()
+        self._log_view.setReadOnly(True)
+        self._log_view.setStyleSheet(
+            f"QTextEdit {{ background:#12161a; color:#bbc4cd; border:none;"
+            " font-size:11px; font-family:'Segoe UI',Arial,sans-serif; padding:4px 8px; }}"
+        )
+        lay.addWidget(self._log_view, 1)
         return frame
 
-    # ------------------------------------------------------------------
-    # Chọn tool / Toggle bridge
-    # ------------------------------------------------------------------
+    def _logtab(self, text: str, active: bool) -> QPushButton:
+        b = QPushButton(text)
+        b.setCheckable(True); b.setChecked(active)
+        b.setFixedHeight(26)
+        b.setStyleSheet(
+            f"QPushButton {{ background:{_PANEL}; color:{_MUTED};"
+            f" border:1px solid {_LINE}; border-radius:4px; padding:0 8px; font-size:11px; }}"
+            f"QPushButton:checked {{ background:#253343; color:#e5edf5;"
+            f" border-color:#46627e; }}"
+        )
+        return b
 
-    def _on_card_select(self, slot: int):
-        """Click card body → chọn hiển thị tool đó."""
-        self._select_slot(slot)
+    # ── Switch inner tab ───────────────────────────────────────────
 
-    def _on_card_toggle(self, slot: int):
-        """Click nút ▶/■ → bật hoặc dừng bridge của tool."""
-        card = self._cards[slot - 1]
-        if card._running:
-            self.stop_tool(slot)
-        else:
-            self.start_tool(slot)
+    def _switch_inner(self, idx: int):
+        self._inner_stack.setCurrentIndex(idx)
+        self._btn_overview.setChecked(idx == 0)
+        self._btn_strategy.setChecked(idx == 1)
+        self._btn_browser.setChecked(idx == 2)
+
+    def _switch_log_filter(self, f: str):
+        self._log_filter = f
+        self._btn_log_sel.setChecked(f == "sel")
+        self._btn_log_all.setChecked(f == "all")
+        self._btn_log_err.setChecked(f == "err")
+        self._redraw_log()
+
+    # ── Select tool ────────────────────────────────────────────────
 
     def _select_slot(self, slot: int):
         self._current_slot = slot
-        idx = slot - 1  # 0-based index trong stacks
-
-        # Cập nhật selection highlight
+        idx = slot - 1
         for card in self._cards:
             card.set_selected(card.slot == slot)
-
-        # Switch stacks
+        self._overview_stack.setCurrentIndex(idx)
         self._strategy_stack.setCurrentIndex(idx)
-        self._room_stack.setCurrentIndex(idx)
+        self._browser_stack.setCurrentIndex(idx)
 
-        # Cũng switch overview_stack nếu cần (lấy từ inner_tabs)
-        overview_stack = self._inner_tabs.widget(0)  # tab index 0 = Tổng quan
-        if isinstance(overview_stack, QStackedWidget):
-            overview_stack.setCurrentIndex(idx)
+        ctx = self._contexts[idx]
+        running = self._cards[idx]._running
+        self._hdr_title.setText(f"Tool {slot}")
+        self._hdr_dot.setStyleSheet(
+            f"color:{'#2fb171' if running else '#69737e'}; font-size:10px;"
+        )
+        if running:
+            self._hdr_badge.setText("Đang chạy")
+            self._hdr_badge.setStyleSheet(
+                "background:#173b2c; color:#86e0b2; border:1px solid #32664f;"
+                " border-radius:4px; padding:3px 7px; font-weight:700; font-size:11px;"
+            )
+        else:
+            self._hdr_badge.setText("Chưa khởi động")
+            self._hdr_badge.setStyleSheet(
+                f"background:{_PANEL2}; color:{_MUTED}; border:1px solid {_LINE};"
+                " border-radius:4px; padding:3px 7px; font-weight:700; font-size:11px;"
+            )
+        tool_idx = ctx.tool_index if ctx else slot
+        cfg_file = "config.json" if slot == 1 else f"config-tool{slot}.json"
+        self._hdr_sub.setText(
+            f"Tool index {tool_idx} — {cfg_file} — bridge port {9526 + tool_idx}"
+        )
+        # Cập nhật log display theo filter
+        self._redraw_log()
 
-        # Update header
-        self._center_header.setText(f"Tool {slot}")
+    # ── Toggle bridge ──────────────────────────────────────────────
 
-    # ------------------------------------------------------------------
-    # Start / Stop từng tool
-    # ------------------------------------------------------------------
+    def _on_toggle(self, slot: int):
+        if self._cards[slot - 1]._running:
+            self.stop_tool(slot)
+        else:
+            self.start_tool(slot)
+        if self._current_slot == slot:
+            self._select_slot(slot)
 
-    def start_tool(self, slot: int):
-        """Khởi động WS bridge cho tool slot."""
-        ctx = self._contexts[slot - 1]
+    def _get_auto_params(self):
+        """Lấy rounds + delay từ topbar spinboxes."""
+        rounds = int(self._spn_rounds.value())
+        dmin = int(self._spn_dmin.value()) * 1000
+        dmax = int(self._spn_dmax.value()) * 1000
+        return rounds, min(dmin, dmax), max(dmin, dmax)
 
+    def _ensure_bridge(self, slot: int) -> bool:
+        """Start bridge cho slot (nếu chưa chạy). Trả về True nếu OK."""
         if slot == 1:
-            # Slot 1: bridge đã được main.py khởi động, chỉ đánh dấu running
-            self._log(1, "Tool 1 dùng bridge mặc định (main.py)")
-            self._cards[0].set_running(True)
-            self._cards[0].set_status_text("Đang chạy")
-            return
-
+            return True  # bridge main.py luôn chạy
+        ctx = self._contexts[slot - 1]
         if ctx is None:
-            self._log(slot, f"Tool {slot}: context lỗi, không thể start")
-            return
-
+            self._log(slot, "Context lỗi, không start bridge", "err")
+            return False
+        if ctx._ws_server is not None:
+            return True  # bridge đã đang chạy
         try:
             ctx.start()
-            self._cards[slot - 1].set_running(True)
-            self._cards[slot - 1].set_status_text(f"Port {ctx._bridge_port}")
-            self._log(slot, f"Tool {slot} bridge port {ctx._bridge_port} started")
+            return True
         except OSError as e:
-            self._cards[slot - 1].set_status_text("Lỗi port")
-            self._log(slot, f"Tool {slot} lỗi start: {e}")
+            self._cards[slot - 1].set_meta("Lỗi port")
+            self._log(slot, f"Lỗi start bridge: {e}", "err")
+            return False
 
-    def stop_tool(self, slot: int):
-        """Dừng WS bridge cho tool slot."""
-        if slot == 1:
-            self._log(1, "Tool 1 không dừng được từ đây")
+    def start_tool(self, slot: int):
+        ctx = self._contexts[slot - 1]
+        rounds, delay_min, delay_max = self._get_auto_params()
+
+        if not self._ensure_bridge(slot):
             return
 
+        # Bật auto play trên strategy_tab của slot này
+        if ctx is not None and ctx.strategy_tab is not None:
+            ctx.strategy_tab.set_auto_play(True, rounds, delay_min, delay_max)
+
+        self._cards[slot - 1].set_running(True)
+        self._cards[slot - 1].set_meta(f"Auto Play: {rounds} ván")
+        self._log(slot, f"Auto Play BẬT — {rounds} ván, delay {delay_min//1000}-{delay_max//1000}s", "ok")
+
+    def stop_tool(self, slot: int):
         ctx = self._contexts[slot - 1]
-        if ctx:
+
+        # Tắt auto play trên strategy_tab
+        if ctx is not None and ctx.strategy_tab is not None:
+            ctx.strategy_tab.set_auto_play(False)
+
+        # Slot 1: bridge main.py không dừng
+        if slot > 1 and ctx is not None:
             ctx.stop()
+
         self._cards[slot - 1].set_running(False)
-        self._cards[slot - 1].set_status_text("Đã dừng")
-        self._log(slot, f"Tool {slot} dừng")
+        self._cards[slot - 1].set_meta("Auto Play: tắt")
+        self._log(slot, "Auto Play ĐÃ TẮT", "warn")
 
     def start_all(self):
-        """Khởi động tất cả tools (2-4). Tool 1 do main.py quản lý."""
-        for slot in range(2, 5):
+        for slot in range(1, 5):
             self.start_tool(slot)
 
     def stop_all(self):
-        """Dừng tất cả tools 2-4."""
-        for slot in range(2, 5):
+        for slot in range(1, 5):
             self.stop_tool(slot)
 
-    # ------------------------------------------------------------------
-    # Event polling
-    # ------------------------------------------------------------------
+    # ── Action button handlers ─────────────────────────────────────
+
+    def _on_open_browsers(self):
+        slot = self._current_slot
+        ctx = self._contexts[slot - 1]
+        if ctx is None:
+            return
+
+        # Extension fetch proxy-creds từ bridge ngay khi load.
+        # Nếu bridge chưa start thì fetch sẽ fail → không có proxy.
+        if not self._ensure_bridge(slot):
+            self._log(slot, "Bridge không start được, extension sẽ không kết nối được!", "err")
+            return
+
+        self._log(slot, "Đang mở 3 trình duyệt...", "info")
+
+        def _work():
+            for pid in ("P1", "P2", "P3"):
+                try:
+                    ctx.browser_manager.open_browser(pid)
+                    self._bg_log.emit(slot, f"{pid}: trình duyệt đã mở", "ok")
+                except Exception as e:
+                    self._bg_log.emit(slot, f"Lỗi mở browser {pid}: {e}", "err")
+
+        threading.Thread(target=_work, daemon=True, name=f"open-browsers-slot{slot}").start()
+
+    def _on_reconnect_all(self):
+        slot = self._current_slot
+        ctx = self._contexts[slot - 1]
+        if ctx is None:
+            self._log(slot, "Không có context", "err")
+            return
+        self._log(slot, "Đang kết nối lại DevTools P1/P2/P3...", "info")
+
+        def _work():
+            for pid in ("P1", "P2", "P3"):
+                try:
+                    ctx.browser_manager._clear_cached_browser_state(pid)
+                    ctx.browser_manager.ensure_tab(pid)
+                    self._bg_log.emit(slot, f"{pid}: kết nối lại DevTools OK", "ok")
+                except Exception as e:
+                    self._bg_log.emit(slot, f"{pid}: lỗi kết nối lại: {e}", "err")
+
+        threading.Thread(target=_work, daemon=True, name=f"reconnect-slot{slot}").start()
+
+    def _on_reset_proxy(self):
+        slot = self._current_slot
+        ctx = self._contexts[slot - 1]
+        if ctx is None:
+            self._log(slot, "Không có context", "err")
+            return
+        self._log(slot, "Đang đổi IP proxy P1/P2/P3...", "info")
+
+        def _work():
+            from core.proxyno1_provider import proxyno1_change_ip_for_profile
+            for pid in ("P1", "P2", "P3"):
+                try:
+                    ok, msg = proxyno1_change_ip_for_profile(pid, slot=slot)
+                    level = "ok" if ok else "err"
+                    self._bg_log.emit(slot, f"{pid}: {msg}", level)
+                except Exception as e:
+                    self._bg_log.emit(slot, f"{pid}: lỗi reset proxy: {e}", "err")
+
+        threading.Thread(target=_work, daemon=True, name=f"reset-proxy-slot{slot}").start()
+
+    def _on_clear_profiles(self):
+        slot = self._current_slot
+        ctx = self._contexts[slot - 1]
+        if ctx is None:
+            self._log(slot, "Không có context", "err")
+            return
+        from PySide6.QtWidgets import QMessageBox
+        resp = QMessageBox.question(
+            self,
+            "Xác nhận xoá Profile",
+            f"Xoá toàn bộ dữ liệu runtime (P1/P2/P3) của Tool {slot}?\n"
+            "Trình duyệt sẽ bị đóng. Hành động này không thể hoàn tác.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if resp != QMessageBox.Yes:
+            return
+        self._log(slot, "Đang xoá profile runtime P1/P2/P3...", "warn")
+
+        def _work():
+            for pid in ("P1", "P2", "P3"):
+                try:
+                    ok = ctx.browser_manager.delete_profile_user_data(pid)
+                    if ok:
+                        self._bg_log.emit(slot, f"{pid}: đã xoá profile runtime", "warn")
+                    else:
+                        self._bg_log.emit(slot, f"{pid}: xoá thất bại (browser còn sống?)", "err")
+                except Exception as e:
+                    self._bg_log.emit(slot, f"{pid}: lỗi xoá: {e}", "err")
+
+        threading.Thread(target=_work, daemon=True, name=f"clear-profiles-slot{slot}").start()
+
+    # ── Event polling ──────────────────────────────────────────────
 
     def _poll_tool_events(self):
-        """Poll event queue cho slot 2-4 (slot 1 do main.py xử lý qua WS_EVENT_QUEUE global)."""
+        # Slot 1: main.py relay event vào ctx.event_queue (xem _handle_bridge_event).
+        # Slot 2-4: per-tool bridge tự push event vào ctx.event_queue.
         for ctx in self._contexts:
-            if ctx is None or ctx.slot == 1:
-                continue  # Slot 1 bridge & queue được quản lý bởi main.py
+            if ctx is None:
+                continue
             n = 0
             while n < 30:
                 try:
@@ -496,28 +906,52 @@ class AutoFourToolTab(QWidget):
                 try:
                     ctx.dispatch_event(evt)
                 except Exception:
-                    log.exception("[AutoFourToolTab] dispatch_event lỗi slot=%d", ctx.slot)
+                    log.exception("[AutoFourToolTab] dispatch slot=%d", ctx.slot)
                 n += 1
 
-    # ------------------------------------------------------------------
-    # Activity log
-    # ------------------------------------------------------------------
+    # ── Log ────────────────────────────────────────────────────────
 
-    def _log(self, slot: int, msg: str):
-        """Ghi vào activity log."""
-        try:
-            self._log_edit.append(f"[T{slot}] {msg}")
-            # Giới hạn 500 dòng để tránh OOM
-            doc = self._log_edit.document()
-            if doc.blockCount() > 500:
-                cursor = self._log_edit.textCursor()
-                cursor.movePosition(cursor.Start)
-                cursor.select(cursor.BlockUnderCursor)
-                cursor.removeSelectedText()
-                cursor.deleteChar()
-        except Exception:
-            pass
+    _LOG_COLORS = {"ok": _GREEN, "warn": _AMBER, "err": _RED, "info": "#66727f"}
 
-    def log_from_context(self, slot: int, msg: str):
-        """API công khai để ToolContext / RoomEngine ghi log."""
-        self._log(slot, msg)
+    def _log(self, slot: int, msg: str, level: str = "info"):
+        ts = datetime.now().strftime("%H:%M:%S")
+        dot = self._LOG_COLORS.get(level, "#66727f")
+        row = {
+            "slot": slot, "level": level, "ts": ts,
+            "html": (
+                f'<div style="padding:6px 3px 6px 18px;border-bottom:1px solid {_LINE2};'
+                f'color:#bbc4cd;position:relative;">'
+                f'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;'
+                f'background:{dot};margin-right:6px;vertical-align:middle;"></span>'
+                f'<span style="color:#697581;">[{ts}]</span> '
+                f'<b style="color:{_TEXT};">[T{slot}]</b> {msg}</div>'
+            )
+        }
+        self._log_html.append(row)
+        if len(self._log_html) > 500:
+            self._log_html = self._log_html[-400:]
+        self._redraw_log()
+
+    def _redraw_log(self):
+        f = self._log_filter
+        sel = self._current_slot
+        rows = []
+        for r in self._log_html:
+            if f == "sel" and r["slot"] != sel and r["slot"] != 0:
+                continue
+            if f == "err" and r["level"] not in ("err", "warn"):
+                continue
+            rows.append(r["html"])
+        self._log_view.setHtml(
+            f'<div style="font-family:Segoe UI,Arial,sans-serif;font-size:11px;">'
+            + "".join(rows) + "</div>"
+        )
+        sb = self._log_view.verticalScrollBar()
+        sb.setValue(sb.maximum())
+
+    def _clear_log(self):
+        self._log_html.clear()
+        self._log_view.clear()
+
+    def log_from_context(self, slot: int, msg: str, level: str = "info"):
+        self._log(slot, msg, level)

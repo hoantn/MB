@@ -503,12 +503,6 @@ class XaoVangTab(QWidget):
     def trigger_auto_for_sid(self, sid: str) -> bool:
         sid_str = str(sid or "").strip()
         if not self._auto_enabled or self._auto_remaining <= 0:
-            log.debug(
-                "XaoVang auto skip | sid=%s enabled=%s remaining=%s",
-                sid_str,
-                self._auto_enabled,
-                self._auto_remaining,
-            )
             return False
         if not sid_str or sid_str in self._auto_seen_sids:
             log.debug("XaoVang auto skip duplicate/empty sid | sid=%s", sid_str)
