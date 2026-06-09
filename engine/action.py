@@ -99,7 +99,7 @@ def compute_target_codes(chi1: List[Card], chi2: List[Card], chi3: List[Card]) -
 
     return [card_to_code(c) for c in ordered_cards]
 
-def compute_moves(current_codes: List[str], target_codes: List[str]) -> List[Tuple[int, int]]:
+def compute_moves(current_codes: List[str], target_codes: List[str], exact: bool = False) -> List[Tuple[int, int]]:
     """
     Tính danh sách (src_idx, dst_idx) để biến current → target theo nguyên tắc:
 
@@ -165,6 +165,9 @@ def compute_moves(current_codes: List[str], target_codes: List[str]) -> List[Tup
 
         return moves
 
+    if exact:
+        return _compute_moves_exact(current_codes, target_codes)
+
     n_cur = len(current_codes)
     n_tgt = len(target_codes)
 
@@ -219,18 +222,24 @@ def compute_moves(current_codes: List[str], target_codes: List[str]) -> List[Tup
         ]
         j_candidate = reciprocal[0] if reciprocal else (candidates[0] if candidates else None)
         if j_candidate is None:
-            log.error(
-                "compute_moves: trạng thái phân nhóm không hợp lệ cho lá %s tại slot %d",
+            log.warning(
+                "compute_moves: không tìm được đối tác swap cho lá %s (i=%d, chi_cur=%d, chi_des=%d) -> fallback exact",
                 code_i,
                 i,
+                chi_cur,
+                chi_des,
             )
-            return _compute_moves_exact(current_codes, target_codes)
+            remaining = _compute_moves_exact(cur, target_codes)
+            moves.extend(remaining)
+            return moves
 
         moves.append((i, j_candidate))
         cur[i], cur[j_candidate] = cur[j_candidate], cur[i]
 
-    log.error("compute_moves: vượt giới hạn giải chu kỳ, fallback exact")
-    return _compute_moves_exact(current_codes, target_codes)
+    log.warning("compute_moves: vượt giới hạn giải chu kỳ, fallback exact từ cur")
+    remaining = _compute_moves_exact(cur, target_codes)
+    moves.extend(remaining)
+    return moves
 
 def _save_arrange_debug_image(
     profile_id: str,
@@ -319,7 +328,9 @@ def apply_arrangement(
     chi1: List[Card],
     chi2: List[Card],
     chi3: List[Card],
-    delay_s: float = 0.0,   # mặc định 0, chỉ dùng config
+    delay_s: float = 0.0,
+    use_exact: bool = False,
+    use_fast_drag: bool = False,
 ):
     """
     Tự động kéo bài trên trình duyệt theo 3 chi đã sắp.
@@ -379,7 +390,7 @@ def apply_arrangement(
         )
         return
 
-    moves = compute_moves(current_codes, target_codes)
+    moves = compute_moves(current_codes, target_codes, exact=use_exact)
     if not moves:
         apply_trace("arrange_no_moves", profile_id)
         log.info("apply_arrangement: không có move nào (có thể đã đúng thứ tự).")
@@ -448,12 +459,9 @@ def apply_arrangement(
         #   - drag_duration_s: "thời gian game update / animation"
         #   - delay_s: "nghỉ thêm giữa các drag theo config"
         apply_trace("drag_before", profile_id, src=s_slot, dst=d_slot)
-        configured_sleep = max(0.0, float(drag_duration_s) + float(delay_s))
-        # Game cần thời gian chốt swap/animation trước khi một slot vừa kéo
-        # được dùng lại. Chỉ tăng thời gian cho chuỗi phụ thuộc; không tăng CPU
-        # và vẫn giữ các swap độc lập ở tốc độ nhanh.
+        total_sleep = max(0.0, float(drag_duration_s) + float(delay_s))
         total_sleep, touches_previous = compute_drag_settle_s(
-            configured_sleep,
+            total_sleep,
             (src_idx, dst_idx),
             previous_move,
         )
@@ -467,19 +475,25 @@ def apply_arrangement(
         )
 
         if DEBUG_ARRANGE_DRY_RUN:
-            # Chỉ log + delay, không kéo chuột thật
             if total_sleep > 0:
                 time.sleep(total_sleep)
         else:
-            # Mỗi drag được retry tối đa 2 lần nếu DevTools ném exception
             drag_ok = False
             max_attempts = 2
 
             for attempt in range(1, max_attempts + 1):
                 try:
-                    devtools.mouse_drag(sx, sy, dx, dy)
-                    if total_sleep > 0:
-                        time.sleep(total_sleep)
+                    if use_fast_drag:
+                        # Auto: steps=3, wait Chrome ACK, animation qua duration_s, chỉ sleep delay_s sau drag
+                        devtools.mouse_drag(sx, sy, dx, dy, steps=3, duration_s=drag_duration_s, wait_ack=True)
+                        if delay_s > 0:
+                            time.sleep(delay_s)
+                    else:
+                        # Manual: steps=18, wait_ack=True để Chrome confirm từng event
+                        # (tránh dependent moves bị corrupt khi Chrome chưa xử lý xong drag trước)
+                        devtools.mouse_drag(sx, sy, dx, dy, wait_ack=True)
+                        if total_sleep > 0:
+                            time.sleep(total_sleep)
                     drag_ok = True
                     apply_trace("drag_after", profile_id, src=s_slot, dst=d_slot, attempt=attempt)
                     break
@@ -494,7 +508,6 @@ def apply_arrangement(
                         max_attempts,
                         e,
                     )
-                    # nghỉ nhẹ trước khi thử lại
                     time.sleep(0.05)
 
             if not drag_ok:
@@ -511,9 +524,12 @@ def apply_arrangement(
 
     if had_error:
         apply_trace("arrange_failed", profile_id, partial_len=len(local_codes))
-        # Các drag trước lỗi đã được DevTools xác nhận. Trả lại layout một phần
-        # để retry tiếp tục từ trạng thái gần nhất, không kéo lại từ đầu.
-        return local_codes
+        if use_fast_drag:
+            # Auto: trả partial để retry tiếp từ trạng thái gần nhất
+            return local_codes
+        else:
+            # Manual (fire-and-forget): trả None để FORCE-APPLY2 bắt đầu lại từ đầu
+            return None
 
     apply_trace("arrange_done", profile_id, result_len=len(local_codes))
     return local_codes

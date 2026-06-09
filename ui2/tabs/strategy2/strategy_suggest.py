@@ -225,9 +225,10 @@ def apply_manual_dashboard_style(
             except Exception:
                 pass
 
-            # Pass 1
+            # LẦN 1
             res_codes = apply_arrangement(
-                pid, tab.browser_manager, list(current_codes), chi1, chi2, chi3, delay_s=delay_s,
+                pid, tab.browser_manager, list(current_codes), chi1, chi2, chi3,
+                delay_s=delay_s,
             )
 
             if isinstance(res_codes, list) and len(res_codes) == 13:
@@ -236,7 +237,7 @@ def apply_manual_dashboard_style(
                 except Exception:
                     pass
             elif res_codes is None:
-                log.warning("[Strategy2] FORCE-APPLY2 pid=%s apply returned None -> treat as uncertain", pid)
+                log.warning("[Strategy2] apply returned None pid=%s -> treat as uncertain, continue FORCE-APPLY2", pid)
                 res_codes = list(current_codes)
                 try:
                     tab._layout_codes[pid] = list(res_codes)
@@ -245,13 +246,13 @@ def apply_manual_dashboard_style(
             else:
                 raise RuntimeError("apply_arrangement trả về kết quả không hợp lệ.")
 
-            # WS UNFREEZE ngay sau pass 1
+            # WS UNFREEZE
             try:
                 tab._ws_freeze[pid] = False
             except Exception:
                 pass
 
-            # Pass 2 (FORCE): chạy ngay sau 0.25s, không điều kiện
+            # FORCE-APPLY2: đợi game settle rồi kéo lần 2 cho chắc
             log.warning("[Strategy2] FORCE-APPLY2 pid=%s run second apply immediately", pid)
             time.sleep(0.25)
 
@@ -275,7 +276,9 @@ def apply_manual_dashboard_style(
                 pass
 
             res_codes_apply2 = apply_arrangement(
-                pid, tab.browser_manager, list(base_layout), chi1, chi2, chi3, delay_s=delay_s,
+                pid, tab.browser_manager, list(base_layout), chi1, chi2, chi3,
+                delay_s=delay_s,
+                use_exact=True,
             )
 
             if isinstance(res_codes_apply2, list) and len(res_codes_apply2) == 13:
@@ -286,7 +289,7 @@ def apply_manual_dashboard_style(
                 except Exception:
                     pass
 
-            # EARLY UI UNLOCK ngay sau pass 2
+            # EARLY UI UNLOCK sau khi cả 2 lần kéo xong
             try:
                 if isinstance(res_codes, list) and len(res_codes) == 13:
                     _ui_call(tab, lambda p=pid: tab._apply_btn_set_default(p), delay_ms=0)
@@ -304,7 +307,7 @@ def apply_manual_dashboard_style(
             except Exception:
                 pass
 
-            # SCAN + poll 1s chờ scan cập nhật _layout_codes
+            # SCAN
             def _start_scan():
                 try:
                     if hasattr(tab, "refresh_slot_order_by_scan"):
@@ -524,6 +527,7 @@ def apply_suggestion_dashboard_style(
             apply_trace("apply_once_before", pid, moves_len=len(planned_moves))
             res_codes = apply_arrangement(
                 pid, tab.browser_manager, base_layout, chi1, chi2, chi3, delay_s=delay_s,
+                use_fast_drag=True,
             )
             apply_trace(
                 "apply_once_after", pid,
@@ -561,6 +565,7 @@ def apply_suggestion_dashboard_style(
                     apply_trace("apply_double_pass_before", pid, moves_len=len(second_moves), tx=transaction_id)
                     res_codes2 = apply_arrangement(
                         pid, tab.browser_manager, list(fast_layout), chi1, chi2, chi3, delay_s=delay_s,
+                        use_fast_drag=True,
                     )
                     apply_trace(
                         "apply_double_pass_after", pid,
@@ -583,6 +588,7 @@ def apply_suggestion_dashboard_style(
                     repair_result = apply_arrangement(
                         pid, tab.browser_manager, list(actual_layout),
                         chi1, chi2, chi3, delay_s=delay_s,
+                        use_fast_drag=True,
                     )
                     apply_trace(
                         "layout606_repair_drag_result", pid,
