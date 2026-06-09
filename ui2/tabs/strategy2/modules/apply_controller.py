@@ -10,7 +10,10 @@ from core.apply_trace import apply_trace
 from core.logger import log
 from ui2.tabs.dashboard.dashboard_scan_worker import ScanWorker
 from ui2.tabs.strategy2.modules.layout_verifier import scan_layout_fresh
-from ui2.tabs.strategy2.strategy_suggest import apply_suggestion_dashboard_style
+from ui2.tabs.strategy2.strategy_suggest import (
+    apply_manual_dashboard_style,
+    apply_suggestion_dashboard_style,
+)
 
 
 class ApplyController:
@@ -85,7 +88,7 @@ class ApplyController:
                     if not self._is_current_snapshot(tab, ctx):
                         log.warning("[Strategy2] Skip stale manual combo snapshot pid=%s", pid)
                         return
-                    apply_suggestion_dashboard_style(
+                    apply_manual_dashboard_style(
                         tab=tab,
                         profile_id=pid,
                         ws_codes=list(ctx.get("ws_codes") or []),
@@ -163,7 +166,7 @@ class ApplyController:
             if not self._prepare_manual_apply(tab, [pid]):
                 return
 
-            apply_suggestion_dashboard_style(
+            apply_manual_dashboard_style(
                 tab=tab,
                 profile_id=pid,
                 ws_codes=list(ws_codes),
@@ -240,7 +243,7 @@ class ApplyController:
                     if not self._is_current_snapshot(tab, ctx):
                         log.warning("[Strategy2] Skip stale manual ALL snapshot pid=%s", pid)
                         return
-                    apply_suggestion_dashboard_style(
+                    apply_manual_dashboard_style(
                         tab=tab,
                         profile_id=pid,
                         ws_codes=list(ctx.get("ws_codes") or []),
