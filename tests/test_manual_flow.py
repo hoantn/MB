@@ -86,10 +86,15 @@ def _run_manual(tab, pid, apply_side_effect=None, join_timeout=10.0):
 
     with patch("ui2.tabs.strategy2.strategy_suggest.apply_arrangement",
                side_effect=apply_side_effect) as mock_apply, \
-         patch("ui2.tabs.strategy2.strategy_suggest.time") as mock_time:
+         patch("ui2.tabs.strategy2.strategy_suggest.time") as mock_time, \
+         patch("ui2.tabs.strategy2.strategy_suggest.ws_layout_store") as mock_store:
 
-        mock_time.sleep = lambda s: None   # không chờ 0.25 s hay 0.03 s
+        mock_time.sleep = lambda s: None   # không chờ thật
         mock_time.time = time.time         # giữ time.time() thật để poll thoát đúng
+        mock_store.latest_sequence.return_value = 0
+        mock_store.hand_generation.return_value = 1
+        # Trả None = không có cmd=606 → fallback predicted layout
+        mock_store.wait_for_newer.return_value = None
 
         apply_manual_dashboard_style(tab, pid, WS_CODES, SUGGESTION)
 

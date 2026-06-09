@@ -208,14 +208,19 @@ def apply_manual_dashboard_style(
         err_msg: Optional[str] = None
         unlocked_early = False
         try:
-            try:
-                cfg = load_config(getattr(getattr(tab, "browser_manager", None), "_slot", 1))
-                ui_cfg = cfg.get("ui") or {}
-                ui_apply = ui_cfg.get("apply") or {}
-                delay_ms = int(ui_apply.get("delay_between_drag_ms") or 0)
-            except Exception:
-                delay_ms = 0
-            delay_s = max(0.0, float(delay_ms) / 1000.0)
+            (
+                delay_s,
+                _,
+                double_pass_gap_ms,
+                _,
+                _,
+            ) = _read_apply_timing_config(
+                slot=getattr(getattr(tab, "browser_manager", None), "_slot", 1)
+            )
+
+            # Chốt sequence cmd=606 trước khi kéo để nhận đúng snapshot sau drag
+            before_606_seq = ws_layout_store.latest_sequence(pid)
+            layout_hand_generation = ws_layout_store.hand_generation(pid)
 
             # WS FREEZE
             try:
@@ -230,6 +235,7 @@ def apply_manual_dashboard_style(
                 pid, tab.browser_manager, list(current_codes), chi1, chi2, chi3,
                 delay_s=delay_s,
             )
+            first_drag_finished_at = time.time()
 
             if isinstance(res_codes, list) and len(res_codes) == 13:
                 try:
@@ -252,23 +258,39 @@ def apply_manual_dashboard_style(
             except Exception:
                 pass
 
-            # FORCE-APPLY2: đợi game settle rồi kéo lần 2 cho chắc
-            log.warning("[Strategy2] FORCE-APPLY2 pid=%s run second apply immediately", pid)
-            time.sleep(0.25)
+            # FORCE-APPLY2: chờ cmd=606 (layout THẬT từ game) rồi kéo lần 2
+            log.warning("[Strategy2] FORCE-APPLY2 pid=%s waiting cmd=606 up to %dms", pid, double_pass_gap_ms)
+            fast_snapshot = ws_layout_store.wait_for_newer(
+                pid,
+                after_sequence=before_606_seq,
+                after_event_at=first_drag_finished_at,
+                timeout_s=float(double_pass_gap_ms) / 1000.0,
+                expected_hand_generation=layout_hand_generation,
+            )
 
-            base_layout = None
-            try:
-                cached_now = (getattr(tab, "_layout_codes", {}) or {}).get(pid)
-                if isinstance(cached_now, list) and len(cached_now) == 13:
-                    base_layout = list(cached_now)
-            except Exception:
+            if (
+                fast_snapshot is not None
+                and isinstance(fast_snapshot.cards, list)
+                and Counter(map(str, fast_snapshot.cards)) == Counter(map(str, ws_codes))
+            ):
+                # Có cmd=606: dùng layout THẬT
+                base_layout = list(fast_snapshot.cards)
+                log.warning("[Strategy2] FORCE-APPLY2 pid=%s got cmd=606 actual layout", pid)
+            else:
+                # Không có cmd=606: fallback predicted layout
+                log.warning("[Strategy2] FORCE-APPLY2 pid=%s no cmd=606, using predicted layout", pid)
                 base_layout = None
-
-            if base_layout is None:
-                if isinstance(res_codes, list) and len(res_codes) == 13:
-                    base_layout = list(res_codes)
-                else:
-                    base_layout = list(current_codes)
+                try:
+                    cached_now = (getattr(tab, "_layout_codes", {}) or {}).get(pid)
+                    if isinstance(cached_now, list) and len(cached_now) == 13:
+                        base_layout = list(cached_now)
+                except Exception:
+                    base_layout = None
+                if base_layout is None:
+                    if isinstance(res_codes, list) and len(res_codes) == 13:
+                        base_layout = list(res_codes)
+                    else:
+                        base_layout = list(current_codes)
 
             try:
                 tab._layout_codes[pid] = list(base_layout)
