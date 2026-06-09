@@ -11,7 +11,7 @@ from collections import Counter
 from core.logger import log
 from core.apply_trace import apply_trace
 from engine.card import Card
-from engine.action import apply_arrangement, compute_moves
+from engine.action import apply_arrangement, compute_moves, compute_target_codes
 from core.config import load_config
 from engine.foul_rules import is_no_foul, is_no_foul_slot_layout
 from ui2.tabs.strategy2.modules.apply_diagnostics import record_apply_failure
@@ -128,7 +128,7 @@ def apply_manual_dashboard_style(
     ws_codes: List[str],
     suggestion: dict,
 ) -> None:
-    """Kéo bài thủ công: double pass ngay, không chờ cmd=606, scan 1s."""
+    """Kéo bài thủ công: double pass + wait cmd=606 + confirm_and_repair."""
 
     pid = str(profile_id)
 
@@ -212,8 +212,8 @@ def apply_manual_dashboard_style(
                 delay_s,
                 _,
                 double_pass_gap_ms,
-                _,
-                _,
+                layout606_timeout_retry_count,
+                layout606_timeout_retry_ms,
             ) = _read_apply_timing_config(
                 slot=getattr(getattr(tab, "browser_manager", None), "_slot", 1)
             )
@@ -221,6 +221,7 @@ def apply_manual_dashboard_style(
             # Chốt sequence cmd=606 trước khi kéo để nhận đúng snapshot sau drag
             before_606_seq = ws_layout_store.latest_sequence(pid)
             layout_hand_generation = ws_layout_store.hand_generation(pid)
+            expected_layout = compute_target_codes(chi1, chi2, chi3)
 
             # WS FREEZE
             try:
@@ -302,6 +303,7 @@ def apply_manual_dashboard_style(
                 delay_s=delay_s,
                 use_exact=True,
             )
+            drag_finished_at = time.time()
 
             if isinstance(res_codes_apply2, list) and len(res_codes_apply2) == 13:
                 res_codes = list(res_codes_apply2)
@@ -311,7 +313,37 @@ def apply_manual_dashboard_style(
                 except Exception:
                     pass
 
-            # EARLY UI UNLOCK sau khi cả 2 lần kéo xong
+            # confirm_and_repair: chờ cmd=606 sau FORCE-APPLY2, sửa nếu cần
+            apply_ok = bool(
+                isinstance(res_codes, list)
+                and len(res_codes) == 13
+                and Counter(map(str, res_codes)) == Counter(map(str, ws_codes))
+                and _layout_matches_target(list(res_codes), expected_layout)
+            )
+            if apply_ok:
+                def _repair_from_actual(actual_layout: List[str]) -> float:
+                    apply_arrangement(
+                        pid, tab.browser_manager, list(actual_layout),
+                        chi1, chi2, chi3, delay_s=delay_s, use_exact=True,
+                    )
+                    return time.time()
+                confirmation = confirm_and_repair_layout(
+                    pid, expected_layout,
+                    after_sequence=before_606_seq,
+                    drag_finished_at=drag_finished_at,
+                    repair=_repair_from_actual,
+                    timeout_retry_count=layout606_timeout_retry_count,
+                    timeout_retry_s=float(layout606_timeout_retry_ms) / 1000.0,
+                    expected_hand_generation=layout_hand_generation,
+                )
+                if confirmation is not None and confirmation.confirmed and confirmation.layout:
+                    res_codes = list(confirmation.layout)
+                    try:
+                        tab._layout_codes[pid] = list(res_codes)
+                    except Exception:
+                        pass
+
+            # EARLY UI UNLOCK sau khi cả 2 lần kéo + confirm xong
             try:
                 if isinstance(res_codes, list) and len(res_codes) == 13:
                     _ui_call(tab, lambda p=pid: tab._apply_btn_set_default(p), delay_ms=0)
