@@ -11,7 +11,7 @@ from collections import Counter
 from core.logger import log
 from core.apply_trace import apply_trace
 from engine.card import Card
-from engine.action import apply_arrangement, compute_moves, compute_target_codes
+from engine.action import apply_arrangement, compute_moves
 from core.config import load_config
 from engine.foul_rules import is_no_foul, is_no_foul_slot_layout
 from ui2.tabs.strategy2.modules.apply_diagnostics import record_apply_failure
@@ -128,11 +128,11 @@ def apply_manual_dashboard_style(
     ws_codes: List[str],
     suggestion: dict,
 ) -> None:
-    """Kéo bài thủ công: double pass + wait cmd=606 + confirm_and_repair."""
+    """Kéo bài thủ công: double pass, chờ cmd=606 thay sleep(0.25)."""
 
     pid = str(profile_id)
 
-    # 1) Build Card objects
+    # 1) Build Card objects từ suggestion
     chi1_codes = suggestion.get("chi1_codes") or []
     chi2_codes = suggestion.get("chi2_codes") or []
     chi3_codes = suggestion.get("chi3_codes") or []
@@ -149,7 +149,7 @@ def apply_manual_dashboard_style(
         QMessageBox.warning(tab, "HÚP", f"{pid}: Chi không hợp lệ (không phải 5-5-3).")
         return
 
-    # 2) current_codes: ưu tiên cache nếu cùng multiset với ws_codes
+    # 2) Lấy layout hiện tại (cache → ws_codes)
     if not hasattr(tab, "_layout_codes"):
         tab._layout_codes = {}
 
@@ -182,7 +182,7 @@ def apply_manual_dashboard_style(
         QMessageBox.warning(tab, "HÚP", f"{pid}: BrowserManager không hợp lệ.")
         return
 
-    # 4) Guard: tránh apply đè
+    # 4) Guard: tránh apply đè nếu đang chạy
     if not hasattr(tab, "_apply_threads"):
         tab._apply_threads = {}
 
@@ -194,7 +194,7 @@ def apply_manual_dashboard_style(
     if t_old is not None and getattr(t_old, "is_alive", lambda: False)():
         return
 
-    # 5) Set busy
+    # 5) Đặt nút Apply sang trạng thái "busy"
     try:
         tab._apply_btn_set_busy(pid)
     except Exception:
@@ -212,18 +212,13 @@ def apply_manual_dashboard_style(
                 delay_s,
                 _,
                 double_pass_gap_ms,
-                layout606_timeout_retry_count,
-                layout606_timeout_retry_ms,
+                _,
+                _,
             ) = _read_apply_timing_config(
                 slot=getattr(getattr(tab, "browser_manager", None), "_slot", 1)
             )
 
-            # Chốt sequence cmd=606 trước khi kéo để nhận đúng snapshot sau drag
-            before_606_seq = ws_layout_store.latest_sequence(pid)
-            layout_hand_generation = ws_layout_store.hand_generation(pid)
-            expected_layout = compute_target_codes(chi1, chi2, chi3)
-
-            # WS FREEZE
+            # WS FREEZE: chặn WS same-hand update chen ngang trong lúc kéo
             try:
                 if not hasattr(tab, "_ws_freeze"):
                     tab._ws_freeze = {}
@@ -231,36 +226,46 @@ def apply_manual_dashboard_style(
             except Exception:
                 pass
 
-            # LẦN 1
+            # Chốt sequence và hand_generation để wait_for_newer lọc đúng snapshot
+            before_606_seq = ws_layout_store.latest_sequence(pid)
+            layout_hand_generation = ws_layout_store.hand_generation(pid)
+
+            # LẦN 1: apply_arrangement từ current_codes
             res_codes = apply_arrangement(
-                pid, tab.browser_manager, list(current_codes), chi1, chi2, chi3,
+                pid,
+                tab.browser_manager,
+                list(current_codes),
+                chi1,
+                chi2,
+                chi3,
                 delay_s=delay_s,
             )
-            first_drag_finished_at = time.time()
 
             if isinstance(res_codes, list) and len(res_codes) == 13:
                 try:
                     tab._layout_codes[pid] = list(res_codes)
                 except Exception:
                     pass
-            elif res_codes is None:
-                log.warning("[Strategy2] apply returned None pid=%s -> treat as uncertain, continue FORCE-APPLY2", pid)
-                res_codes = list(current_codes)
-                try:
-                    tab._layout_codes[pid] = list(res_codes)
-                except Exception:
-                    pass
             else:
-                raise RuntimeError("apply_arrangement trả về kết quả không hợp lệ.")
+                if res_codes is None:
+                    log.warning("[Strategy2] apply returned None pid=%s -> treat as uncertain, continue FORCE-APPLY2", pid)
+                    res_codes = list(current_codes)
+                    try:
+                        tab._layout_codes[pid] = list(res_codes)
+                    except Exception:
+                        pass
+                else:
+                    raise RuntimeError("apply_arrangement trả về kết quả không hợp lệ.")
 
-            # WS UNFREEZE
+            # WS UNFREEZE: drag đã xong -> cho phép WS đồng bộ trở lại
             try:
                 tab._ws_freeze[pid] = False
             except Exception:
                 pass
 
-            # FORCE-APPLY2: chờ cmd=606 (layout THẬT từ game) rồi kéo lần 2
+            # LẦN 2 (FORCE): chờ cmd=606 layout THẬT thay vì sleep(0.25)
             log.warning("[Strategy2] FORCE-APPLY2 pid=%s waiting cmd=606 up to %dms", pid, double_pass_gap_ms)
+            first_drag_finished_at = time.time()
             fast_snapshot = ws_layout_store.wait_for_newer(
                 pid,
                 after_sequence=before_606_seq,
@@ -269,16 +274,15 @@ def apply_manual_dashboard_style(
                 expected_hand_generation=layout_hand_generation,
             )
 
+            # Base layout cho lần 2: cmd=606 thật → cache → res_codes → current_codes
             if (
                 fast_snapshot is not None
                 and isinstance(fast_snapshot.cards, list)
                 and Counter(map(str, fast_snapshot.cards)) == Counter(map(str, ws_codes))
             ):
-                # Có cmd=606: dùng layout THẬT
                 base_layout = list(fast_snapshot.cards)
                 log.warning("[Strategy2] FORCE-APPLY2 pid=%s got cmd=606 actual layout", pid)
             else:
-                # Không có cmd=606: fallback predicted layout
                 log.warning("[Strategy2] FORCE-APPLY2 pid=%s no cmd=606, using predicted layout", pid)
                 base_layout = None
                 try:
@@ -299,11 +303,14 @@ def apply_manual_dashboard_style(
                 pass
 
             res_codes_apply2 = apply_arrangement(
-                pid, tab.browser_manager, list(base_layout), chi1, chi2, chi3,
+                pid,
+                tab.browser_manager,
+                list(base_layout),
+                chi1,
+                chi2,
+                chi3,
                 delay_s=delay_s,
-                use_exact=True,
             )
-            drag_finished_at = time.time()
 
             if isinstance(res_codes_apply2, list) and len(res_codes_apply2) == 13:
                 res_codes = list(res_codes_apply2)
@@ -313,37 +320,7 @@ def apply_manual_dashboard_style(
                 except Exception:
                     pass
 
-            # confirm_and_repair: chờ cmd=606 sau FORCE-APPLY2, sửa nếu cần
-            apply_ok = bool(
-                isinstance(res_codes, list)
-                and len(res_codes) == 13
-                and Counter(map(str, res_codes)) == Counter(map(str, ws_codes))
-                and _layout_matches_target(list(res_codes), expected_layout)
-            )
-            if apply_ok:
-                def _repair_from_actual(actual_layout: List[str]) -> float:
-                    apply_arrangement(
-                        pid, tab.browser_manager, list(actual_layout),
-                        chi1, chi2, chi3, delay_s=delay_s, use_exact=True,
-                    )
-                    return time.time()
-                confirmation = confirm_and_repair_layout(
-                    pid, expected_layout,
-                    after_sequence=before_606_seq,
-                    drag_finished_at=drag_finished_at,
-                    repair=_repair_from_actual,
-                    timeout_retry_count=layout606_timeout_retry_count,
-                    timeout_retry_s=float(layout606_timeout_retry_ms) / 1000.0,
-                    expected_hand_generation=layout_hand_generation,
-                )
-                if confirmation is not None and confirmation.confirmed and confirmation.layout:
-                    res_codes = list(confirmation.layout)
-                    try:
-                        tab._layout_codes[pid] = list(res_codes)
-                    except Exception:
-                        pass
-
-            # EARLY UI UNLOCK sau khi cả 2 lần kéo + confirm xong
+            # EARLY UI UNLOCK sau khi cả 2 lần kéo xong
             try:
                 if isinstance(res_codes, list) and len(res_codes) == 13:
                     _ui_call(tab, lambda p=pid: tab._apply_btn_set_default(p), delay_ms=0)
@@ -356,12 +333,14 @@ def apply_manual_dashboard_style(
                 if Counter(map(str, res_codes)) != Counter(map(str, ws_codes)):
                     log.error(
                         "[Strategy2] VERIFY-13 mismatch after apply pid=%s ws_first3=%s res_first3=%s",
-                        pid, list(ws_codes)[:3], list(res_codes)[:3],
+                        pid,
+                        list(ws_codes)[:3],
+                        list(res_codes)[:3],
                     )
             except Exception:
                 pass
 
-            # SCAN
+            # SCAN & UI sync
             def _start_scan():
                 try:
                     if hasattr(tab, "refresh_slot_order_by_scan"):

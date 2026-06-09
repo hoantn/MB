@@ -87,8 +87,7 @@ def _run_manual(tab, pid, apply_side_effect=None, join_timeout=10.0):
     with patch("ui2.tabs.strategy2.strategy_suggest.apply_arrangement",
                side_effect=apply_side_effect) as mock_apply, \
          patch("ui2.tabs.strategy2.strategy_suggest.time") as mock_time, \
-         patch("ui2.tabs.strategy2.strategy_suggest.ws_layout_store") as mock_store, \
-         patch("ui2.tabs.strategy2.strategy_suggest.confirm_and_repair_layout") as mock_confirm:
+         patch("ui2.tabs.strategy2.strategy_suggest.ws_layout_store") as mock_store:
 
         mock_time.sleep = lambda s: None   # không chờ thật
         mock_time.time = time.time         # giữ time.time() thật để poll thoát đúng
@@ -96,8 +95,6 @@ def _run_manual(tab, pid, apply_side_effect=None, join_timeout=10.0):
         mock_store.hand_generation.return_value = 1
         # Trả None = không có cmd=606 → fallback predicted layout
         mock_store.wait_for_newer.return_value = None
-        # confirm_and_repair trả kết quả xác nhận OK
-        mock_confirm.return_value = MagicMock(confirmed=True, layout=list(SLOT_LAYOUT))
 
         apply_manual_dashboard_style(tab, pid, WS_CODES, SUGGESTION)
 
@@ -274,15 +271,13 @@ class ManualWorkerFlowTests(unittest.TestCase):
         with patch("ui2.tabs.strategy2.strategy_suggest.apply_arrangement",
                    side_effect=slow_apply), \
              patch("ui2.tabs.strategy2.strategy_suggest.time") as mock_time, \
-             patch("ui2.tabs.strategy2.strategy_suggest.ws_layout_store") as mock_store_g, \
-             patch("ui2.tabs.strategy2.strategy_suggest.confirm_and_repair_layout") as mock_confirm_g:
+             patch("ui2.tabs.strategy2.strategy_suggest.ws_layout_store") as mock_store_g:
 
             mock_time.sleep = lambda s: None
             mock_time.time = time.time
             mock_store_g.latest_sequence.return_value = 0
             mock_store_g.hand_generation.return_value = 1
             mock_store_g.wait_for_newer.return_value = None
-            mock_confirm_g.return_value = MagicMock(confirmed=True, layout=list(SLOT_LAYOUT))
 
             # Click 1: thread chạy, block tại LẦN 1
             apply_manual_dashboard_style(tab, "P1", WS_CODES, SUGGESTION)
@@ -317,8 +312,8 @@ class ManualWorkerFlowTests(unittest.TestCase):
         # FORCE-APPLY2 nhận layout từ cache sau LẦN 1, không phải ws_codes raw
         self.assertEqual(layouts_passed[1], list(SLOT_LAYOUT))
 
-    def test_lam1_no_use_exact_apply2_has_use_exact(self):
-        """LẦN 1 dùng chi-based (không use_exact); FORCE-APPLY2 dùng use_exact=True."""
+    def test_lam1_and_apply2_both_chi_based(self):
+        """LẦN 1 và FORCE-APPLY2 đều chi-based: không use_exact, không use_fast_drag."""
         tab = _Tab()
         kwargs_list = []
 
@@ -329,51 +324,11 @@ class ManualWorkerFlowTests(unittest.TestCase):
         _run_manual(tab, "P1", apply_side_effect=capture)
 
         self.assertEqual(len(kwargs_list), 2)
-        # LẦN 1: không có use_exact, không có use_fast_drag
-        self.assertNotIn("use_exact", kwargs_list[0],
-                         "LẦN 1 không được truyền use_exact")
-        self.assertNotIn("use_fast_drag", kwargs_list[0],
-                         "LẦN 1 không được truyền use_fast_drag")
-        # FORCE-APPLY2: phải có use_exact=True
-        self.assertEqual(kwargs_list[1].get("use_exact"), True,
-                         "FORCE-APPLY2 phải truyền use_exact=True")
-
-    def test_confirm_repair_called_after_apply2(self):
-        """confirm_and_repair_layout được gọi sau FORCE-APPLY2 khi layout hợp lệ."""
-        from unittest.mock import call as mock_call
-        tab = _Tab()
-
-        confirm_calls = []
-
-        def _run_with_confirm_capture():
-            from ui2.tabs.strategy2.strategy_suggest import apply_manual_dashboard_style
-
-            with patch("ui2.tabs.strategy2.strategy_suggest.apply_arrangement",
-                       side_effect=lambda *a, **kw: list(SLOT_LAYOUT)) as _, \
-                 patch("ui2.tabs.strategy2.strategy_suggest.time") as mock_time, \
-                 patch("ui2.tabs.strategy2.strategy_suggest.ws_layout_store") as mock_store, \
-                 patch("ui2.tabs.strategy2.strategy_suggest.confirm_and_repair_layout",
-                       side_effect=lambda *a, **kw: (confirm_calls.append((a, kw)) or
-                                                     MagicMock(confirmed=True, layout=list(SLOT_LAYOUT)))) as _:
-                mock_time.sleep = lambda s: None
-                mock_time.time = time.time
-                mock_store.latest_sequence.return_value = 0
-                mock_store.hand_generation.return_value = 1
-                mock_store.wait_for_newer.return_value = None
-
-                apply_manual_dashboard_style(tab, "P1", WS_CODES, SUGGESTION)
-                t = tab._apply_threads.get("P1")
-                if t:
-                    t.join(timeout=10.0)
-
-        _run_with_confirm_capture()
-
-        self.assertEqual(len(confirm_calls), 1,
-                         "confirm_and_repair_layout phải được gọi đúng 1 lần")
-        _, kw = confirm_calls[0]
-        self.assertIn("after_sequence", kw, "cần truyền after_sequence")
-        self.assertIn("drag_finished_at", kw, "cần truyền drag_finished_at")
-        self.assertIn("expected_hand_generation", kw, "cần truyền expected_hand_generation")
+        for i, name in enumerate(["LẦN 1", "FORCE-APPLY2"]):
+            self.assertNotIn("use_exact", kwargs_list[i],
+                             f"{name} không được truyền use_exact")
+            self.assertNotIn("use_fast_drag", kwargs_list[i],
+                             f"{name} không được truyền use_fast_drag")
 
 
 if __name__ == "__main__":
