@@ -276,6 +276,7 @@ class AutoFourToolTab(QWidget):
 
         self._bg_log.connect(self._log)
         self._init_tool_contexts()
+        self._start_slot_bridges()
 
         try:
             self._build_ui()
@@ -311,6 +312,25 @@ class AutoFourToolTab(QWidget):
             except Exception:
                 log.exception("[AutoFourToolTab] ToolContext slot=%d lỗi", slot)
                 self._contexts.append(None)
+
+    def _start_slot_bridges(self):
+        """Khởi động WS bridge cho slot 2-4 ngay khi tab init.
+
+        Bridge phải luôn chạy khi browser mở, bất kể auto play có bật hay không,
+        vì extension cần fetch proxy-creds từ bridge ngay khi onAuthRequired.
+        Slot 1 do main.py quản lý, không cần start ở đây.
+        """
+        for slot in range(2, 5):
+            ctx = self._contexts[slot - 1]
+            if ctx is None:
+                continue
+            if ctx._ws_server is not None:
+                continue
+            try:
+                ctx.start()
+                log.info("[AutoFourToolTab] bridge slot=%d started (eager)", slot)
+            except OSError as e:
+                log.warning("[AutoFourToolTab] bridge slot=%d port busy: %s", slot, e)
 
     # ── Build UI ───────────────────────────────────────────────────
 
@@ -804,9 +824,8 @@ class AutoFourToolTab(QWidget):
         if ctx is not None and ctx.strategy_tab is not None:
             ctx.strategy_tab.set_auto_play(False)
 
-        # Slot 1: bridge main.py không dừng
-        if slot > 1 and ctx is not None:
-            ctx.stop()
+        # Không dừng bridge khi tắt auto play — bridge phải chạy liên tục để
+        # extension vẫn fetch được proxy-creds khi browser đang mở.
 
         self._cards[slot - 1].set_running(False)
         self._cards[slot - 1].set_meta("Auto Play: tắt")

@@ -195,14 +195,26 @@ def save_config(config: Dict[str, Any], slot: int = 1) -> None:
 
 
 def ensure_slot_configs() -> None:
-    """Tạo config-tool2,3,4.json nếu chưa tồn tại với tool_index=slot tương ứng."""
+    """Tạo config-tool2,3,4.json nếu chưa tồn tại.
+
+    Dùng config slot 1 làm template (copy proxy, chrome_path, target_url)
+    để các tool mới có thể kết nối ngay mà không cần cấu hình lại từ đầu.
+    Chỉ reset user_data_dir để mỗi slot dùng profile Chrome riêng biệt.
+    """
+    slot1_cfg = load_config(1)
     for slot in range(2, 5):
         path = _config_path(slot)
         if not os.path.exists(path):
-            default = copy.deepcopy(DEFAULT_CONFIG)
-            default.setdefault("ui", {})["tool_index"] = slot
-            save_config(default, slot)
-            log.info("Đã tạo config cho slot %d: %s", slot, path)
+            new_cfg = copy.deepcopy(slot1_cfg)
+            new_cfg.setdefault("ui", {})["tool_index"] = slot
+            # Reset user_data_dir để tránh xung đột profile Chrome giữa các slot
+            for pid, p in new_cfg.get("profiles", {}).items():
+                p["user_data_dir"] = ""
+            # Reset window positions — mỗi slot có vị trí cửa sổ riêng
+            new_cfg.get("ui", {}).pop("browser_window_positions", None)
+            new_cfg.get("ui", {}).pop("tool_window_geometries", None)
+            save_config(new_cfg, slot)
+            log.info("Đã tạo config cho slot %d từ template slot 1: %s", slot, path)
 
 
 # ------------------------- GAME COORDS HELPERS (NEW) -------------------------
