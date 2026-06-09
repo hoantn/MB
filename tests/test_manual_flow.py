@@ -86,15 +86,10 @@ def _run_manual(tab, pid, apply_side_effect=None, join_timeout=10.0):
 
     with patch("ui2.tabs.strategy2.strategy_suggest.apply_arrangement",
                side_effect=apply_side_effect) as mock_apply, \
-         patch("ui2.tabs.strategy2.strategy_suggest.time") as mock_time, \
-         patch("ui2.tabs.strategy2.strategy_suggest.ws_layout_store") as mock_store:
+         patch("ui2.tabs.strategy2.strategy_suggest.time") as mock_time:
 
-        mock_time.sleep = lambda s: None   # không chờ thật
+        mock_time.sleep = lambda s: None   # không chờ thật (kể cả sleep(0.25))
         mock_time.time = time.time         # giữ time.time() thật để poll thoát đúng
-        mock_store.latest_sequence.return_value = 0
-        mock_store.hand_generation.return_value = 1
-        # Trả None = không có cmd=606 → fallback predicted layout
-        mock_store.wait_for_newer.return_value = None
 
         apply_manual_dashboard_style(tab, pid, WS_CODES, SUGGESTION)
 
@@ -270,14 +265,10 @@ class ManualWorkerFlowTests(unittest.TestCase):
 
         with patch("ui2.tabs.strategy2.strategy_suggest.apply_arrangement",
                    side_effect=slow_apply), \
-             patch("ui2.tabs.strategy2.strategy_suggest.time") as mock_time, \
-             patch("ui2.tabs.strategy2.strategy_suggest.ws_layout_store") as mock_store_g:
+             patch("ui2.tabs.strategy2.strategy_suggest.time") as mock_time:
 
             mock_time.sleep = lambda s: None
             mock_time.time = time.time
-            mock_store_g.latest_sequence.return_value = 0
-            mock_store_g.hand_generation.return_value = 1
-            mock_store_g.wait_for_newer.return_value = None
 
             # Click 1: thread chạy, block tại LẦN 1
             apply_manual_dashboard_style(tab, "P1", WS_CODES, SUGGESTION)

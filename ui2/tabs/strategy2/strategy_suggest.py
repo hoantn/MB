@@ -211,7 +211,7 @@ def apply_manual_dashboard_style(
             (
                 delay_s,
                 _,
-                double_pass_gap_ms,
+                _,
                 _,
                 _,
             ) = _read_apply_timing_config(
@@ -225,10 +225,6 @@ def apply_manual_dashboard_style(
                 tab._ws_freeze[pid] = True
             except Exception:
                 pass
-
-            # Chốt sequence và hand_generation để wait_for_newer lọc đúng snapshot
-            before_606_seq = ws_layout_store.latest_sequence(pid)
-            layout_hand_generation = ws_layout_store.hand_generation(pid)
 
             # LẦN 1: apply_arrangement từ current_codes
             res_codes = apply_arrangement(
@@ -263,39 +259,25 @@ def apply_manual_dashboard_style(
             except Exception:
                 pass
 
-            # LẦN 2 (FORCE): chờ cmd=606 layout THẬT thay vì sleep(0.25)
-            log.warning("[Strategy2] FORCE-APPLY2 pid=%s waiting cmd=606 up to %dms", pid, double_pass_gap_ms)
-            first_drag_finished_at = time.time()
-            fast_snapshot = ws_layout_store.wait_for_newer(
-                pid,
-                after_sequence=before_606_seq,
-                after_event_at=first_drag_finished_at,
-                timeout_s=float(double_pass_gap_ms) / 1000.0,
-                expected_hand_generation=layout_hand_generation,
-            )
+            # LẦN 2 (FORCE): chạy ngay 1 vòng nữa cho chắc
+            log.warning("[Strategy2] FORCE-APPLY2 pid=%s run second apply immediately", pid)
 
-            # Base layout cho lần 2: cmd=606 thật → cache → res_codes → current_codes
-            if (
-                fast_snapshot is not None
-                and isinstance(fast_snapshot.cards, list)
-                and Counter(map(str, fast_snapshot.cards)) == Counter(map(str, ws_codes))
-            ):
-                base_layout = list(fast_snapshot.cards)
-                log.warning("[Strategy2] FORCE-APPLY2 pid=%s got cmd=606 actual layout", pid)
-            else:
-                log.warning("[Strategy2] FORCE-APPLY2 pid=%s no cmd=606, using predicted layout", pid)
+            # đợi ngắn để game settle drag events của lần 1
+            time.sleep(0.25)
+
+            # Base layout cho lần 2: cache → res_codes → current_codes
+            base_layout = None
+            try:
+                cached_now = (getattr(tab, "_layout_codes", {}) or {}).get(pid)
+                if isinstance(cached_now, list) and len(cached_now) == 13:
+                    base_layout = list(cached_now)
+            except Exception:
                 base_layout = None
-                try:
-                    cached_now = (getattr(tab, "_layout_codes", {}) or {}).get(pid)
-                    if isinstance(cached_now, list) and len(cached_now) == 13:
-                        base_layout = list(cached_now)
-                except Exception:
-                    base_layout = None
-                if base_layout is None:
-                    if isinstance(res_codes, list) and len(res_codes) == 13:
-                        base_layout = list(res_codes)
-                    else:
-                        base_layout = list(current_codes)
+            if base_layout is None:
+                if isinstance(res_codes, list) and len(res_codes) == 13:
+                    base_layout = list(res_codes)
+                else:
+                    base_layout = list(current_codes)
 
             try:
                 tab._layout_codes[pid] = list(base_layout)
