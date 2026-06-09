@@ -19,7 +19,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSplitter, QStackedWidget, QFrame, QTextEdit,
-    QSizePolicy, QSpinBox,
+    QSizePolicy, QSpinBox, QCheckBox,
 )
 
 from core.logger import log
@@ -517,6 +517,32 @@ class AutoFourToolTab(QWidget):
         tbl.addWidget(self._btn_strategy)
         tbl.addWidget(self._btn_browser)
         tbl.addStretch()
+
+        # Quick exit room: P1/P2/P3 checkboxes + button (right side of tab bar)
+        _chk_style = (
+            f"QCheckBox {{ color:{_MUTED}; font-size:11px; font-weight:700; spacing:4px; }}"
+            f"QCheckBox::indicator {{ width:13px; height:13px; border-radius:3px;"
+            f" border:1px solid #3a424d; background:#1d2229; }}"
+            f"QCheckBox::indicator:checked {{ background:{_BLUE}; border-color:{_BLUE}; }}"
+        )
+        self._chk_exit_p1 = QCheckBox("P1"); self._chk_exit_p1.setChecked(True)
+        self._chk_exit_p2 = QCheckBox("P2"); self._chk_exit_p2.setChecked(True)
+        self._chk_exit_p3 = QCheckBox("P3"); self._chk_exit_p3.setChecked(True)
+        for chk in (self._chk_exit_p1, self._chk_exit_p2, self._chk_exit_p3):
+            chk.setStyleSheet(_chk_style)
+            tbl.addWidget(chk)
+        tbl.addSpacing(6)
+        self._btn_exit_room = QPushButton("Thoát Phòng")
+        self._btn_exit_room.setFixedHeight(24)
+        self._btn_exit_room.setStyleSheet(
+            "QPushButton { background:#622b31; color:#fff; border:1px solid #a04040;"
+            " border-radius:4px; padding:0 9px; font-weight:700; font-size:11px; }"
+            "QPushButton:pressed { background:#7a3540; }"
+        )
+        self._btn_exit_room.clicked.connect(self._on_quick_exit_room)
+        tbl.addWidget(self._btn_exit_room)
+        tbl.addSpacing(4)
+
         lay.addWidget(tab_bar)
 
         # Stacked panes
@@ -837,6 +863,26 @@ class AutoFourToolTab(QWidget):
                     self._bg_log.emit(slot, f"{pid}: lỗi kết nối lại: {e}", "err")
 
         threading.Thread(target=_work, daemon=True, name=f"reconnect-slot{slot}").start()
+
+    def _on_quick_exit_room(self):
+        slot = self._current_slot
+        ctx = self._contexts[slot - 1]
+        if ctx is None or ctx.gateway is None:
+            self._log(slot, "Không có gateway để thoát phòng", "err")
+            return
+        pids = []
+        if self._chk_exit_p1.isChecked(): pids.append("P1")
+        if self._chk_exit_p2.isChecked(): pids.append("P2")
+        if self._chk_exit_p3.isChecked(): pids.append("P3")
+        if not pids:
+            self._log(slot, "Chưa chọn profile để thoát phòng", "warn")
+            return
+        for pid in pids:
+            try:
+                ctx.gateway.gui_lenh_thoat_phong(pid)
+                self._log(slot, f"Đã gửi lệnh thoát phòng → {pid}", "ok")
+            except Exception as e:
+                self._log(slot, f"Lỗi thoát phòng {pid}: {e}", "err")
 
     def _on_reset_proxy(self):
         slot = self._current_slot
