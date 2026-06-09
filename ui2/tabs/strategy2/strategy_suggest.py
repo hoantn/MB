@@ -117,12 +117,7 @@ def _read_apply_timing_config(slot: int = 1) -> tuple[float, bool, int, int, int
         ui_apply = ui_cfg.get("apply") or {}
         delay_ms = int(ui_apply.get("delay_between_drag_ms") or 0)
         double_pass = bool(ui_apply.get("double_pass", True))
-        # Cua so cho cmd=606 sau pass keo dau. Day la thoi gian cho toi da:
-        # neu 606 ve som thi xu ly som, khong ngu cung. 4s bam sat chu ky 606
-        # thuc te, giup manual 1 click co co hoi sua ngay trong cung mot luot.
         double_pass_gap_ms = int(ui_apply.get("double_pass_gap_ms") or 4000)
-        # Timeout retry chi cho them cmd=606 moi de xac nhan/repair, khong keo mu.
-        # Neu 606 ve cham hon mot chu ky, P do van co co hoi chot dung trong van.
         layout606_timeout_retry_count = int(ui_apply.get("layout606_timeout_retry_count") or 1)
         layout606_timeout_retry_ms = int(ui_apply.get("layout606_timeout_retry_ms") or 6500)
     except Exception:
@@ -150,11 +145,10 @@ def apply_suggestion_dashboard_style(
     on_unsafe: Optional[Callable[[], None]] = None,
 ) -> bool:
     """
-    Apply gợi ý độc lập theo từng P:
-    - Chốt đúng bộ 13 lá và target trước khi kéo.
-    - Tính một chuỗi swap luôn khép kín và kéo đúng một lượt.
-    - Chờ cmd=606 xác nhận layout thật sau khi kéo.
-    - Nếu layout thật lệch mục tiêu, sửa từ chính snapshot 606 và chờ xác nhận mới.
+    Apply gợi ý độc lập theo từng P.
+
+    on_complete=None  → luồng thủ công: double pass ngay, không chờ cmd=606.
+    on_complete=fn    → luồng auto: chờ cmd=606, confirm_and_repair, callbacks.
     """
 
     pid = str(profile_id)
@@ -211,8 +205,6 @@ def apply_suggestion_dashboard_style(
 
     # ------------------------------------------------------------------
     # 2) Lấy layout hiện tại (current_codes)
-    #    - Ưu tiên cache _layout_codes nếu cùng multiset với ws_codes.
-    #    - Ngược lại dùng ws_codes làm ground truth.
     # ------------------------------------------------------------------
     if not hasattr(tab, "_layout_codes"):
         tab._layout_codes = {}
@@ -225,19 +217,16 @@ def apply_suggestion_dashboard_style(
         log.warning("[AUTO-SAFE] %s: suggestion không khớp 13 lá hiện tại, không kéo snapshot cũ", pid)
         return False
 
-    # cmd=600 là nguồn layout đầu vào của lần xếp đầu tiên. Không chờ cmd606
-    # trước kéo; cmd606 chỉ xác nhận hoặc sửa layout thật sau thao tác.
     current_codes = list(ws_codes)
     apply_trace("apply_start_from_cmd600", pid, tx=transaction_id)
 
-    # Đồng bộ cache dự đoán theo layout gốc trước khi bắt đầu kéo.
     try:
         tab._layout_codes[pid] = list(current_codes)
     except Exception:
         pass
 
     # ------------------------------------------------------------------
-    # 3) Kiểm tra BrowserManager & DevTools contract cơ bản
+    # 3) Kiểm tra BrowserManager
     # ------------------------------------------------------------------
     bm = getattr(tab, "browser_manager", None)
     if bm is None or not hasattr(bm, "get_active_tab"):
@@ -258,7 +247,6 @@ def apply_suggestion_dashboard_style(
 
     if t_old is not None and getattr(t_old, "is_alive", lambda: False)():
         apply_trace("apply_reject_thread_alive", pid)
-        # đang apply -> im lặng, không hiển thị popup
         return False
 
     # ------------------------------------------------------------------
@@ -280,7 +268,6 @@ def apply_suggestion_dashboard_style(
         unlocked_early = False
         apply_trace("worker_enter", pid)
         try:
-            # 6.1 Đọc config delay / tốc độ kéo
             (
                 delay_s,
                 double_pass_enabled,
@@ -291,10 +278,6 @@ def apply_suggestion_dashboard_style(
                 slot=getattr(getattr(tab, "browser_manager", None), "_slot", 1)
             )
 
-            # Chốt layout đầu vào trong suốt một phiên kéo. Sau khi DevTools gửi
-            # toàn bộ thao tác không lỗi, kết quả mô phỏng của compute_moves là
-            # trạng thái dự đoán. Quét thật phía dưới chỉ được dùng khi đạt đủ
-            # điều kiện tin cậy; tuyệt đối không sửa bài từ OCR mơ hồ.
             try:
                 if not hasattr(tab, "_ws_freeze"):
                     tab._ws_freeze = {}
@@ -303,189 +286,255 @@ def apply_suggestion_dashboard_style(
                 pass
 
             base_layout = list(current_codes)
-            planned_moves = compute_moves(base_layout, list(expected_layout))
-            before_606_seq = ws_layout_store.latest_sequence(pid)
-            layout_hand_generation = ws_layout_store.hand_generation(pid)
-            apply_trace("apply_once_before", pid, moves_len=len(planned_moves))
-            res_codes = apply_arrangement(
-                pid,
-                tab.browser_manager,
-                base_layout,
-                chi1,
-                chi2,
-                chi3,
-                delay_s=delay_s,
-            )
-            apply_trace(
-                "apply_once_after",
-                pid,
-                result_len=len(res_codes) if isinstance(res_codes, list) else -1,
-            )
-            first_drag_finished_at = time.time()
-            if double_pass_enabled and planned_moves:
-                # Pass 2 khong lap mu cung chuoi keo. Chi tin cmd=606 neu no
-                # xuat hien SAU khi pass keo da ket thuc; snapshot giua luc dang
-                # drag co the la trang thai trung gian va phai bi bo qua.
-                fast_snapshot = ws_layout_store.wait_for_newer(
-                    pid,
-                    after_sequence=before_606_seq,
-                    after_event_at=first_drag_finished_at,
-                    timeout_s=float(double_pass_gap_ms) / 1000.0,
-                    expected_hand_generation=layout_hand_generation,
-                )
-                fast_layout = (
-                    list(fast_snapshot.cards)
-                    if (
-                        fast_snapshot is not None
-                        and Counter(map(str, fast_snapshot.cards)) == Counter(map(str, ws_codes))
-                    )
-                    else []
-                )
-                second_moves = (
-                    compute_moves(list(fast_layout), list(expected_layout))
-                    if fast_layout and not _layout_matches_target(fast_layout, list(expected_layout))
-                    else []
+
+            if on_complete is None:
+                # ------------------------------------------------------------
+                # LUỒNG THỦ CÔNG: double pass ngay, không chờ cmd=606, scan 1s
+                # ------------------------------------------------------------
+                apply_trace("apply_once_before", pid)
+                res_codes = apply_arrangement(
+                    pid, tab.browser_manager, base_layout, chi1, chi2, chi3, delay_s=delay_s,
                 )
                 apply_trace(
-                    "apply_double_pass_check",
-                    pid,
-                    moves_len=len(second_moves),
-                    gap_ms=double_pass_gap_ms,
-                    has_606=bool(fast_layout),
-                    tx=transaction_id,
+                    "apply_once_after", pid,
+                    result_len=len(res_codes) if isinstance(res_codes, list) else -1,
                 )
-                if second_moves:
-                    apply_trace(
-                        "apply_double_pass_before",
-                        pid,
-                        moves_len=len(second_moves),
-                        tx=transaction_id,
-                    )
-                    res_codes2 = apply_arrangement(
-                        pid,
-                        tab.browser_manager,
-                        list(fast_layout),
-                        chi1,
-                        chi2,
-                        chi3,
-                        delay_s=delay_s,
-                    )
-                    apply_trace(
-                        "apply_double_pass_after",
-                        pid,
-                        result_len=len(res_codes2) if isinstance(res_codes2, list) else -1,
-                        tx=transaction_id,
-                    )
-                    if isinstance(res_codes2, list) and len(res_codes2) == 13:
-                        res_codes = list(res_codes2)
-            drag_finished_at = time.time()
 
-            apply_ok = bool(
-                isinstance(res_codes, list)
-                and len(res_codes) == 13
-                and Counter(map(str, res_codes)) == Counter(map(str, ws_codes))
-                and _layout_matches_target(list(res_codes), list(expected_layout))
-            )
-            # Xac minh layout game dung mot lan sau ca chuoi keo. Ket qua OCR chi
-            # duoc tin khi nhan du 13 la, khop chinh xac bo WS va du confidence.
-            # Neu OCR khong chac chan, giu layout du doan thay vi keo sua mu.
-            confirmation = None
-            if apply_ok:
-                def _repair_from_actual(actual_layout: List[str]) -> float:
-                    repair_result = apply_arrangement(
-                        pid,
-                        tab.browser_manager,
-                        list(actual_layout),
-                        chi1,
-                        chi2,
-                        chi3,
-                        delay_s=delay_s,
-                    )
-                    apply_trace(
-                        "layout606_repair_drag_result",
-                        pid,
-                        result_len=len(repair_result) if isinstance(repair_result, list) else -1,
-                    )
-                    return time.time()
+                if isinstance(res_codes, list) and len(res_codes) == 13:
+                    try:
+                        tab._layout_codes[pid] = list(res_codes)
+                    except Exception:
+                        pass
+                elif res_codes is None:
+                    res_codes = list(base_layout)
+                    try:
+                        tab._layout_codes[pid] = list(res_codes)
+                    except Exception:
+                        pass
+                else:
+                    raise RuntimeError("apply_arrangement trả về kết quả không hợp lệ.")
 
-                confirmation = confirm_and_repair_layout(
-                    pid,
-                    list(expected_layout),
-                    after_sequence=before_606_seq,
-                    drag_finished_at=drag_finished_at,
-                    repair=_repair_from_actual,
-                    timeout_retry_count=layout606_timeout_retry_count,
-                    timeout_retry_s=float(layout606_timeout_retry_ms) / 1000.0,
-                    transaction_id=transaction_id,
-                    expected_hand_generation=layout_hand_generation,
+                # WS UNFREEZE ngay sau drag 1
+                try:
+                    tab._ws_freeze[pid] = False
+                except Exception:
+                    pass
+
+                # Pass 2: chạy ngay sau 0.25s, không điều kiện
+                time.sleep(0.25)
+                try:
+                    base_layout2 = list((getattr(tab, "_layout_codes", {}) or {}).get(pid) or res_codes)
+                except Exception:
+                    base_layout2 = list(res_codes)
+                try:
+                    tab._layout_codes[pid] = list(base_layout2)
+                except Exception:
+                    pass
+                res_codes2 = apply_arrangement(
+                    pid, tab.browser_manager, base_layout2, chi1, chi2, chi3, delay_s=delay_s,
                 )
-                apply_ok = bool(confirmation.confirmed and confirmation.layout)
+                if isinstance(res_codes2, list) and len(res_codes2) == 13:
+                    res_codes = list(res_codes2)
+                    try:
+                        tab._layout_codes[pid] = list(res_codes)
+                    except Exception:
+                        pass
+
+                # EARLY UI UNLOCK ngay sau drag 2
+                try:
+                    if isinstance(res_codes, list) and len(res_codes) == 13:
+                        _ui_call(tab, lambda p=pid: tab._apply_btn_set_default(p), delay_ms=0)
+                        unlocked_early = True
+                except Exception:
+                    pass
+
+                # SCAN DevTools + poll tối đa 1s
+                def _start_scan():
+                    try:
+                        if hasattr(tab, "refresh_slot_order_by_scan"):
+                            tab.refresh_slot_order_by_scan(pid)
+                    except Exception as exc:
+                        log.exception("[Strategy2] refresh_slot_order_by_scan error pid=%s: %s", pid, exc)
+
+                try:
+                    prev_layout = list((getattr(tab, "_layout_codes", {}) or {}).get(pid) or [])
+                except Exception:
+                    prev_layout = []
+                _ui_call(tab, _start_scan, delay_ms=0)
+
+                real_codes = None
+                t0 = time.time()
+                while (time.time() - t0) < 1.0:
+                    try:
+                        cur = (getattr(tab, "_layout_codes", {}) or {}).get(pid)
+                    except Exception:
+                        cur = None
+                    if isinstance(cur, list) and len(cur) == 13:
+                        if not prev_layout or list(cur) != prev_layout:
+                            real_codes = list(cur)
+                            break
+                    time.sleep(0.03)
+
+                if real_codes is None:
+                    try:
+                        cur = (getattr(tab, "_layout_codes", {}) or {}).get(pid)
+                        if isinstance(cur, list) and len(cur) == 13:
+                            real_codes = list(cur)
+                    except Exception:
+                        pass
+
+                if (
+                    isinstance(real_codes, list) and len(real_codes) == 13
+                    and isinstance(res_codes, list) and len(res_codes) == 13
+                    and list(real_codes) != list(res_codes)
+                ):
+                    try:
+                        tab._layout_codes[pid] = list(real_codes)
+                    except Exception:
+                        pass
+
+            else:
+                # ------------------------------------------------------------
+                # LUỒNG AUTO: giữ nguyên, chờ cmd=606, confirm_and_repair
+                # ------------------------------------------------------------
+                planned_moves = compute_moves(base_layout, list(expected_layout))
+                before_606_seq = ws_layout_store.latest_sequence(pid)
+                layout_hand_generation = ws_layout_store.hand_generation(pid)
+                apply_trace("apply_once_before", pid, moves_len=len(planned_moves))
+                res_codes = apply_arrangement(
+                    pid, tab.browser_manager, base_layout, chi1, chi2, chi3, delay_s=delay_s,
+                )
+                apply_trace(
+                    "apply_once_after", pid,
+                    result_len=len(res_codes) if isinstance(res_codes, list) else -1,
+                )
+                first_drag_finished_at = time.time()
+                if double_pass_enabled and planned_moves:
+                    fast_snapshot = ws_layout_store.wait_for_newer(
+                        pid,
+                        after_sequence=before_606_seq,
+                        after_event_at=first_drag_finished_at,
+                        timeout_s=float(double_pass_gap_ms) / 1000.0,
+                        expected_hand_generation=layout_hand_generation,
+                    )
+                    fast_layout = (
+                        list(fast_snapshot.cards)
+                        if (
+                            fast_snapshot is not None
+                            and Counter(map(str, fast_snapshot.cards)) == Counter(map(str, ws_codes))
+                        )
+                        else []
+                    )
+                    second_moves = (
+                        compute_moves(list(fast_layout), list(expected_layout))
+                        if fast_layout and not _layout_matches_target(fast_layout, list(expected_layout))
+                        else []
+                    )
+                    apply_trace(
+                        "apply_double_pass_check", pid,
+                        moves_len=len(second_moves), gap_ms=double_pass_gap_ms,
+                        has_606=bool(fast_layout), tx=transaction_id,
+                    )
+                    if second_moves:
+                        apply_trace("apply_double_pass_before", pid, moves_len=len(second_moves), tx=transaction_id)
+                        res_codes2 = apply_arrangement(
+                            pid, tab.browser_manager, list(fast_layout), chi1, chi2, chi3, delay_s=delay_s,
+                        )
+                        apply_trace(
+                            "apply_double_pass_after", pid,
+                            result_len=len(res_codes2) if isinstance(res_codes2, list) else -1,
+                            tx=transaction_id,
+                        )
+                        if isinstance(res_codes2, list) and len(res_codes2) == 13:
+                            res_codes = list(res_codes2)
+                drag_finished_at = time.time()
+
+                apply_ok = bool(
+                    isinstance(res_codes, list)
+                    and len(res_codes) == 13
+                    and Counter(map(str, res_codes)) == Counter(map(str, ws_codes))
+                    and _layout_matches_target(list(res_codes), list(expected_layout))
+                )
+                confirmation = None
                 if apply_ok:
-                    res_codes = list(confirmation.layout or [])
-            # Chỉ plan sẽ click Xong/Báo binh mới bắt buộc không lủng.
-            # Nhánh Binh Lủng chủ đích không có on_complete và phải được phép apply.
-            if apply_ok and require_no_foul:
-                apply_ok = _layout_is_safe_to_complete(
-                    pid,
-                    list(ws_codes),
-                    list(res_codes),
-                    list(expected_layout),
-                )
-            if not apply_ok:
-                # Khi chưa được 606 xác nhận, tuyệt đối không lưu layout dự đoán.
-                # Nếu có snapshot mismatch thì đó mới là ground truth cho lần retry.
-                if confirmation is not None and confirmation.snapshot is not None:
-                    tab._layout_codes[pid] = list(confirmation.snapshot.cards)
-                failure_event = (
-                    f"layout606_{confirmation.reason}"
-                    if confirmation is not None
-                    else "drag_send_failed_or_invalid_result"
-                )
-                record_apply_failure(
-                    failure_event,
-                    pid,
-                    base_layout=base_layout,
-                    target_layout=list(expected_layout),
-                    planned_moves=list(planned_moves),
-                    drag_result=list(res_codes) if isinstance(res_codes, list) else None,
-                    drag_result_type=type(res_codes).__name__,
-                    layout606_seq=(
-                        confirmation.snapshot.sequence
-                        if confirmation is not None and confirmation.snapshot is not None
-                        else None
-                    ),
-                    repair_attempts=confirmation.repair_attempts if confirmation is not None else 0,
-                    transaction_id=transaction_id,
-                )
-                if callable(on_unsafe):
-                    _ui_call(
-                        tab,
-                        lambda reason=failure_event: _call_unsafe(on_unsafe, reason),
-                        delay_ms=0,
+                    def _repair_from_actual(actual_layout: List[str]) -> float:
+                        repair_result = apply_arrangement(
+                            pid, tab.browser_manager, list(actual_layout),
+                            chi1, chi2, chi3, delay_s=delay_s,
+                        )
+                        apply_trace(
+                            "layout606_repair_drag_result", pid,
+                            result_len=len(repair_result) if isinstance(repair_result, list) else -1,
+                        )
+                        return time.time()
+
+                    confirmation = confirm_and_repair_layout(
+                        pid,
+                        list(expected_layout),
+                        after_sequence=before_606_seq,
+                        drag_finished_at=drag_finished_at,
+                        repair=_repair_from_actual,
+                        timeout_retry_count=layout606_timeout_retry_count,
+                        timeout_retry_s=float(layout606_timeout_retry_ms) / 1000.0,
+                        transaction_id=transaction_id,
+                        expected_hand_generation=layout_hand_generation,
                     )
-                return
+                    apply_ok = bool(confirmation.confirmed and confirmation.layout)
+                    if apply_ok:
+                        res_codes = list(confirmation.layout or [])
+                if apply_ok and require_no_foul:
+                    apply_ok = _layout_is_safe_to_complete(
+                        pid, list(ws_codes), list(res_codes), list(expected_layout),
+                    )
+                if not apply_ok:
+                    if confirmation is not None and confirmation.snapshot is not None:
+                        tab._layout_codes[pid] = list(confirmation.snapshot.cards)
+                    failure_event = (
+                        f"layout606_{confirmation.reason}"
+                        if confirmation is not None
+                        else "drag_send_failed_or_invalid_result"
+                    )
+                    record_apply_failure(
+                        failure_event,
+                        pid,
+                        base_layout=base_layout,
+                        target_layout=list(expected_layout),
+                        planned_moves=list(planned_moves),
+                        drag_result=list(res_codes) if isinstance(res_codes, list) else None,
+                        drag_result_type=type(res_codes).__name__,
+                        layout606_seq=(
+                            confirmation.snapshot.sequence
+                            if confirmation is not None and confirmation.snapshot is not None
+                            else None
+                        ),
+                        repair_attempts=confirmation.repair_attempts if confirmation is not None else 0,
+                        transaction_id=transaction_id,
+                    )
+                    if callable(on_unsafe):
+                        _ui_call(
+                            tab,
+                            lambda reason=failure_event: _call_unsafe(on_unsafe, reason),
+                            delay_ms=0,
+                        )
+                    return
 
-            # Cập nhật ngay layout dự đoán sau một lượt kéo thành công. Việc này
-            # giữ lần apply sau cùng một nguồn trạng thái và tránh kéo lại từ WS cũ.
-            tab._layout_codes[pid] = list(res_codes)
-            if not hasattr(tab, "_confirmed_apply_tokens"):
-                tab._confirmed_apply_tokens = {}
-            tab._confirmed_apply_tokens[pid] = transaction_id
-            apply_trace("apply_once_safe", pid, tx=transaction_id)
+                tab._layout_codes[pid] = list(res_codes)
+                if not hasattr(tab, "_confirmed_apply_tokens"):
+                    tab._confirmed_apply_tokens = {}
+                tab._confirmed_apply_tokens[pid] = transaction_id
+                apply_trace("apply_once_safe", pid, tx=transaction_id)
 
-            # UI chỉ được mở khóa sau khi vòng kéo/xác nhận của P này kết thúc.
-            try:
-                _ui_call(tab, lambda p=pid: tab._apply_btn_set_default(p), delay_ms=0)
-                unlocked_early = True
-            except Exception:
-                pass
+                try:
+                    _ui_call(tab, lambda p=pid: tab._apply_btn_set_default(p), delay_ms=0)
+                    unlocked_early = True
+                except Exception:
+                    pass
 
-            if callable(on_complete):
                 apply_trace("auto_safe_ok", pid)
                 _ui_call(tab, on_complete, delay_ms=0)
-            if callable(on_finished):
-                apply_trace("on_finished_call", pid)
-                _ui_call(tab, on_finished, delay_ms=0)
+                if callable(on_finished):
+                    apply_trace("on_finished_call", pid)
+                    _ui_call(tab, on_finished, delay_ms=0)
 
         except Exception as e:
             err_msg = str(e)
@@ -494,13 +543,11 @@ def apply_suggestion_dashboard_style(
 
         finally:
             apply_trace("worker_finally", pid, err=bool(err_msg), unlocked=bool(unlocked_early))
-            # Luôn clear thread entry
             try:
                 tab._apply_threads.pop(pid, None)
             except Exception:
                 pass
 
-            # UI: báo lỗi (nếu có)
             if err_msg:
                 _ui_call(
                     tab,
@@ -508,11 +555,16 @@ def apply_suggestion_dashboard_style(
                     delay_ms=0,
                 )
 
-            # UI: trả nút Apply về trạng thái mặc định
-            # (nếu đã unlock sớm sau drag cuối thì không gọi lại lần 2)
             if not unlocked_early:
                 _ui_call(tab, lambda p=pid: tab._apply_btn_set_default(p), delay_ms=0)
 
+            # Scan cuối để UI sync (chỉ luồng thủ công)
+            if on_complete is None:
+                try:
+                    if hasattr(tab, "refresh_slot_order_by_scan"):
+                        _ui_call(tab, lambda p=pid: tab.refresh_slot_order_by_scan(p), delay_ms=300)
+                except Exception:
+                    pass
 
             # Safety: không bao giờ để WS freeze bị kẹt
             try:
