@@ -19,7 +19,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSplitter, QStackedWidget, QFrame, QTextEdit,
-    QSizePolicy, QSpinBox, QCheckBox,
+    QSizePolicy, QSpinBox,
 )
 
 from core.logger import log
@@ -518,30 +518,31 @@ class AutoFourToolTab(QWidget):
         tbl.addWidget(self._btn_browser)
         tbl.addStretch()
 
-        # Quick exit room: P1/P2/P3 checkboxes + button (right side of tab bar)
-        _chk_style = (
-            f"QCheckBox {{ color:{_MUTED}; font-size:11px; font-weight:700; spacing:4px; }}"
-            f"QCheckBox::indicator {{ width:13px; height:13px; border-radius:3px;"
-            f" border:1px solid #3a424d; background:#1d2229; }}"
-            f"QCheckBox::indicator:checked {{ background:{_BLUE}; border-color:{_BLUE}; }}"
+        # Quick exit room: P1/P2/P3 toggle + button (right side of tab bar)
+        _toggle_style = (
+            "QPushButton { background:#1d2229; color:#697581; border:1px solid #2e3740;"
+            " border-radius:3px; padding:0 7px; font-weight:700; font-size:11px; }"
+            f"QPushButton:checked {{ background:{_BLUE}; color:#fff; border-color:{_BLUE}; }}"
+            "QPushButton:pressed { opacity:0.85; }"
         )
-        self._chk_exit_p1 = QCheckBox("P1"); self._chk_exit_p1.setChecked(True)
-        self._chk_exit_p2 = QCheckBox("P2"); self._chk_exit_p2.setChecked(True)
-        self._chk_exit_p3 = QCheckBox("P3"); self._chk_exit_p3.setChecked(True)
-        for chk in (self._chk_exit_p1, self._chk_exit_p2, self._chk_exit_p3):
-            chk.setStyleSheet(_chk_style)
-            tbl.addWidget(chk)
+        self._chk_exit_p1 = QPushButton("P1"); self._chk_exit_p1.setCheckable(True); self._chk_exit_p1.setChecked(True)
+        self._chk_exit_p2 = QPushButton("P2"); self._chk_exit_p2.setCheckable(True); self._chk_exit_p2.setChecked(True)
+        self._chk_exit_p3 = QPushButton("P3"); self._chk_exit_p3.setCheckable(True); self._chk_exit_p3.setChecked(True)
+        for tog in (self._chk_exit_p1, self._chk_exit_p2, self._chk_exit_p3):
+            tog.setFixedHeight(22)
+            tog.setStyleSheet(_toggle_style)
+            tbl.addWidget(tog)
         tbl.addSpacing(6)
         self._btn_exit_room = QPushButton("Thoát Phòng")
-        self._btn_exit_room.setFixedHeight(24)
+        self._btn_exit_room.setFixedHeight(22)
         self._btn_exit_room.setStyleSheet(
             "QPushButton { background:#622b31; color:#fff; border:1px solid #a04040;"
-            " border-radius:4px; padding:0 9px; font-weight:700; font-size:11px; }"
+            " border-radius:3px; padding:0 9px; font-weight:700; font-size:11px; }"
             "QPushButton:pressed { background:#7a3540; }"
         )
         self._btn_exit_room.clicked.connect(self._on_quick_exit_room)
         tbl.addWidget(self._btn_exit_room)
-        tbl.addSpacing(4)
+        tbl.addSpacing(6)
 
         lay.addWidget(tab_bar)
 
