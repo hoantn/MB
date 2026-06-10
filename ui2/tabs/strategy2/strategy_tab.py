@@ -21,6 +21,7 @@ MAX_UI_NGU_ITEMS = 12
 from core.logger import log
 from core.apply_trace import apply_trace
 from ui2.bridge.ws_card_store import ws_card_store
+from ui2.bridge.ws_layout_store import ws_layout_store
 from ui2.tabs.dashboard.dashboard_constants import FULL_DECK
 
 from .strategy_view import StrategyView
@@ -115,7 +116,17 @@ class StrategyTab(QWidget):
         except Exception:
             log.exception('[Strategy2] ui_call handler error')
 
-    def __init__(self, browser_manager, parent=None, card_store=None):
+    def __init__(
+        self,
+        browser_manager,
+        parent=None,
+        card_store=None,
+        room_engine=None,
+        layout_store=None,
+        game_controller=None,
+        auto_play_log_sink=None,
+        auto_settings_notifier=None,
+    ):
         super().__init__(parent)
 
         # Ensure ui_call is connected on the owning (UI) thread.
@@ -128,12 +139,22 @@ class StrategyTab(QWidget):
         # card_store=None → dùng global singleton (Tool 1 / backward compat)
         # card_store=<instance> → dùng per-tool store (Tool 2-4)
         self._card_store = card_store if card_store is not None else ws_card_store
+        self._room_engine = room_engine
+        self._layout_store = layout_store if layout_store is not None else ws_layout_store
+        self._game_controller = game_controller
 
         self.capture_manager = (
             getattr(parent, "capture_manager", None)
             or getattr(browser_manager, "capture_manager", None)
             or getattr(browser_manager, "capture", None)
         )
+        if self.capture_manager is None:
+            try:
+                from capture.capture_manager import CaptureManager
+
+                self.capture_manager = CaptureManager(browser_manager)
+            except Exception:
+                log.exception("[Strategy2] cannot create CaptureManager fallback")
 
         self.MAX_UI_P_ITEMS = MAX_UI_P_ITEMS
         self.MAX_UI_NGU_ITEMS = MAX_UI_NGU_ITEMS
@@ -203,8 +224,8 @@ class StrategyTab(QWidget):
         self._auto_play_internal_sap_ham_done: bool = False
         self._auto_play_round_modes: Dict[str, str] = {}
         self._auto_play_session: int = 0
-        self._auto_play_log_sink = None
-        self._auto_settings_notifier = None
+        self._auto_play_log_sink = auto_play_log_sink
+        self._auto_settings_notifier = auto_settings_notifier
         self._missing_3p_alert_timer = QTimer(self)
         self._missing_3p_alert_timer.setSingleShot(True)
         self._missing_3p_alert_timer.setInterval(100)
@@ -229,7 +250,6 @@ class StrategyTab(QWidget):
         self._batch_debounce.timeout.connect(self._enqueue_batch_jobs)
 
         self._scheduled_hash: Dict[str, Optional[str]] = {pid: None for pid in (self.profiles + ["NGU"])}
-        self._last_suggestion_watchdog_at: float = 0.0
         # ========================================================================
 
         self._poll_suggest_timer = QTimer(self)
@@ -259,6 +279,45 @@ class StrategyTab(QWidget):
         self._renderer = RenderController(MAX_UI_P_ITEMS, MAX_UI_NGU_ITEMS)
         self._apply_controller = ApplyController()
         self._on_profile_switch(self.active_profile)
+
+    def set_runtime_services(
+        self,
+        *,
+        room_engine=None,
+        layout_store=None,
+        game_controller=None,
+        auto_play_log_sink=None,
+        auto_settings_notifier=None,
+    ) -> None:
+        """Attach per-tool runtime services; fallback globals remain for the main Strategy tab."""
+        if room_engine is not None:
+            self._room_engine = room_engine
+        if layout_store is not None:
+            self._layout_store = layout_store
+        if game_controller is not None:
+            self._game_controller = game_controller
+        if auto_play_log_sink is not None:
+            self._auto_play_log_sink = auto_play_log_sink
+        if auto_settings_notifier is not None:
+            self._auto_settings_notifier = auto_settings_notifier
+
+    def _get_room_engine(self):
+        room_engine = getattr(self, "_room_engine", None)
+        if room_engine is not None:
+            return room_engine
+        try:
+            return getattr(self.window(), "room_engine", None)
+        except Exception:
+            return None
+
+    def _get_game_controller(self):
+        controller = getattr(self, "_game_controller", None)
+        if controller is not None:
+            return controller
+        try:
+            return getattr(self.window(), "game_controller", None)
+        except Exception:
+            return None
 
     @property
     def log(self):
@@ -695,9 +754,20 @@ class StrategyTab(QWidget):
         if not (codes and isinstance(codes, list) and len(codes) == 13):
             return
 
-        # cmd=600 chỉ xác định bộ bài gốc, không phải layout sau kéo. Snapshot
-        # cùng bộ lá đến muộn không được ghi đè layout dự đoán vừa apply.
-        log.debug("[WS SAME HAND] bỏ qua cập nhật layout pid=%s", pid)
+        # SAME HAND: cmd=606/layout snapshot syncs only the real game layout.
+        # Do not mutate _codes_slot_order; it is the cmd=600 hand base used by
+        # suggestions, NGU derivation and Auto strategy.
+        self._layout_codes[pid] = list(codes)
+
+        if pid == self.active_profile:
+            try:
+                if self._suggestions_render.get(pid) or self._suggestions.get(pid):
+                    self._render_p_active()
+                else:
+                    self.view.set_cards_p_normalized(list(codes))
+            except Exception:
+                pass
+        log.debug("[WS SAME HAND] layout synced pid=%s first3=%s", pid, list(codes)[:3])
 
     def _poll_ws(self) -> None:
         updates, waiting = self._ws_ingest.poll(
@@ -729,12 +799,14 @@ class StrategyTab(QWidget):
                 up.codes_slot_order[:3],
             )
 
-            # Always store raw snapshot (optional but useful for debug)
-            self._ws_snapshot[pid] = list(up.raw_cards)
-
             codes = list(up.codes_slot_order or [])
             if len(codes) != 13:
                 continue
+
+            # Mark the raw WS packet as seen even while apply is running, so an
+            # old in-drag 606 is not replayed after the freeze opens. The apply
+            # worker uses the tab layout store sequence/time to choose post-drag 606.
+            self._ws_snapshot[pid] = list(up.raw_cards)
 
             # HƯỚNG A: Nếu đang apply => hoãn reset (pending), không đụng state ngay
             if busy_map.get(pid, False) or freeze_map.get(pid, False):
@@ -775,9 +847,19 @@ class StrategyTab(QWidget):
                 self._batch_debounce.start()
                 any_new_hand = True
             else:
-                # Cùng bộ 13 lá không phải ván mới và cmd=600 không đại diện
-                # cho layout sau kéo, vì vậy không ghi đè state apply hiện tại.
-                log.debug("[WS SAME HAND] bỏ qua cập nhật layout pid=%s", pid)
+                # SAME HAND: cmd=606/layout snapshot updates only current layout.
+                # Keep _codes_slot_order as the cmd=600 hand base so 606 cannot
+                # perturb suggestions, NGU derivation or Auto strategy.
+                self._layout_codes[pid] = list(codes)
+                if pid == self.active_profile:
+                    try:
+                        if self._suggestions_render.get(pid) or self._suggestions.get(pid):
+                            self._render_p_active()
+                        else:
+                            self.view.set_cards_p_normalized(list(codes))
+                    except Exception:
+                        pass
+                log.debug("[WS SAME HAND] layout synced pid=%s first3=%s", pid, list(codes)[:3])
 
 
         if any_new_hand:
@@ -814,49 +896,6 @@ class StrategyTab(QWidget):
 
     def _poll_suggest_results(self) -> None:
         self._scheduler.poll_suggest_results(self)
-        self._watchdog_missing_suggestions()
-
-    def _watchdog_missing_suggestions(self) -> None:
-        """
-        Tự cứu luồng sinh gợi ý.
-
-        Nếu một profile đã có đủ 13 lá nhưng _suggestions vẫn rỗng, Auto sẽ
-        không có dữ liệu để xếp. Trường hợp này từng xảy ra khi queue bị clear
-        nhưng hash đã bị đánh dấu. Watchdog chỉ chạy nhẹ mỗi ~1 giây, không
-        sinh job trùng nếu scheduler đang queue/running cùng hand.
-        """
-        now = time.monotonic()
-        if now - float(getattr(self, "_last_suggestion_watchdog_at", 0.0) or 0.0) < 1.0:
-            return
-        self._last_suggestion_watchdog_at = now
-
-        scheduler = getattr(self, "_scheduler", None)
-        retry = False
-        for pid in self.profiles:
-            codes = list(self._codes_slot_order.get(pid) or [])
-            if len(codes) != 13 or (self._suggestions.get(pid) or []):
-                continue
-            h = self._hand_hash(codes)
-            if scheduler is not None and hasattr(scheduler, "has_pending") and scheduler.has_pending(pid, h):
-                continue
-            self._scheduled_hash[pid] = None
-            retry = True
-            log.warning("[SUGGEST-WATCHDOG] retry pid=%s hash=%s", pid, h[:8])
-
-        if self._ngu_base_codes and len(self._ngu_base_codes) == 13 and not (self._ngu_suggestions or []):
-            h = self._hand_hash(self._ngu_base_codes)
-            if not (
-                scheduler is not None
-                and hasattr(scheduler, "has_pending")
-                and scheduler.has_pending("NGU", h)
-            ):
-                self._scheduled_hash["NGU"] = None
-                retry = True
-                log.warning("[SUGGEST-WATCHDOG] retry NGU hash=%s", h[:8])
-
-        if retry:
-            self._batch_debounce.stop()
-            self._batch_debounce.start()
 
     # =================== legacy worker (kept) ===================
     def _start_suggest_worker(self, key: str, codes: List[str]) -> None:
@@ -1060,9 +1099,7 @@ class StrategyTab(QWidget):
                 or not notifier.is_missing_3p_enabled()
             ):
                 return
-            owner = self.window()
-            room_engine = getattr(owner, "room_engine", None)
-            context = classify_auto_room_context(room_engine)
+            context = classify_auto_room_context(self._get_room_engine())
             controlled_count = len(context.controlled_pids)
             if controlled_count <= 0 or controlled_count >= len(self.profiles):
                 return
@@ -1344,9 +1381,7 @@ class StrategyTab(QWidget):
             return
         try:
             has_auto_opp = any(s.get("_auto_opp_money") for s in self._ngu_suggestions)
-            owner = self.window()
-            room_engine = getattr(owner, "room_engine", None)
-            room_context = classify_auto_room_context(room_engine)
+            room_context = classify_auto_room_context(self._get_room_engine())
             allow_opp_plan = room_context.kind == "external_opp"
             allow_intentional_foul = (
                 allow_opp_plan
@@ -1611,8 +1646,7 @@ class StrategyTab(QWidget):
                     return
                 # Khi apply đã hoàn tất thì phải chốt thao tác của chính P đó.
                 # Không hủy giữa chừng vì session/roster/WS thay đổi sau khi kéo.
-                owner = self.window()
-                controller = getattr(owner, "game_controller", None)
+                controller = self._get_game_controller()
                 if controller is None or not hasattr(controller, "click_binh"):
                     raise RuntimeError("game_controller chưa hỗ trợ click_binh")
                 controller.click_binh(pid)
@@ -1649,8 +1683,7 @@ class StrategyTab(QWidget):
                     return
                 # Apply đã thành công thì luôn click Xong; không để thay đổi
                 # trạng thái của P khác hoặc một WS đến muộn làm bỏ hoàn tất.
-                owner = self.window()
-                controller = getattr(owner, "game_controller", None)
+                controller = self._get_game_controller()
                 if controller is None or not hasattr(controller, "click_done"):
                     raise RuntimeError("game_controller chưa hỗ trợ click_done")
                 controller.click_done(pid)
@@ -1675,7 +1708,7 @@ class StrategyTab(QWidget):
         expected_room_context_key=None,
     ) -> None:
         """Apply Auto Play profile-by-profile with an independent random delay per P."""
-        from ui2.tabs.strategy2.strategy_suggest import apply_suggestion_dashboard_style
+        from ui2.tabs.strategy2.modules.apply_auto import apply_suggestion_dashboard_style
 
         report_binh_pids = set(report_binh_pids or ())
         no_complete_pids = set(no_complete_pids or ())
@@ -2027,7 +2060,7 @@ class StrategyTab(QWidget):
 
     # ===== used by apply_suggestion_dashboard_style =====
     def refresh_slot_order_by_scan(self, profile_id: str) -> None:
-        return self._apply_controller.refresh_slot_order_by_scan_fresh(self, profile_id)
+        return self._apply_controller.refresh_slot_order_by_scan(self, profile_id)
      
     def _has_playable_split(self, sug: dict) -> bool:
         if not sug:

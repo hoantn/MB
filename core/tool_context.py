@@ -1,7 +1,7 @@
 """
 core/tool_context.py
 
-Container cho tất cả tài nguyên của 1 tool slot (1-4):
+Container cho tất cả tài nguyên của 1 tool slot:
   - BrowserManager (đọc đúng config slot)
   - GameController
   - WSCardStore (per-tool, tránh clash với Tool 1 global)
@@ -84,9 +84,9 @@ class ToolContext:
 
     def __init__(self, slot: int, card_store=None) -> None:
         """
-        slot: vị trí config (1-4).
+        slot: vị trí config.
         card_store: truyền vào để inject per-tool store.
-            - None → tự tạo WSCardStore() mới (dùng cho slot 2-4)
+            - None → tự tạo WSCardStore() mới (dùng cho slot 2+)
             - ws_card_store (global) → dùng cho slot 1 để nhận cards từ main.py bridge
         """
         from core.config import load_config
@@ -94,6 +94,7 @@ class ToolContext:
         from browser.manager import BrowserManager
         from ui2.game_controller import GameController
         from ui2.bridge.ws_card_store import WSCardStore
+        from ui2.bridge.ws_layout_store import WSLayoutStore
 
         self.slot = slot
         self._config = load_config(slot)
@@ -108,8 +109,9 @@ class ToolContext:
             config=self.browser_manager.config,
         )
 
-        # card_store: None → tạo mới (slot 2-4); hoặc inject global (slot 1)
+        # card_store: None → tạo mới (slot 2+); hoặc inject global (slot 1)
         self.card_store = card_store if card_store is not None else WSCardStore()
+        self.layout_store = WSLayoutStore()
 
         # Per-tool WS queues
         self.event_queue: "queue.Queue[Dict[str, Any]]" = queue.Queue()
@@ -124,7 +126,8 @@ class ToolContext:
         self.room_tab = None          # RoomControlTab
         self.room_engine = None       # RoomEngine
         self.strategy_tab = None      # StrategyTab
-        self.profiles_tab = None      # ProfilesTabV2 (cấu hình trình duyệt per-slot)
+        self.profiles_tab = None      # ProfilesTabV2
+        self.config_tab = None        # ConfigTab
 
         # Activity log sink (set sau bởi AutoFourToolTab)
         self.log_sink = None
@@ -138,9 +141,10 @@ class ToolContext:
         from ui2.tabs.strategy2.strategy_tab import StrategyTab
         from engine.room_engine import RoomEngine
         from ui2.tabs.profiles_tab_v2 import ProfilesTabV2
+        from ui2.tabs.config_tab import ConfigTab
 
         # Slot 1: extension polls main.py bridge (port 9527) → dùng global WS_COMMAND_QUEUE.
-        # Slot 2-4: per-tool bridge riêng → dùng per-tool command_queue.
+        # Slot 2+: per-tool bridge riêng → dùng per-tool command_queue.
         if self.slot == 1:
             from ui2.bridge.ws_http_bridge import WS_COMMAND_QUEUE as _GLOBAL_CMD_Q
             self.gateway = ToolGateway(_GLOBAL_CMD_Q)
@@ -162,12 +166,21 @@ class ToolContext:
             browser_manager=self.browser_manager,
             parent=parent,
             card_store=self.card_store,
+            room_engine=self.room_engine,
+            layout_store=self.layout_store,
+            game_controller=self.game_controller,
         )
 
         # ProfilesTabV2 — cấu hình chrome_path/proxy/URL per-slot
         self.profiles_tab = ProfilesTabV2(
             browser_manager=self.browser_manager,
             parent=parent,
+        )
+
+        self.config_tab = ConfigTab(
+            parent=parent,
+            slot=self.slot,
+            embedded=True,
         )
 
     def start(self) -> None:
@@ -224,15 +237,28 @@ class ToolContext:
             if isinstance(cs_p, list):
                 cs = cs_p
 
-        # --- extension_ready ---
-        # ws_layout_store global chỉ dành cho slot 1 (main.py). Không ghi vào đây từ ToolContext
-        # để tránh slot 2-4 ghi đè key "P1"/"P2"/"P3" của slot 1.
         if kind == "extension_ready":
+            try:
+                version = evt.get("version")
+                if version is None and isinstance(payload, dict):
+                    version = payload.get("version")
+                self.layout_store.mark_extension_ready(profile_id, str(version or "unknown"))
+            except Exception:
+                log.exception("[ToolContext] extension_ready layout mark failed slot=%d", self.slot)
             return
 
         # --- cmd=606: layout sau kéo ---
-        # Không ghi vào ws_layout_store global — chỉ main.py (slot 1) dùng store đó cho apply.
-        if kind == "layout_snapshot" and cmd == 606:
+        if cs is not None and cmd == 606:
+            try:
+                self.card_store.update_cards(profile_id, cs)
+            except Exception:
+                log.exception("[ToolContext] cmd606 layout update failed slot=%d", self.slot)
+            try:
+                sent_at_ms = evt.get("sent_at_ms")
+                event_at = float(sent_at_ms) / 1000.0 if sent_at_ms is not None else None
+                self.layout_store.update_layout(profile_id, cs, event_at=event_at)
+            except Exception:
+                log.exception("[ToolContext] cmd606 layout_store update failed slot=%d", self.slot)
             return
 
         # --- cmd=600: 13 lá gốc → per-tool card_store ---
@@ -241,6 +267,10 @@ class ToolContext:
                 self.card_store.update_cards(profile_id, cs)
             except Exception:
                 log.exception("[ToolContext] cmd600 card update failed slot=%d", self.slot)
+            try:
+                self.layout_store.begin_hand(profile_id, cs)
+            except Exception:
+                log.exception("[ToolContext] cmd600 layout hand begin failed slot=%d", self.slot)
 
             # Room roster từ cmd=600 payload
             if self.room_engine is not None and isinstance(payload, dict):

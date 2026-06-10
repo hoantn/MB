@@ -10,10 +10,7 @@ from core.apply_trace import apply_trace
 from core.logger import log
 from ui2.tabs.dashboard.dashboard_scan_worker import ScanWorker
 from ui2.tabs.strategy2.modules.layout_verifier import scan_layout_fresh
-from ui2.tabs.strategy2.strategy_suggest import (
-    apply_manual_dashboard_style,
-    apply_suggestion_dashboard_style,
-)
+from ui2.tabs.strategy2.modules.apply_manual import apply_manual_dashboard_style
 
 
 class ApplyController:
@@ -126,40 +123,36 @@ class ApplyController:
 
             sug = suggs[idx]
 
-            # If it is special-row, do not drag-apply
             try:
                 if tab._is_special_row(sug):
                     c1 = list(sug.get("chi1_codes") or [])
                     c2 = list(sug.get("chi2_codes") or [])
                     c3 = list(sug.get("chi3_codes") or [])
-
-                    # CHỈ chặn nếu special row chưa được build split (chưa có 5-5-3)
                     if not (len(c1) == 5 and len(c2) == 5 and len(c3) == 3):
                         QMessageBox.information(
                             tab,
-                            "Bài đặc biệt",
-                            "Đây là bài đặc biệt (báo binh), không thể Apply theo kiểu kéo 13 lá."
+                            "Bai dac biet",
+                            "Day la bai dac biet (bao binh), khong the Apply theo kieu keo 13 la.",
                         )
                         return
-
-                    # Nếu đã có split 5-5-3 -> cho đi tiếp như gợi ý bình thường
-
             except Exception:
                 pass
-                
-            # FAIL-SAFE: suggestion phải sử dụng đúng 13 lá hiện tại
+
             try:
-                target = (sug.get("chi1_codes") or []) + (sug.get("chi2_codes") or []) + (sug.get("chi3_codes") or [])
-                if len(target) == 13:
-                    if Counter(map(str, target)) != Counter(map(str, ws_codes)):
-                        log.error(
-                            "[APPLY ABORT] pid=%s card-mismatch ws_first3=%s target_first3=%s",
-                            pid,
-                            list(ws_codes)[:3],
-                            list(target)[:3],
-                        )
-                        QMessageBox.warning(tab, "HÚP", f"{pid}: Bài đã đổi (không khớp 13 lá). Vui lòng chờ gợi ý mới.")
-                        return
+                target = (
+                    list(sug.get("chi1_codes") or [])
+                    + list(sug.get("chi2_codes") or [])
+                    + list(sug.get("chi3_codes") or [])
+                )
+                if len(target) == 13 and Counter(map(str, target)) != Counter(map(str, ws_codes)):
+                    log.error(
+                        "[APPLY ABORT] pid=%s card-mismatch ws_first3=%s target_first3=%s",
+                        pid,
+                        list(ws_codes)[:3],
+                        list(target)[:3],
+                    )
+                    QMessageBox.warning(tab, "HUP", f"{pid}: Bai da doi (khong khop 13 la). Vui long cho goi y moi.")
+                    return
             except Exception:
                 pass
 
@@ -180,83 +173,24 @@ class ApplyController:
     def on_apply_all(self, tab) -> None:
         """Called by StrategyTab: apply for all profiles that have 13 cards & a selected suggestion."""
         try:
-            # Prefer StrategyTab.profiles if exists, else fallback to fixed P1..P3
             pids = getattr(tab, "profiles", None)
             if not pids:
                 pids = ["P1", "P2", "P3"]
 
-            contexts = []
             for pid in pids:
-                try:
-                    worker = (getattr(tab, "_apply_threads", {}) or {}).get(pid)
-                    if worker is not None and getattr(worker, "is_alive", lambda: False)():
-                        log.warning("[Strategy2] Apply ALL skip busy pid=%s", pid)
-                        continue
-                except Exception:
-                    pass
-
-                # Apply only if we have 13 cards + suggestions
-                ws_codes = list(tab._codes_slot_order.get(pid) or [])
+                ws_codes = tab._codes_slot_order.get(pid) or []
                 if len(ws_codes) != 13:
                     continue
                 suggs = tab._suggestions_render.get(pid) or tab._suggestions.get(pid) or []
                 idx = tab._selected_index.get(pid, 0)
                 if not suggs or idx < 0 or idx >= len(suggs):
                     continue
-
-                sug = dict(suggs[idx])
-
-                # Do NOT apply special row
                 try:
-                    if tab._is_special_row(sug):
+                    if tab._is_special_row(suggs[idx]):
                         continue
                 except Exception:
                     pass
-
-                target = (sug.get("chi1_codes") or []) + (sug.get("chi2_codes") or []) + (sug.get("chi3_codes") or [])
-                if len(target) == 13 and Counter(map(str, target)) != Counter(map(str, ws_codes)):
-                    log.error(
-                        "[APPLY ALL SKIP] pid=%s card-mismatch ws_first3=%s target_first3=%s",
-                        pid,
-                        list(ws_codes)[:3],
-                        list(target)[:3],
-                    )
-                    continue
-
-                # Snapshot everything needed before starting workers. After this,
-                # Apply All must not depend on active_profile or UI selection.
-                contexts.append({
-                    "pid": str(pid),
-                    "ws_codes": list(ws_codes),
-                    "suggestion": sug,
-                })
-
-            if not contexts:
-                return
-
-            if not self._prepare_manual_apply(tab, [ctx["pid"] for ctx in contexts]):
-                return
-
-            def _apply_context(ctx: dict) -> None:
-                pid = str(ctx.get("pid") or "")
-                try:
-                    if not self._is_current_snapshot(tab, ctx):
-                        log.warning("[Strategy2] Skip stale manual ALL snapshot pid=%s", pid)
-                        return
-                    apply_manual_dashboard_style(
-                        tab=tab,
-                        profile_id=pid,
-                        ws_codes=list(ctx.get("ws_codes") or []),
-                        suggestion=dict(ctx.get("suggestion") or {}),
-                    )
-                except Exception as e:
-                    log.exception("[Strategy2] ApplyController parallel apply error pid=%s: %s", pid, e)
-
-            # Start nearly together, but not on the exact same millisecond.
-            # Each profile uses its own snapshot so P1/P2/P3 do not read shared
-            # active_profile/list selection while applying.
-            for i, ctx in enumerate(contexts):
-                QTimer.singleShot(i * 140, lambda c=ctx: _apply_context(c))
+                self.on_apply(tab, pid)
 
         except Exception as e:
             log.exception("[Strategy2] ApplyController.on_apply_all error: %s", e)
@@ -265,6 +199,11 @@ class ApplyController:
     # -----------------------
     # Scan / resync (optional)
     # -----------------------
+
+    def refresh_slot_order_by_scan(self, tab, profile_id: str) -> None:
+        """WS-only mode: cmd=606 owns post-apply layout sync."""
+        apply_trace("refresh_scan_skip_ws_only", str(profile_id))
+        return None
 
     def refresh_slot_order_by_scan_fresh(self, tab, profile_id: str) -> None:
         """Quét ảnh mới trong thread riêng và đồng bộ layout lên UI."""
@@ -403,5 +342,108 @@ class ApplyController:
             log.exception("[Strategy2] refresh_slot_order_by_scan error pid=%s: %s", profile_id, e)
             try:
                 QTimer.singleShot(0, lambda: QMessageBox.warning(tab, "HÚP", f"{profile_id}: Scan lỗi: {e}"))
+            except Exception:
+                pass
+
+    def _refresh_slot_order_by_scan_legacy(self, tab, profile_id: str) -> None:
+        """Scan real table layout after manual apply using the current ScanWorker API."""
+        pid = str(profile_id)
+        apply_trace("refresh_scan_enter", pid)
+
+        try:
+            th0 = tab._scan_threads.get(pid)
+            if th0 is not None and th0.isRunning():
+                apply_trace("refresh_scan_skip_running", pid)
+                return
+        except Exception:
+            pass
+
+        try:
+            capture_manager = getattr(tab, "capture_manager", None)
+            if capture_manager is None:
+                apply_trace("refresh_scan_no_capture_manager", pid)
+                log.warning("[Strategy2] refresh scan skipped: capture_manager missing pid=%s", pid)
+                return
+
+            worker = ScanWorker([pid], capture_manager)
+            apply_trace("refresh_scan_worker_created", pid, worker_type=type(worker).__name__)
+
+            th = QThread(tab)
+            worker.moveToThread(th)
+            apply_trace("refresh_scan_thread_created", pid)
+
+            def _cleanup():
+                apply_trace("refresh_scan_cleanup", pid)
+                try:
+                    tab._scan_threads.pop(pid, None)
+                except Exception:
+                    pass
+                try:
+                    worker.deleteLater()
+                except Exception:
+                    pass
+                try:
+                    th.deleteLater()
+                except Exception:
+                    pass
+
+            def _on_profile_scanned(scanned_pid, codes_slot_order, _confs=None, _images=None):
+                scanned_pid = str(scanned_pid or pid)
+                if scanned_pid != pid:
+                    return
+                apply_trace(
+                    "refresh_scan_result",
+                    pid,
+                    result_len=len(codes_slot_order) if isinstance(codes_slot_order, list) else -1,
+                )
+                try:
+                    codes = list(codes_slot_order or [])
+                    if len(codes) != 13 or any(c is None for c in codes):
+                        apply_trace("refresh_scan_bad_result", pid, result_len=len(codes))
+                        return
+                    tab._layout_codes[pid] = list(codes)
+                    if getattr(tab, "active_profile", None) == pid:
+                        tab.view.set_cards_p_normalized(list(codes))
+                except Exception:
+                    log.exception("[Strategy2] scan result handler error pid=%s", pid)
+
+            def _on_scan_error(scanned_pid, message):
+                if str(scanned_pid or pid) == pid:
+                    apply_trace("refresh_scan_error", pid, message=str(message))
+                    log.warning("[Strategy2] refresh scan error pid=%s: %s", pid, message)
+
+            try:
+                worker.finished.connect(th.quit)  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            try:
+                worker.profile_scanned.connect(_on_profile_scanned)  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            try:
+                worker.error.connect(_on_scan_error)  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            try:
+                th.finished.connect(_cleanup)
+            except Exception:
+                pass
+            try:
+                th.started.connect(worker.run)  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+            if not hasattr(tab, "_scan_threads"):
+                tab._scan_threads = {}
+            tab._scan_threads[pid] = th
+
+            apply_trace("refresh_scan_thread_start", pid)
+            th.start()
+
+        except Exception as e:
+            apply_trace("refresh_scan_exception", pid, error=str(e))
+            log.exception("[Strategy2] refresh_slot_order_by_scan error pid=%s: %s", pid, e)
+            try:
+                QTimer.singleShot(0, lambda: QMessageBox.warning(tab, "HÚP", f"{pid}: Scan lỗi: {e}"))
             except Exception:
                 pass

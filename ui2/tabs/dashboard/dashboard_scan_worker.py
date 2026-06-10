@@ -21,6 +21,13 @@ class ScanWorker(QObject):
         self._profiles = profiles
         self._capture_manager = capture_manager
 
+    def _slot(self) -> int:
+        try:
+            browser_manager = getattr(self._capture_manager, "browser_manager", None)
+            return int(getattr(browser_manager, "_slot", 1) or 1)
+        except Exception:
+            return 1
+
     def run(self) -> None:
         from PIL import Image  # type: ignore
 
@@ -31,7 +38,7 @@ class ScanWorker(QObject):
                     self.error.emit(pid, "Không capture được vùng game.")
                     continue
 
-                pil_slots = crop_slots(pid, img)
+                pil_slots = crop_slots(pid, img, slot=self._slot())
                 codes: List[Optional[str]] = [None] * 13
                 confs: List[float] = [0.0] * 13
                 images: List[Optional[Image.Image]] = [None] * 13  # type: ignore

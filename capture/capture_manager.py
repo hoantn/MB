@@ -24,6 +24,12 @@ class CaptureManager:
     def __init__(self, browser_manager: BrowserManager):
         self.browser_manager = browser_manager
 
+    def _slot(self) -> int:
+        try:
+            return int(getattr(self.browser_manager, "_slot", 1) or 1)
+        except Exception:
+            return 1
+
     def _get_or_attach_tab(self, profile_id: str):
         """Lấy tab DevTools; nếu chưa có thì thử attach lại."""
         tab = self.browser_manager.get_active_tab(profile_id)
@@ -51,7 +57,7 @@ class CaptureManager:
         if not tab:
             return None
 
-        region = get_game_region(profile_id)
+        region = get_game_region(profile_id, slot=self._slot())
         if region is None:
             log.warning("capture_region: region cho %s là None", profile_id)
             return None
@@ -112,8 +118,9 @@ class CaptureManager:
             return False, msg
 
         # 2) Đọc region + slots hiện dùng
-        game_region = get_game_region(profile_id)
-        slots = get_slots(profile_id) or {}
+        cfg_slot = self._slot()
+        game_region = get_game_region(profile_id, slot=cfg_slot)
+        slots = get_slots(profile_id, slot=cfg_slot) or {}
 
         if not game_region:
             msg = f"Chưa có game_region cho {profile_id}, hãy cấu hình vùng game trước."
@@ -126,8 +133,8 @@ class CaptureManager:
             return False, msg
 
         # 3) Đọc design hiện có (nếu có)
-        design_region = get_design_region(profile_id)
-        design_slots = get_design_slots(profile_id)
+        design_region = get_design_region(profile_id, slot=cfg_slot)
+        design_slots = get_design_slots(profile_id, slot=cfg_slot)
 
         # ---------------- LẦN ĐẦU: tạo design từ config hiện tại ----------------
         if not design_region or not design_slots:
@@ -163,9 +170,9 @@ class CaptureManager:
                 }
 
             # Lưu design vào config
-            set_design_region(profile_id, design_region)
+            set_design_region(profile_id, design_region, slot=cfg_slot)
             for idx_str, drect in design_slots.items():
-                set_design_slot(profile_id, int(idx_str), drect)
+                set_design_slot(profile_id, int(idx_str), drect, slot=cfg_slot)
 
             msg = (
                 f"Đã khởi tạo toạ độ design 1280x720 cho {profile_id} từ cấu hình hiện tại. "
@@ -221,9 +228,9 @@ class CaptureManager:
             }
 
         # Lưu lại region + slots mới
-        set_game_region(profile_id, new_region)
+        set_game_region(profile_id, new_region, slot=cfg_slot)
         for idx_str, rect in new_slots.items():
-            set_slot(profile_id, int(idx_str), rect)
+            set_slot(profile_id, int(idx_str), rect, slot=cfg_slot)
 
         msg = (
             f"Đã cập nhật vùng game và 13 slot cho {profile_id} theo canvas Cocos mới "

@@ -88,8 +88,8 @@ def _run_manual(tab, pid, apply_side_effect=None, join_timeout=10.0):
                side_effect=apply_side_effect) as mock_apply, \
          patch("ui2.tabs.strategy2.strategy_suggest.time") as mock_time:
 
-        mock_time.sleep = lambda s: None   # không chờ thật (kể cả sleep(0.25))
-        mock_time.time = time.time         # giữ time.time() thật để poll thoát đúng
+        mock_time.sleep = lambda s: None   # không chờ thật
+        mock_time.time = time.time         # giữ time.time() thật
 
         apply_manual_dashboard_style(tab, pid, WS_CODES, SUGGESTION)
 
@@ -320,6 +320,7 @@ class ManualWorkerFlowTests(unittest.TestCase):
                              f"{name} không được truyền use_exact")
             self.assertNotIn("use_fast_drag", kwargs_list[i],
                              f"{name} không được truyền use_fast_drag")
+
 
 
 if __name__ == "__main__":

@@ -3,8 +3,8 @@ from PIL import Image
 from capture.region import get_slots
 from core.logger import log
 
-def crop_slots(profile_id: str, img: Image.Image) -> List[Optional[Image.Image]]:
-    slots_cfg = get_slots(profile_id)
+def crop_slots(profile_id: str, img: Image.Image, slot: int = 1) -> List[Optional[Image.Image]]:
+    slots_cfg = get_slots(profile_id, slot=slot)
     result: List[Optional[Image.Image]] = []
     for i in range(1, 14):
         key = str(i)

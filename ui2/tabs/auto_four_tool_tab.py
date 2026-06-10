@@ -1,7 +1,7 @@
 """
 ui2/tabs/auto_four_tool_tab.py
 
-Tab "Auto Play" quản lý 4 tool slot.
+Tab "Auto Play" quản lý nhiều tool slot.
 Layout 3 cột: [Sidebar 250px] | [Detail flexible] | [Activity 310px]
 
 Tổng quan   → nhúng ctx.room_tab  (RoomControlTab đang hoạt động)
@@ -19,9 +19,10 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSplitter, QStackedWidget, QFrame, QTextEdit,
-    QSizePolicy, QSpinBox,
+    QSizePolicy, QSpinBox, QScrollArea,
 )
 
+from core.config import AUTO_TOOL_SLOTS
 from core.logger import log
 
 # ── Màu demo ──────────────────────────────────────────────────────
@@ -59,6 +60,28 @@ def _circle(size: int, color: str) -> QLabel:
 # ═══════════════════════════════════════════════════════════════════
 # ToggleSwitch — iOS-style toggle khớp demo HTML (.switch)
 # ═══════════════════════════════════════════════════════════════════
+
+class _SlotAutoLogSink:
+    """Adapter so each embedded StrategyTab writes Auto logs to this slot panel."""
+
+    def __init__(self, owner: "AutoFourToolTab", slot: int) -> None:
+        self.owner = owner
+        self.slot = int(slot)
+
+    def append_log(self, text: str) -> None:
+        try:
+            self.owner.log_from_context(self.slot, str(text), "info")
+        except Exception:
+            pass
+
+    def set_auto_state(self, enabled: bool, remaining: int) -> None:
+        try:
+            if self.owner._cards:
+                card = self.owner._cards[self.slot - 1]
+                card.set_meta(f"Auto Play: {int(remaining)} ván" if enabled else "Auto Play: tắt")
+        except Exception:
+            pass
+
 
 class ToggleSwitch(QWidget):
     """Toggle switch vẽ bằng paintEvent — knob di chuyển trái/phải."""
@@ -254,7 +277,7 @@ class ToolSlotCard(QFrame):
 # ═══════════════════════════════════════════════════════════════════
 
 class AutoFourToolTab(QWidget):
-    """Tab quản lý 4 tool auto play — layout khớp demo HTML."""
+    """Tab quản lý nhiều tool auto play — layout khớp demo HTML."""
 
     # Signal thread-safe: background thread emit → _log chạy trên UI thread
     _bg_log = Signal(int, str, str)
@@ -269,6 +292,7 @@ class AutoFourToolTab(QWidget):
         self._overview_stack  = QStackedWidget()
         self._strategy_stack  = QStackedWidget()
         self._browser_stack   = QStackedWidget()
+        self._config_stack    = QStackedWidget()
         self._log_html: List[str] = []
 
         # Log filter: "sel" | "all" | "err"
@@ -298,29 +322,40 @@ class AutoFourToolTab(QWidget):
     def _init_tool_contexts(self):
         from core.config import ensure_slot_configs
         from core.tool_context import ToolContext
-        ensure_slot_configs()
-        for slot in range(1, 5):
+        ensure_slot_configs(AUTO_TOOL_SLOTS)
+        for slot in range(1, AUTO_TOOL_SLOTS + 1):
             try:
                 # Mỗi slot có WSCardStore riêng — KHÔNG chia sẻ global_cs.
                 # Slot 1 nhận event qua relay từ main.py._handle_bridge_event.
-                # Slots 2-4 nhận event qua per-tool bridge riêng.
+                # Slots 2+ nhận event qua per-tool bridge riêng.
                 # Tránh double-processing: nếu slot 1 dùng global_cs,
                 # cả 2 strategy_tab (main.py + ctx) cùng poll global_cs → double compute.
                 ctx = ToolContext(slot, card_store=None)
                 ctx.build_widgets(parent=self)
+                if ctx.strategy_tab is not None:
+                    try:
+                        ctx.strategy_tab.set_runtime_services(
+                            room_engine=ctx.room_engine,
+                            layout_store=ctx.layout_store,
+                            game_controller=ctx.game_controller,
+                            auto_play_log_sink=_SlotAutoLogSink(self, slot),
+                            auto_settings_notifier=getattr(self.parent(), "gold_threshold_notifier", None),
+                        )
+                    except Exception:
+                        log.exception("[AutoFourToolTab] attach Strategy runtime slot=%d failed", slot)
                 self._contexts.append(ctx)
             except Exception:
                 log.exception("[AutoFourToolTab] ToolContext slot=%d lỗi", slot)
                 self._contexts.append(None)
 
     def _start_slot_bridges(self):
-        """Khởi động WS bridge cho slot 2-4 ngay khi tab init.
+        """Khởi động WS bridge cho slot 2+ ngay khi tab init.
 
         Bridge phải luôn chạy khi browser mở, bất kể auto play có bật hay không,
         vì extension cần fetch proxy-creds từ bridge ngay khi onAuthRequired.
         Slot 1 do main.py quản lý, không cần start ở đây.
         """
-        for slot in range(2, 5):
+        for slot in range(2, AUTO_TOOL_SLOTS + 1):
             ctx = self._contexts[slot - 1]
             if ctx is None:
                 continue
@@ -425,7 +460,7 @@ class AutoFourToolTab(QWidget):
 
     def _build_sidebar(self) -> QWidget:
         frame = QWidget()
-        frame.setStyleSheet(f"background:#12161a; border-right:1px solid {_LINE};")
+        frame.setStyleSheet("background:#12161a;")
         lay = QVBoxLayout(frame)
         lay.setContentsMargins(10, 10, 10, 10)
         lay.setSpacing(7)
@@ -433,10 +468,10 @@ class AutoFourToolTab(QWidget):
         hdr = QHBoxLayout()
         hdr.addWidget(_lbl("Danh sách Tool", f"color:{_TEXT}; font-weight:800;"))
         hdr.addStretch()
-        hdr.addWidget(_lbl("4 cụm / 12P", f"color:{_MUTED}; font-size:11px;"))
+        hdr.addWidget(_lbl(f"{AUTO_TOOL_SLOTS} cụm / {AUTO_TOOL_SLOTS * 3}P", f"color:{_MUTED}; font-size:11px;"))
         lay.addLayout(hdr)
 
-        for slot in range(1, 5):
+        for slot in range(1, AUTO_TOOL_SLOTS + 1):
             card = ToolSlotCard(slot, self)
             card.selected_changed.connect(self._select_slot)
             card.toggle_requested.connect(self._on_toggle)
@@ -463,10 +498,17 @@ class AutoFourToolTab(QWidget):
             f" padding:2px 5px; font-size:11px;")
         fh.addWidget(health_tag)
         fl.addLayout(fh)
-        fl.addWidget(_lbl("Hệ thống: 4/4 sẵn sàng", f"color:{_TEXT}; font-size:11px;"))
-        fl.addWidget(_lbl("Profiles: 12 hồ sơ", f"color:{_MUTED}; font-size:11px;"))
+        fl.addWidget(_lbl(f"Hệ thống: {AUTO_TOOL_SLOTS}/{AUTO_TOOL_SLOTS} sẵn sàng", f"color:{_TEXT}; font-size:11px;"))
+        fl.addWidget(_lbl(f"Profiles: {AUTO_TOOL_SLOTS * 3} hồ sơ", f"color:{_MUTED}; font-size:11px;"))
         lay.addWidget(foot)
-        return frame
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(frame)
+        scroll.setStyleSheet(f"background:#12161a; border-right:1px solid {_LINE};")
+        return scroll
 
     # ── Detail panel ───────────────────────────────────────────────
 
@@ -502,18 +544,15 @@ class AutoFourToolTab(QWidget):
         info_col.addLayout(top_row)
         info_col.addWidget(self._hdr_sub)
 
-        # Right: 5 action buttons (khớp demo)
+        # Right: action buttons for the selected tool.
         act_row = QHBoxLayout(); act_row.setSpacing(6)
         self._btn_open_browsers  = self._detailbtn("Mở 3 trình duyệt",  "#343b45")
         self._btn_reconnect_all  = self._detailbtn("Kết nối lại ALL",    "#254c7d", _BLUE)
         self._btn_reset_proxy    = self._detailbtn("Reset Proxy ALL",    "#5d4218", _AMBER)
-        self._btn_clear_profiles = self._detailbtn("Xoá ALL Profile",    "#622b31", _RED)
         self._btn_open_browsers.clicked.connect(self._on_open_browsers)
         self._btn_reconnect_all.clicked.connect(self._on_reconnect_all)
         self._btn_reset_proxy.clicked.connect(self._on_reset_proxy)
-        self._btn_clear_profiles.clicked.connect(self._on_clear_profiles)
-        for b in (self._btn_open_browsers, self._btn_reconnect_all,
-                  self._btn_reset_proxy, self._btn_clear_profiles):
+        for b in (self._btn_open_browsers, self._btn_reconnect_all, self._btn_reset_proxy):
             act_row.addWidget(b)
 
         hl.addLayout(info_col, 1)
@@ -530,12 +569,15 @@ class AutoFourToolTab(QWidget):
         self._btn_overview  = self._innertab("Phòng",   True)
         self._btn_strategy  = self._innertab("Chiến Thuật", False)
         self._btn_browser   = self._innertab("Trình duyệt", False)
+        self._btn_config    = self._innertab("Cấu hình", False)
         self._btn_overview.clicked.connect(lambda: self._switch_inner(0))
         self._btn_strategy.clicked.connect(lambda: self._switch_inner(1))
         self._btn_browser.clicked.connect(lambda:  self._switch_inner(2))
+        self._btn_config.clicked.connect(lambda:   self._switch_inner(3))
         tbl.addWidget(self._btn_overview)
         tbl.addWidget(self._btn_strategy)
         tbl.addWidget(self._btn_browser)
+        tbl.addWidget(self._btn_config)
         tbl.addStretch()
 
         # Quick exit room: P1/P2/P3 toggle + button (right side of tab bar)
@@ -582,6 +624,9 @@ class AutoFourToolTab(QWidget):
         self._inner_stack.addWidget(self._browser_stack)
         self._build_browser_pages()
 
+        self._inner_stack.addWidget(self._config_stack)
+        self._build_config_pages()
+
         lay.addWidget(self._inner_stack, 1)
         return frame
 
@@ -612,7 +657,7 @@ class AutoFourToolTab(QWidget):
 
     def _build_overview_pages(self):
         """Pane Tổng quan = nhúng ctx.room_tab (RoomControlTab đang hoạt động)."""
-        for slot in range(1, 5):
+        for slot in range(1, AUTO_TOOL_SLOTS + 1):
             ctx = self._contexts[slot - 1]
             if ctx is not None and ctx.room_tab is not None:
                 self._overview_stack.addWidget(ctx.room_tab)
@@ -624,7 +669,7 @@ class AutoFourToolTab(QWidget):
 
     def _build_strategy_pages(self):
         """Pane Chiến Thuật = nhúng ctx.strategy_tab (StrategyTab đang hoạt động)."""
-        for slot in range(1, 5):
+        for slot in range(1, AUTO_TOOL_SLOTS + 1):
             ctx = self._contexts[slot - 1]
             if ctx is not None and ctx.strategy_tab is not None:
                 self._strategy_stack.addWidget(ctx.strategy_tab)
@@ -637,7 +682,7 @@ class AutoFourToolTab(QWidget):
     def _build_browser_pages(self):
         """Pane Trình duyệt = nhúng ctx.profiles_tab (ProfilesTabV2 per-slot)."""
         from PySide6.QtWidgets import QScrollArea
-        for slot in range(1, 5):
+        for slot in range(1, AUTO_TOOL_SLOTS + 1):
             ctx = self._contexts[slot - 1]
             if ctx is not None and ctx.profiles_tab is not None:
                 scroll = QScrollArea()
@@ -652,6 +697,18 @@ class AutoFourToolTab(QWidget):
                 self._browser_stack.addWidget(ph)
 
     # ── Activity log ───────────────────────────────────────────────
+
+    def _build_config_pages(self):
+        """Pane Cau hinh = ctx.config_tab (ConfigTab per-slot)."""
+        for slot in range(1, AUTO_TOOL_SLOTS + 1):
+            ctx = self._contexts[slot - 1]
+            if ctx is not None and getattr(ctx, "config_tab", None) is not None:
+                self._config_stack.addWidget(ctx.config_tab)
+            else:
+                ph = QLabel(f"Cau hinh Tool {slot} - loi khoi tao")
+                ph.setAlignment(Qt.AlignCenter)
+                ph.setStyleSheet(f"color:{_MUTED};")
+                self._config_stack.addWidget(ph)
 
     def _build_activity(self) -> QWidget:
         frame = QWidget()
@@ -722,6 +779,7 @@ class AutoFourToolTab(QWidget):
         self._btn_overview.setChecked(idx == 0)
         self._btn_strategy.setChecked(idx == 1)
         self._btn_browser.setChecked(idx == 2)
+        self._btn_config.setChecked(idx == 3)
 
     def _switch_log_filter(self, f: str):
         self._log_filter = f
@@ -740,6 +798,7 @@ class AutoFourToolTab(QWidget):
         self._overview_stack.setCurrentIndex(idx)
         self._strategy_stack.setCurrentIndex(idx)
         self._browser_stack.setCurrentIndex(idx)
+        self._config_stack.setCurrentIndex(idx)
 
         ctx = self._contexts[idx]
         running = self._cards[idx]._running
@@ -832,11 +891,11 @@ class AutoFourToolTab(QWidget):
         self._log(slot, "Auto Play ĐÃ TẮT", "warn")
 
     def start_all(self):
-        for slot in range(1, 5):
+        for slot in range(1, AUTO_TOOL_SLOTS + 1):
             self.start_tool(slot)
 
     def stop_all(self):
-        for slot in range(1, 5):
+        for slot in range(1, AUTO_TOOL_SLOTS + 1):
             self.stop_tool(slot)
 
     # ── Action button handlers ─────────────────────────────────────
@@ -924,42 +983,11 @@ class AutoFourToolTab(QWidget):
 
         threading.Thread(target=_work, daemon=True, name=f"reset-proxy-slot{slot}").start()
 
-    def _on_clear_profiles(self):
-        slot = self._current_slot
-        ctx = self._contexts[slot - 1]
-        if ctx is None:
-            self._log(slot, "Không có context", "err")
-            return
-        from PySide6.QtWidgets import QMessageBox
-        resp = QMessageBox.question(
-            self,
-            "Xác nhận xoá Profile",
-            f"Xoá toàn bộ dữ liệu runtime (P1/P2/P3) của Tool {slot}?\n"
-            "Trình duyệt sẽ bị đóng. Hành động này không thể hoàn tác.",
-            QMessageBox.Yes | QMessageBox.No,
-        )
-        if resp != QMessageBox.Yes:
-            return
-        self._log(slot, "Đang xoá profile runtime P1/P2/P3...", "warn")
-
-        def _work():
-            for pid in ("P1", "P2", "P3"):
-                try:
-                    ok = ctx.browser_manager.delete_profile_user_data(pid)
-                    if ok:
-                        self._bg_log.emit(slot, f"{pid}: đã xoá profile runtime", "warn")
-                    else:
-                        self._bg_log.emit(slot, f"{pid}: xoá thất bại (browser còn sống?)", "err")
-                except Exception as e:
-                    self._bg_log.emit(slot, f"{pid}: lỗi xoá: {e}", "err")
-
-        threading.Thread(target=_work, daemon=True, name=f"clear-profiles-slot{slot}").start()
-
     # ── Event polling ──────────────────────────────────────────────
 
     def _poll_tool_events(self):
         # Slot 1: main.py relay event vào ctx.event_queue (xem _handle_bridge_event).
-        # Slot 2-4: per-tool bridge tự push event vào ctx.event_queue.
+        # Slot 2+: per-tool bridge tự push event vào ctx.event_queue.
         for ctx in self._contexts:
             if ctx is None:
                 continue

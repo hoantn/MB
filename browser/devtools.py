@@ -199,54 +199,50 @@ class DevToolsClient:
 
     # ================== INPUT CHUỘT =========================
 
-    def _dispatch_mouse_events(self, events: List[Dict]):
+    def _dispatch_mouse_events(self, events: List[Dict], sleep_per_event: float = 0.01, wait_ack: bool = True):
         with self._input_lock:
-            self._dispatch_mouse_events_locked(events)
+            self._dispatch_mouse_events_locked(events, sleep_per_event=sleep_per_event, wait_ack=wait_ack)
 
-    def _dispatch_mouse_events_locked(self, events: List[Dict]):
-        """
-        Gửi nhiều Input.dispatchMouseEvent trong một connection và chờ Chrome
-        xác nhận toàn bộ command trước khi coi thao tác thành công.
-        'events' là list các dict params (không chứa id/method).
-        """
+    def _dispatch_mouse_events_locked(self, events: List[Dict], sleep_per_event: float = 0.01, wait_ack: bool = True):
         ws = self._open_ws()
         try:
             msg_id = 1
-
-            def _send_and_wait(method: str, params: Optional[Dict] = None) -> None:
-                nonlocal msg_id
-                command_id = msg_id
-                payload = {"id": command_id, "method": method}
-                if params is not None:
-                    payload["params"] = params
-                ws.send(json.dumps(payload))
+            if wait_ack:
+                def _send_and_wait(method: str, params: Optional[Dict] = None) -> None:
+                    nonlocal msg_id
+                    command_id = msg_id
+                    payload = {"id": command_id, "method": method}
+                    if params is not None:
+                        payload["params"] = params
+                    ws.send(json.dumps(payload))
+                    msg_id += 1
+                    while True:
+                        raw = ws.recv()
+                        if not raw:
+                            raise RuntimeError(
+                                "DevTools đóng kết nối trước khi xác nhận thao tác chuột"
+                            )
+                        response = json.loads(raw)
+                        if response.get("id") != command_id:
+                            continue
+                        if response.get("error"):
+                            raise RuntimeError(
+                                f"DevTools từ chối thao tác chuột id={command_id}: "
+                                f"{response.get('error')}"
+                            )
+                        return
+                _send_and_wait("Page.enable")
+                for ev in events:
+                    _send_and_wait("Input.dispatchMouseEvent", ev)
+                    time.sleep(sleep_per_event)
+            else:
+                # fire-and-forget: bắn event không chờ Chrome ACK (bản gốc)
+                ws.send(json.dumps({"id": msg_id, "method": "Page.enable"}))
                 msg_id += 1
-
-                while True:
-                    raw = ws.recv()
-                    if not raw:
-                        raise RuntimeError(
-                            "DevTools đóng kết nối trước khi xác nhận thao tác chuột"
-                        )
-                    response = json.loads(raw)
-                    if response.get("id") != command_id:
-                        continue
-                    if response.get("error"):
-                        raise RuntimeError(
-                            f"DevTools từ chối thao tác chuột id={command_id}: "
-                            f"{response.get('error')}"
-                        )
-                    return
-
-            # enable Input & Page tối thiểu
-            _send_and_wait("Page.enable")
-
-            for ev in events:
-                # Xác nhận từng bước trước khi gửi bước kế tiếp. Khi một bước
-                # lỗi, chuỗi dừng ngay thay vì vẫn bắn phần còn lại vào game.
-                _send_and_wait("Input.dispatchMouseEvent", ev)
-                # nhỏ giọt tránh spam
-                time.sleep(0.01)
+                for ev in events:
+                    ws.send(json.dumps({"id": msg_id, "method": "Input.dispatchMouseEvent", "params": ev}))
+                    msg_id += 1
+                    time.sleep(sleep_per_event)
         finally:
             ws.close()
 
@@ -287,18 +283,7 @@ class DevToolsClient:
         ]
         self._dispatch_mouse_events(events)
 
-    def mouse_drag(self, x1: float, y1: float, x2: float, y2: float, *, steps: int = 18):
-        """
-        Kéo chuột từ (x1, y1) → (x2, y2) bằng nút trái.
-        Làm đơn giản:
-        - Move tới điểm bắt đầu.
-        - Nhấn giữ chuột trái.
-        - Di chuyển tuyến tính 'steps' bước.
-        - Nhả chuột tại điểm đích.
-        Tốc độ kéo giữa các drag được điều khiển bởi delay ở tầng apply_arrangement,
-        không thêm delay “bí mật” ở đây ngoài 0.01s trong _dispatch_mouse_events.
-        """
-        # đảm bảo tối thiểu 2 bước nội suy
+    def mouse_drag(self, x1: float, y1: float, x2: float, y2: float, *, steps: int = 18, duration_s: float = 0.0, wait_ack: bool = False):
         steps = max(2, int(steps))
 
         events = []
@@ -321,7 +306,6 @@ class DevToolsClient:
         })
 
         # 3) Di chuyển trung gian từ (x1, y1) -> (x2, y2)
-        #    steps-1 bước nội suy + 1 bước cuối ở đích
         for i in range(1, steps):
             t = i / float(steps)
             xi = x1 + (x2 - x1) * t
@@ -331,7 +315,7 @@ class DevToolsClient:
                 "x": float(xi),
                 "y": float(yi),
                 "button": "left",
-                "buttons": 1,   # đang giữ chuột trái
+                "buttons": 1,
             })
 
         # Bước move cuối cùng chính xác tại điểm đích
@@ -352,7 +336,10 @@ class DevToolsClient:
             "clickCount": 1,
         })
 
-        self._dispatch_mouse_events(events)
+        n_events = len(events)
+        sleep_per_event = (max(0.002, float(duration_s) / n_events) if duration_s > 0 else 0.01)
+        self._dispatch_mouse_events(events, sleep_per_event=sleep_per_event, wait_ack=wait_ack)
+
     def insert_text(self, text: str) -> None:
         """
         Gõ text vào phần tử đang focus sau khi đã click.

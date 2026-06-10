@@ -648,10 +648,10 @@ class MainWindow(QMainWindow, WebSocketGateway):
         )
         self._apply_strategy_room_splitter_layout()
 
-        # tabs.addTab(self.strategy_room_splitter, "Chiến Thuật")  # đã nhúng vào Auto Play
-        self.strategy_room_splitter.hide()
+        tabs.addTab(self.strategy_room_splitter, "Chiến Thuật")
+        # self.strategy_room_splitter.hide()
         tabs.addTab(self.xao_vang_tab, "Xào Vàng")
-        # Tab Auto Play: quản lý 4 tool slot đồng thời
+        # Tab Auto Play: quản lý nhiều tool slot đồng thời
         try:
             self.auto_four_tool_tab = AutoFourToolTab(self)
         except Exception:
@@ -699,6 +699,13 @@ class MainWindow(QMainWindow, WebSocketGateway):
             ws_gateway=self,
             game_controller=self.game_controller,
         )
+        try:
+            self.strategy_tab.set_runtime_services(
+                room_engine=self.room_engine,
+                game_controller=self.game_controller,
+            )
+        except Exception:
+            log.exception("[Main] cannot attach runtime services to main StrategyTab")
 
         self.room_engine.sig_player_joined.connect(self._on_player_joined_toast)
         self.room_engine.sig_player_left.connect(self._on_player_left_toast)
@@ -1385,9 +1392,14 @@ class MainWindow(QMainWindow, WebSocketGateway):
                 log.exception("WS extension ready handling failed: profile=%s", profile_id)
             return
 
-        # cmd=606 la snapshot thu tu slot do client gui dinh ky. Luu rieng de
-        # xac nhan thao tac keo, tuyet doi khong ghi de bo bai goc cmd=600.
+        # cmd=606 la snapshot thu tu slot do client gui dinh ky.
+        # - ws_card_store: track layout sau kéo (giống MB-Copy) để WSIngest cập nhật _layout_codes
+        # - ws_layout_store: xác nhận thao tác kéo cho auto flow, không ghi đè bài gốc cmd=600
         if kind == "layout_snapshot" and cmd == 606 and isinstance(cs, list):
+            try:
+                ws_card_store.update_cards(profile_id, cs)
+            except Exception:
+                log.exception("layout cmd606 ws_card_store update failed: profile=%s cs=%s", profile_id, cs)
             try:
                 from ui2.bridge.ws_layout_store import ws_layout_store
 

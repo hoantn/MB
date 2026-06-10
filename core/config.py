@@ -147,7 +147,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 
 
 def _config_path(slot: int) -> str:
-    """Slot 1 dùng config.json (backward compat), slot 2-4 dùng config-tool{N}.json"""
+    """Slot 1 dùng config.json (backward compat), slot 2+ dùng config-tool{N}.json"""
     if slot == 1:
         return CONFIG_FILE
     return os.path.join(CONFIG_DIR, f"config-tool{slot}.json")
@@ -158,7 +158,7 @@ def load_config(slot: int = 1) -> Dict[str, Any]:
     if not os.path.exists(path):
         default = copy.deepcopy(DEFAULT_CONFIG)
         if slot > 1:
-            # Ghi tool_index vào config mới tạo cho slot 2-4
+            # Ghi tool_index vào config mới tạo cho slot 2+
             default.setdefault("ui", {})["tool_index"] = slot
         save_config(default, slot)
         return default
@@ -194,7 +194,10 @@ def save_config(config: Dict[str, Any], slot: int = 1) -> None:
         log.error(f"Failed to save config slot={slot}: {e}")
 
 
-def ensure_slot_configs() -> None:
+AUTO_TOOL_SLOTS = 12
+
+
+def ensure_slot_configs(max_slots: int = AUTO_TOOL_SLOTS) -> None:
     """Tạo config-tool2,3,4.json nếu chưa tồn tại.
 
     Dùng config slot 1 làm template (copy proxy, chrome_path, target_url)
@@ -202,7 +205,7 @@ def ensure_slot_configs() -> None:
     Chỉ reset user_data_dir để mỗi slot dùng profile Chrome riêng biệt.
     """
     slot1_cfg = load_config(1)
-    for slot in range(2, 5):
+    for slot in range(2, max(2, int(max_slots)) + 1):
         path = _config_path(slot)
         if not os.path.exists(path):
             new_cfg = copy.deepcopy(slot1_cfg)
@@ -280,12 +283,12 @@ def _extract_coord_blocks(cfg: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def apply_game_to_config(game_name: str) -> Tuple[bool, str]:
+def apply_game_to_config(game_name: str, slot: int = 1) -> Tuple[bool, str]:
     """
     Nút 1: "Chuyển game"
     /config/games/<game>.json -> merge tọa độ -> config.json
     """
-    main_cfg = load_config()
+    main_cfg = load_config(slot)
     game_coords, err = load_game_coords(game_name)
     if err:
         log.error("apply_game_to_config: %s", err)
@@ -309,16 +312,16 @@ def apply_game_to_config(game_name: str) -> Tuple[bool, str]:
     ui = main_cfg.setdefault("ui", {})
     ui["active_game"] = (game_name or "").strip().lower()
 
-    save_config(main_cfg)
+    save_config(main_cfg, slot)
     return True, f"Đã chuyển tọa độ sang game '{game_name}'."
 
 
-def copy_config_coords_to_game(game_name: str) -> Tuple[bool, str]:
+def copy_config_coords_to_game(game_name: str, slot: int = 1) -> Tuple[bool, str]:
     """
     Nút 2: "Copy tọa độ gốc"
     config.json -> ghi ra /config/games/<game>.json (chỉ tọa độ)
     """
-    main_cfg = load_config()
+    main_cfg = load_config(slot)
     coords = _extract_coord_blocks(main_cfg)
 
     if not coords:

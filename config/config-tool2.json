@@ -1,0 +1,234 @@
+{
+  "profiles": {
+    "P1": {
+      "name": "Profile 1",
+      "chrome_path": "D:/Users/PC GAMING/Downloads/goc",
+      "target_url": "https://play.top88.vc/?a=LT8",
+      "user_data_dir": "",
+      "proxy": {
+        "host": "http://lcdc1.proxyno1.com",
+        "port": 17187,
+        "username": "kiem",
+        "password": "kiem",
+        "tmproxy_api_key": "fcb86c608fc5ddaacefb3c2f815742ee",
+        "tmproxy_type": "https",
+        "proxyno1_api_key": "6Iyhfn1xdRArliFgrFmXqc1780250041",
+        "provider": "proxyno1",
+        "proxyno1_last_change_at": "2026-06-08T18:12:37",
+        "proxyno1_last_message": "Đổi IP thành công"
+      },
+      "window": {
+        "width": 1280,
+        "height": 780,
+        "scale_percent": 51
+      }
+    },
+    "P2": {
+      "name": "Profile 2",
+      "chrome_path": "D:/Users/PC GAMING/Downloads/goc",
+      "target_url": "https://web.yo88.st/?a=yo88win",
+      "user_data_dir": "",
+      "proxy": {
+        "host": "http://hndc24.proxyno1.com",
+        "port": 40491,
+        "username": "kiem",
+        "password": "kiem",
+        "tmproxy_api_key": "0dbaaf04399cac6331792cf50b32a901",
+        "tmproxy_type": "https",
+        "proxyno1_api_key": "rO4y8DKe831sY4yL4BPj7a1780250042",
+        "provider": "proxyno1",
+        "proxyno1_last_change_at": "2026-06-08T22:08:56",
+        "proxyno1_last_message": "Đổi IP thành công"
+      },
+      "window": {
+        "width": 1280,
+        "height": 780,
+        "scale_percent": 51
+      }
+    },
+    "P3": {
+      "name": "Profile 3",
+      "chrome_path": "D:/Users/PC GAMING/Downloads/goc",
+      "target_url": "https://play.ricwin.tw/?a=RIC001",
+      "user_data_dir": "",
+      "proxy": {
+        "host": "http://hndc59.proxyno1.com",
+        "port": 22740,
+        "username": "kiem",
+        "password": "kiem",
+        "tmproxy_api_key": "27339f4405281b70d31669f64226fe0e",
+        "tmproxy_type": "https",
+        "proxyno1_api_key": "r69clzeNvO0A3RzDeuGec41780250041",
+        "provider": "proxyno1",
+        "proxyno1_last_change_at": "2026-06-08T18:12:42",
+        "proxyno1_last_message": "Đổi IP thành công"
+      },
+      "window": {
+        "width": 1280,
+        "height": 780,
+        "scale_percent": 51
+      }
+    }
+  },
+  "ui": {
+    "tool_index": 2,
+    "browser_window_positions": {
+      "tool2": {
+        "P1": {
+          "x": -1930,
+          "y": 392
+        },
+        "P2": {
+          "x": -1292,
+          "y": 392
+        },
+        "P3": {
+          "x": -654,
+          "y": 392
+        }
+      }
+    },
+    "tool_window_geometries": {},
+    "theme": "Tối",
+    "theme_colors": {
+      "Tối": {
+        "bg": "#1E1E1E",
+        "panel": "#252526",
+        "sidebar": "#2D2D30",
+        "input_bg": "#1C1C1C",
+        "border": "#3C3C3C",
+        "divider": "#333333",
+        "text": "#E6E6E6",
+        "text2": "#B0B0B0",
+        "muted": "#8A8A8A",
+        "btn_bg": "#2D2D30",
+        "btn_hover": "#333333"
+      },
+      "Sáng": {
+        "bg": "#E5E7EB",
+        "panel": "#E5E7EB",
+        "sidebar": "#F9FAFB",
+        "input_bg": "#f6f7f8",
+        "border": "#D1D5DB",
+        "divider": "#E5E7EB",
+        "text": "#111827",
+        "text2": "#374151",
+        "muted": "#6B7280",
+        "btn_bg": "#CCCCCC",
+        "btn_hover": "#D1D5DB"
+      }
+    },
+    "room": {
+      "delay_create_ms": 800,
+      "delay_join_ms": 500,
+      "notify_enter_exit": true
+    },
+    "taixiu": {
+      "delay_ms": 800
+    },
+    "apply": {
+      "delay_between_drag_ms": 10,
+      "drag_duration_ms": 120,
+      "double_pass": true,
+      "double_pass_gap_ms": 4000,
+      "layout606_timeout_retry_count": 1,
+      "layout606_timeout_retry_ms": 6500,
+      "verify_drag": true,
+      "verify_min_confidence": 0.7
+    },
+    "active_game": "hit"
+  },
+  "game_ui": {
+    "bet_buttons": {},
+    "bet_buttons_profile": {
+      "P1": {},
+      "P2": {},
+      "P3": {}
+    },
+    "exit_button_profile": {
+      "P1": null,
+      "P2": null,
+      "P3": null
+    },
+    "exit_button2_profile": {
+      "P1": null,
+      "P2": null,
+      "P3": null
+    },
+    "binh_button_profile": {
+      "P1": null,
+      "P2": null,
+      "P3": null
+    },
+    "done_button_profile": {
+      "P1": null,
+      "P2": null,
+      "P3": null
+    },
+    "taixiu": {
+      "tx_bet_values": [
+        "1000",
+        "10000",
+        "50000",
+        "100000",
+        "500000",
+        "1000000",
+        "10000000"
+      ],
+      "tx_bet_points_profile": {
+        "P1": {},
+        "P2": {},
+        "P3": {}
+      },
+      "tai_button_profile": {
+        "P1": null,
+        "P2": null,
+        "P3": null
+      },
+      "xiu_button_profile": {
+        "P1": null,
+        "P2": null,
+        "P3": null
+      },
+      "confirm_button_profile": {
+        "P1": null,
+        "P2": null,
+        "P3": null
+      }
+    }
+  },
+  "capture": {
+    "regions": {
+      "P1": null,
+      "P2": null,
+      "P3": null
+    },
+    "slots": {
+      "P1": {},
+      "P2": {},
+      "P3": {}
+    }
+  },
+  "auto_settings": {
+    "telegram": {
+      "bot_token": "",
+      "chat_id": ""
+    },
+    "alerts": {
+      "gold_min_threshold": {
+        "enabled": false,
+        "threshold": 0
+      },
+      "gold_max_threshold": {
+        "enabled": false,
+        "threshold": 0
+      },
+      "opp_sap_lang_intentional_foul": {
+        "enabled": false
+      },
+      "missing_3p": {
+        "enabled": false
+      }
+    }
+  }
+}

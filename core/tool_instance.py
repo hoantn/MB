@@ -8,7 +8,7 @@ from core.config import load_config
 
 
 TOOL_MIN = 1
-TOOL_MAX = 10
+TOOL_MAX = 12
 PROFILE_IDS = ("P1", "P2", "P3")
 
 

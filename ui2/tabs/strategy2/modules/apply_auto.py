@@ -10,6 +10,7 @@ from collections import Counter
 
 from core.logger import log
 from core.apply_trace import apply_trace
+from core.apply_lock import acquire as _acquire_apply_lock, release as _release_apply_lock
 from engine.card import Card
 from engine.action import apply_arrangement, compute_moves
 from core.config import load_config
@@ -18,10 +19,6 @@ from ui2.tabs.strategy2.modules.apply_diagnostics import record_apply_failure
 from ui2.bridge.ws_layout_store import ws_layout_store
 from ui2.tabs.strategy2.modules.apply_confirmation import confirm_and_repair_layout
 
-
-# ---------------------------------------------------------------------------
-# Helpers dùng chung
-# ---------------------------------------------------------------------------
 
 def _layout_matches_target(final_codes: List[str], target_codes: List[str]) -> bool:
     if len(list(final_codes or [])) != 13 or len(list(target_codes or [])) != 13:
@@ -84,16 +81,7 @@ def _call_unsafe(callback: Callable, reason: str) -> None:
         callback()
 
 
-def pick_default_suggestion(suggestions: List[dict]) -> int:
-    if not suggestions:
-        return 0
-    for i, s in enumerate(suggestions):
-        if str(s.get("mode", "")).lower() == "money":
-            return i
-    return 0
-
-
-def _read_apply_timing_config(slot: int = 1) -> tuple[float, bool, int, int, int]:
+def _read_apply_timing_config(slot: int = 1) -> tuple:
     try:
         cfg = load_config(slot)
         ui_cfg = cfg.get("ui") or {}
@@ -117,280 +105,6 @@ def _read_apply_timing_config(slot: int = 1) -> tuple[float, bool, int, int, int
         max(1, int(layout606_timeout_retry_ms)),
     )
 
-
-# ---------------------------------------------------------------------------
-# LUỒNG THỦ CÔNG — y chang MB - Copy
-# ---------------------------------------------------------------------------
-
-def apply_manual_dashboard_style(
-    tab,
-    profile_id: str,
-    ws_codes: List[str],
-    suggestion: dict,
-) -> None:
-    """Kéo bài thủ công: double pass, chờ cmd=606 thay sleep(0.25)."""
-
-    pid = str(profile_id)
-
-    # 1) Build Card objects từ suggestion
-    chi1_codes = suggestion.get("chi1_codes") or []
-    chi2_codes = suggestion.get("chi2_codes") or []
-    chi3_codes = suggestion.get("chi3_codes") or []
-
-    try:
-        chi1 = [Card.from_code(c) for c in chi1_codes]
-        chi2 = [Card.from_code(c) for c in chi2_codes]
-        chi3 = [Card.from_code(c) for c in chi3_codes]
-    except Exception as e:
-        QMessageBox.warning(tab, "HÚP", f"{pid}: Lỗi parse Card: {e}")
-        return
-
-    if not (len(chi1) == 5 and len(chi2) == 5 and len(chi3) == 3):
-        QMessageBox.warning(tab, "HÚP", f"{pid}: Chi không hợp lệ (không phải 5-5-3).")
-        return
-
-    # 2) Lấy layout hiện tại (cache → ws_codes)
-    if not hasattr(tab, "_layout_codes"):
-        tab._layout_codes = {}
-
-    ws_codes = list(ws_codes or [])
-    if len(ws_codes) != 13:
-        QMessageBox.warning(tab, "HÚP", f"{pid}: WS không đủ 13 lá, không thể Apply.")
-        return
-
-    try:
-        cached = tab._layout_codes.get(pid)
-        if isinstance(cached, list) and len(cached) == 13:
-            if Counter(map(str, cached)) == Counter(map(str, ws_codes)):
-                current_codes = list(cached)
-            else:
-                current_codes = list(ws_codes)
-        else:
-            current_codes = list(ws_codes)
-    except Exception:
-        current_codes = list(ws_codes)
-
-    try:
-        tab._layout_codes[pid] = list(current_codes)
-    except Exception:
-        pass
-
-    # 3) Kiểm tra BrowserManager
-    bm = getattr(tab, "browser_manager", None)
-    if bm is None or not hasattr(bm, "get_active_tab"):
-        log.error("[Strategy2] INVALID browser_manager type=%s value=%s", type(bm), bm)
-        QMessageBox.warning(tab, "HÚP", f"{pid}: BrowserManager không hợp lệ.")
-        return
-
-    # 4) Guard: tránh apply đè nếu đang chạy
-    if not hasattr(tab, "_apply_threads"):
-        tab._apply_threads = {}
-
-    try:
-        t_old = tab._apply_threads.get(pid)
-    except Exception:
-        t_old = None
-
-    if t_old is not None and getattr(t_old, "is_alive", lambda: False)():
-        return
-
-    # 5) Đặt nút Apply sang trạng thái "busy"
-    try:
-        tab._apply_btn_set_busy(pid)
-    except Exception:
-        pass
-
-    # 6) Worker thread
-    def _worker_apply() -> None:
-        nonlocal current_codes
-
-        res_codes = None
-        err_msg: Optional[str] = None
-        unlocked_early = False
-        try:
-            (
-                delay_s,
-                _,
-                _,
-                _,
-                _,
-            ) = _read_apply_timing_config(
-                slot=getattr(getattr(tab, "browser_manager", None), "_slot", 1)
-            )
-
-            # WS FREEZE: chặn WS same-hand update chen ngang trong lúc kéo
-            try:
-                if not hasattr(tab, "_ws_freeze"):
-                    tab._ws_freeze = {}
-                tab._ws_freeze[pid] = True
-            except Exception:
-                pass
-
-            # LẦN 1: apply_arrangement từ current_codes (chi-based)
-            res_codes = apply_arrangement(
-                pid,
-                tab.browser_manager,
-                list(current_codes),
-                chi1,
-                chi2,
-                chi3,
-                delay_s=delay_s,
-            )
-
-            if isinstance(res_codes, list) and len(res_codes) == 13:
-                try:
-                    tab._layout_codes[pid] = list(res_codes)
-                except Exception:
-                    pass
-            else:
-                if res_codes is None:
-                    log.warning("[Strategy2] apply returned None pid=%s -> treat as uncertain, continue FORCE-APPLY2", pid)
-                    res_codes = list(current_codes)
-                    try:
-                        tab._layout_codes[pid] = list(res_codes)
-                    except Exception:
-                        pass
-                else:
-                    raise RuntimeError("apply_arrangement trả về kết quả không hợp lệ.")
-
-            # WS UNFREEZE: drag đã xong -> cho phép WS đồng bộ trở lại
-            try:
-                tab._ws_freeze[pid] = False
-            except Exception:
-                pass
-
-            # FORCE-APPLY2: chạy ngay sau 0.25s để game settle drag events lần 1
-            log.warning("[Strategy2] FORCE-APPLY2 pid=%s run second apply immediately", pid)
-            time.sleep(0.25)
-
-            # Base layout cho lần 2: ưu tiên cache sau lần 1, rồi res_codes, rồi current_codes
-            base_layout = None
-            try:
-                cached_now = (getattr(tab, "_layout_codes", {}) or {}).get(pid)
-                if isinstance(cached_now, list) and len(cached_now) == 13:
-                    base_layout = list(cached_now)
-            except Exception:
-                base_layout = None
-            if base_layout is None:
-                if isinstance(res_codes, list) and len(res_codes) == 13:
-                    base_layout = list(res_codes)
-                else:
-                    base_layout = list(current_codes)
-
-            try:
-                tab._layout_codes[pid] = list(base_layout)
-            except Exception:
-                pass
-
-            res_codes_apply2 = apply_arrangement(
-                pid,
-                tab.browser_manager,
-                list(base_layout),
-                chi1,
-                chi2,
-                chi3,
-                delay_s=delay_s,
-            )
-
-            if isinstance(res_codes_apply2, list) and len(res_codes_apply2) == 13:
-                res_codes = list(res_codes_apply2)
-                current_codes = list(res_codes)
-                try:
-                    tab._layout_codes[pid] = list(res_codes)
-                except Exception:
-                    pass
-
-            # EARLY UI UNLOCK sau khi cả 2 lần kéo xong
-            try:
-                if isinstance(res_codes, list) and len(res_codes) == 13:
-                    _ui_call(tab, lambda p=pid: tab._apply_btn_set_default(p), delay_ms=0)
-                    unlocked_early = True
-            except Exception:
-                pass
-
-            # VERIFY 13 (log only)
-            try:
-                if Counter(map(str, res_codes)) != Counter(map(str, ws_codes)):
-                    log.error(
-                        "[Strategy2] VERIFY-13 mismatch after apply pid=%s ws_first3=%s res_first3=%s",
-                        pid,
-                        list(ws_codes)[:3],
-                        list(res_codes)[:3],
-                    )
-            except Exception:
-                pass
-
-            # Poll _layout_codes để bắt cmd=606 real state đến muộn (như MB-Copy — không scan OCR)
-            try:
-                prev_layout = (getattr(tab, "_layout_codes", {}) or {}).get(pid)
-                prev_layout = list(prev_layout) if isinstance(prev_layout, list) else None
-            except Exception:
-                prev_layout = None
-
-            real_codes = None
-            t0 = time.time()
-            while (time.time() - t0) < 1.0:
-                try:
-                    cur = (getattr(tab, "_layout_codes", {}) or {}).get(pid)
-                except Exception:
-                    cur = None
-                if isinstance(cur, list) and len(cur) == 13:
-                    if (prev_layout is None) or (list(cur) != prev_layout):
-                        real_codes = list(cur)
-                        break
-                time.sleep(0.03)
-
-            if real_codes is None:
-                try:
-                    cur = (getattr(tab, "_layout_codes", {}) or {}).get(pid)
-                    if isinstance(cur, list) and len(cur) == 13:
-                        real_codes = list(cur)
-                except Exception:
-                    real_codes = None
-
-            if (
-                isinstance(real_codes, list) and len(real_codes) == 13
-                and isinstance(res_codes, list) and len(res_codes) == 13
-                and list(real_codes) != list(res_codes)
-            ):
-                try:
-                    tab._layout_codes[pid] = list(real_codes)
-                except Exception:
-                    pass
-
-        except Exception as e:
-            err_msg = str(e)
-            log.exception("[Strategy2] apply_arrangement ERROR pid=%s: %s", pid, err_msg)
-
-        finally:
-            try:
-                tab._apply_threads.pop(pid, None)
-            except Exception:
-                pass
-
-            if err_msg:
-                _ui_call(
-                    tab,
-                    lambda m=err_msg: QMessageBox.warning(tab, "HÚP", f"{pid}: Apply lỗi: {m}"),
-                    delay_ms=0,
-                )
-
-            if not unlocked_early:
-                _ui_call(tab, lambda p=pid: tab._apply_btn_set_default(p), delay_ms=0)
-
-            try:
-                tab._ws_freeze[pid] = False
-            except Exception:
-                pass
-
-    t = threading.Thread(target=_worker_apply, name=f"MB-Strategy2-Apply-{pid}", daemon=True)
-    tab._apply_threads[pid] = t
-    t.start()
-
-
-# ---------------------------------------------------------------------------
-# LUỒNG AUTO — giữ nguyên, chờ cmd=606, confirm_and_repair, callbacks
-# ---------------------------------------------------------------------------
 
 def apply_suggestion_dashboard_style(
     tab,
@@ -485,6 +199,12 @@ def apply_suggestion_dashboard_style(
 
     if t_old is not None and getattr(t_old, "is_alive", lambda: False)():
         apply_trace("apply_reject_thread_alive", pid)
+        return False
+
+    _slot = getattr(getattr(tab, "browser_manager", None), "_slot", 1)
+    if not _acquire_apply_lock(_slot, pid):
+        apply_trace("apply_reject_cross_tab_lock", pid)
+        log.warning("[Strategy2] AUTO skip: slot=%d pid=%s đang apply ở tab khác", _slot, pid)
         return False
 
     # 5) Set busy
@@ -673,6 +393,10 @@ def apply_suggestion_dashboard_style(
         finally:
             apply_trace("worker_finally", pid, err=bool(err_msg), unlocked=bool(unlocked_early))
             try:
+                _release_apply_lock(_slot, pid)
+            except Exception:
+                pass
+            try:
                 tab._apply_threads.pop(pid, None)
             except Exception:
                 pass
@@ -695,5 +419,10 @@ def apply_suggestion_dashboard_style(
     t = threading.Thread(target=_worker_apply, name=f"MB-Strategy2-Apply-{pid}", daemon=True)
     tab._apply_threads[pid] = t
     apply_trace("thread_start", pid, thread_name=t.name)
-    t.start()
+    try:
+        t.start()
+    except Exception:
+        _release_apply_lock(_slot, pid)
+        tab._apply_threads.pop(pid, None)
+        return False
     return True

@@ -43,8 +43,10 @@ from ui2.theme import (
 
 
 class ConfigTab(QWidget):
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, *, slot: int = 1, embedded: bool = False) -> None:
         super().__init__(parent)
+        self._slot = max(1, int(slot or 1))
+        self._embedded = bool(embedded)
 
         self._build_ui()
         self._load_from_config()
@@ -212,6 +214,16 @@ class ConfigTab(QWidget):
         root.addWidget(grp_theme)
         root.addWidget(grp_tool_window)
 
+        if self._embedded:
+            grp_tool.hide()
+            grp_notify.hide()
+            grp_theme.hide()
+            try:
+                lay_room.labelForField(self.spin_exit_double_click).hide()
+            except Exception:
+                pass
+            self.spin_exit_double_click.hide()
+
         root.addLayout(btn_row)
         root.addStretch(1)
 
@@ -229,7 +241,7 @@ class ConfigTab(QWidget):
     def _load_from_config(self) -> None:
         """Đọc config.json và đổ vào UI."""
         try:
-            cfg: Dict[str, Any] = load_config()
+            cfg: Dict[str, Any] = load_config(self._slot)
         except Exception as e:
             log.error("ConfigTab._load_from_config: %s", e)
             return
@@ -269,8 +281,7 @@ class ConfigTab(QWidget):
     def _on_save_clicked(self) -> None:
         """Lưu config từ UI về config.json."""
         try:
-            cfg: Dict[str, Any] = load_config()
-            self._show_success("Đã lưu cấu hình thành công.")
+            cfg: Dict[str, Any] = load_config(self._slot)
         except Exception as e:
             log.error("ConfigTab._on_save_clicked load: %s", e)
             self._show_error(f"Lưu cấu hình thất bại:\n{e}")
@@ -281,26 +292,29 @@ class ConfigTab(QWidget):
         ui_apply = ui.setdefault("apply", {})
         old_tool_index = int(ui.get("tool_index", 1) or 1)
         new_tool_index = int(self.cmb_tool.currentIndex()) + 1
-        ui["tool_index"] = new_tool_index
+        if not self._embedded:
+            ui["tool_index"] = new_tool_index
 
         ui_room["delay_join_ms"] = int(self.spin_delay_join.value())
         ui_room["delay_create_ms"] = int(self.spin_delay_create.value())
-        ui_room["exit_double_click_ms"] = int(self.spin_exit_double_click.value())
-        ui_room["notify_enter_exit"] = bool(self.chk_notify_enter_exit.isChecked())
-        ui_room["mini_as_window"] = bool(self.chk_room_mini.isChecked())
+        if not self._embedded:
+            ui_room["exit_double_click_ms"] = int(self.spin_exit_double_click.value())
+            ui_room["notify_enter_exit"] = bool(self.chk_notify_enter_exit.isChecked())
+            ui_room["mini_as_window"] = bool(self.chk_room_mini.isChecked())
 
         ui_apply["delay_between_drag_ms"] = int(self.spin_delay_between_drag.value())
         ui_apply["drag_duration_ms"] = int(self.spin_drag_duration.value())
 
         try:
-            save_config(cfg)
+            save_config(cfg, self._slot)
         except Exception as e:
             log.error("ConfigTab._on_save_clicked save: %s", e)
             return
 
         # Không popup ồn ào, chỉ log – nếu muốn bạn có thể thêm toast/messagebox
         log.info("ConfigTab: config saved.")
-        if new_tool_index != old_tool_index:
+        self._show_success("Đã lưu cấu hình thành công.")
+        if not self._embedded and new_tool_index != old_tool_index:
             QMessageBox.information(
                 self,
                 "Can khoi dong lai",
@@ -317,7 +331,7 @@ class ConfigTab(QWidget):
         
     def _on_apply_game_clicked(self) -> None:
         game = (self.cmb_game.currentText() or "").strip().lower()
-        ok, msg = apply_game_to_config(game)
+        ok, msg = apply_game_to_config(game, self._slot)
         if ok:
             log.info("ConfigTab: %s", msg)
             # Load lại để UI khác đọc config mới nếu cần
@@ -329,7 +343,7 @@ class ConfigTab(QWidget):
 
     def _on_copy_coords_clicked(self) -> None:
         game = (self.cmb_game.currentText() or "").strip().lower()
-        ok, msg = copy_config_coords_to_game(game)
+        ok, msg = copy_config_coords_to_game(game, self._slot)
         if ok:
             log.info("ConfigTab: %s", msg)
             self._show_success(msg)

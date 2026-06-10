@@ -517,31 +517,7 @@
       }
     },
     "active_game": "go88",
-    "tool_index": 1,
-    "browser_window_positions": {
-      "tool1": {
-        "P1": {
-          "x": -1927,
-          "y": 2
-        },
-        "P2": {
-          "x": -1291,
-          "y": 2
-        },
-        "P3": {
-          "x": -654,
-          "y": 2
-        }
-      }
-    },
-    "tool_window_geometries": {
-      "tool1": {
-        "x": 0,
-        "y": 23,
-        "width": 1920,
-        "height": 1017
-      }
-    }
+    "tool_index": 11
   },
   "profiles": {
     "P1": {

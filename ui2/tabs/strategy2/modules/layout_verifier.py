@@ -83,7 +83,11 @@ def scan_layout_fresh(
             apply_trace("fresh_scan_no_image", pid)
             return None
 
-        slots = crop_slots(pid, image)
+        try:
+            cfg_slot = int(getattr(getattr(capture_manager, "browser_manager", None), "_slot", 1) or 1)
+        except Exception:
+            cfg_slot = 1
+        slots = crop_slots(pid, image, slot=cfg_slot)
         if len(slots) != 13 or any(slot is None for slot in slots):
             apply_trace("fresh_scan_bad_slots", pid, slots_len=len(slots or []))
             return None
