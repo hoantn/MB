@@ -489,9 +489,8 @@ def apply_arrangement(
                         if delay_s > 0:
                             time.sleep(delay_s)
                     else:
-                        # Manual: steps=18, wait_ack=True để Chrome confirm từng event
-                        # (tránh dependent moves bị corrupt khi Chrome chưa xử lý xong drag trước)
-                        devtools.mouse_drag(sx, sy, dx, dy, wait_ack=True)
+                        # Manual: fire-and-forget như MB-Copy (không chờ Chrome ACK)
+                        devtools.mouse_drag(sx, sy, dx, dy)
                         if total_sleep > 0:
                             time.sleep(total_sleep)
                     drag_ok = True
