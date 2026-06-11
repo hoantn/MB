@@ -679,11 +679,31 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # tabs.addTab(self.dashboard_tab, "Dashboard")
         tabs.addTab(self.config_tab, "Cấu hình")
         if ENABLE_CAPTURE_TAB and self.capture_tab is not None:
-            # tabs.addTab(self.capture_tab, "Fix tọa độ")
-            self.capture_tab.hide()
+            tabs.addTab(self.capture_tab, "Fix tọa độ")
         tabs.addTab(self.players_tab, "Người chơi")
         # tabs.addTab(self.ws_sim_tab, "Test Bài")
         
+        strategy_main_index = tabs.indexOf(self.strategy_room_splitter)
+        if strategy_main_index >= 0:
+            tabs.removeTab(strategy_main_index)
+            self.strategy_room_splitter.hide()
+
+        config_main_index = tabs.indexOf(self.config_tab) if getattr(self, "config_tab", None) is not None else -1
+        if config_main_index >= 0:
+            tabs.removeTab(config_main_index)
+            self.config_tab.hide()
+
+        auto_main_index = tabs.indexOf(self.auto_four_tool_tab)
+        if auto_main_index > 0:
+            auto_widget = tabs.widget(auto_main_index)
+            auto_text = tabs.tabText(auto_main_index)
+            auto_icon = tabs.tabIcon(auto_main_index)
+            auto_tip = tabs.tabToolTip(auto_main_index)
+            tabs.removeTab(auto_main_index)
+            tabs.insertTab(0, auto_widget, auto_icon, auto_text)
+            tabs.setTabToolTip(0, auto_tip)
+        tabs.setCurrentIndex(0)
+
         self.tab_widget = tabs
         self.setCentralWidget(tabs)
         if self.ws_test_tab is not None:

@@ -44,6 +44,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "ui": {
         "tool_index": 1,
         "browser_window_positions": {},
+        "browser": {
+            "manage_chrome_by_tool": False,
+        },
         "tool_window_geometries": {},
         "theme": "Tối",
         "theme_colors": {
@@ -120,6 +123,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "capture": {
         "regions": {"P1": None, "P2": None, "P3": None},
         "slots": {"P1": {}, "P2": {}, "P3": {}},
+        "runtime": {"P1": None, "P2": None, "P3": None},
+        "runtime_scopes": {"P1": {}, "P2": {}, "P3": {}},
     },
     "auto_settings": {
         "telegram": {

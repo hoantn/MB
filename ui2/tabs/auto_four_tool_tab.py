@@ -78,7 +78,7 @@ class _SlotAutoLogSink:
         try:
             if self.owner._cards:
                 card = self.owner._cards[self.slot - 1]
-                card.set_meta(f"Auto Play: {int(remaining)} ván" if enabled else "Auto Play: tắt")
+                card.set_meta("Auto Play: đang bật" if enabled else "Auto Play: tắt")
         except Exception:
             pass
 
@@ -149,6 +149,7 @@ class ToolSlotCard(QFrame):
 
     _COL_OFF  = "#69737e"
     _COL_RUN  = "#2fb171"
+    _COL_SAME = "#4e8bd9"
     _COL_WAIT = "#e3a53b"
     _COL_ERR  = "#dc5b62"
 
@@ -158,6 +159,7 @@ class ToolSlotCard(QFrame):
         self._selected = False
         self._running = False
         self._p_dots: dict[str, QLabel] = {}
+        self._p_cells: dict[str, QWidget] = {}
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setMinimumHeight(90)
         self.setCursor(Qt.PointingHandCursor)
@@ -203,6 +205,7 @@ class ToolSlotCard(QFrame):
             cell.setStyleSheet(
                 f"background:{_PANEL3}; border:1px solid {_LINE2}; border-radius:3px;"
             )
+            self._p_cells[pid] = cell
             cl = QHBoxLayout(cell)
             cl.setContentsMargins(5, 2, 5, 2)
             cl.setSpacing(0)
@@ -234,13 +237,20 @@ class ToolSlotCard(QFrame):
 
     def set_profile_status(self, pid: str, status: str):
         dot = self._p_dots.get(pid)
-        if not dot:
+        cell = self._p_cells.get(pid)
+        if not dot or not cell:
             return
-        color = {
-            "run":  self._COL_RUN,
-            "wait": self._COL_WAIT,
-            "err":  self._COL_ERR,
-        }.get(status, self._COL_OFF)
+        color, bg, tip = {
+            "connected": (self._COL_RUN, "#13241d", f"{pid}: đã kết nối"),
+            "same_table": (self._COL_SAME, "#142235", f"{pid}: cùng bàn với P khác"),
+            "split_table": (self._COL_ERR, "#2a171a", f"{pid}: khác bàn với P khác"),
+            "wait": (self._COL_WAIT, "#271f11", f"{pid}: đang chờ"),
+            "err": (self._COL_ERR, "#2a171a", f"{pid}: lỗi"),
+        }.get(status, (self._COL_OFF, _PANEL3, f"{pid}: chưa kết nối"))
+        cell.setStyleSheet(
+            f"background:{bg}; border:1px solid {color}; border-radius:3px;"
+        )
+        cell.setToolTip(tip)
         dot.setStyleSheet(f"background:{color}; border-radius:2px;")
 
     def _refresh(self):
@@ -317,6 +327,11 @@ class AutoFourToolTab(QWidget):
         self._poll_timer.timeout.connect(self._poll_tool_events)
         self._poll_timer.start()
 
+        self._signal_timer = QTimer(self)
+        self._signal_timer.setInterval(500)
+        self._signal_timer.timeout.connect(self._refresh_profile_room_signals)
+        self._signal_timer.start()
+
     # ── Init contexts ──────────────────────────────────────────────
 
     def _init_tool_contexts(self):
@@ -384,11 +399,12 @@ class AutoFourToolTab(QWidget):
         sidebar.setFixedWidth(250)
         body.addWidget(sidebar)
         body.addWidget(self._build_detail())
-        body.addWidget(self._build_activity())
+        body.addWidget(self._build_room_panel())
 
         body.setStretchFactor(0, 0)
         body.setStretchFactor(1, 1)
-        body.setStretchFactor(2, 0)
+        body.setStretchFactor(2, 1)
+        body.setSizes([250, 700, 440])
 
         root.addWidget(body, 1)
 
@@ -412,26 +428,20 @@ class AutoFourToolTab(QWidget):
         sep = QFrame(); sep.setFrameShape(QFrame.VLine)
         sep.setStyleSheet(f"color:{_LINE};"); lay.addWidget(sep)
 
-        lay.addWidget(_lbl("Số ván", f"color:{_MUTED};"))
-        self._spn_rounds = QSpinBox()
-        self._spn_rounds.setRange(1, 9999); self._spn_rounds.setValue(999)
-        self._spn_rounds.setFixedWidth(68)
-        self._spn_rounds.setStyleSheet(
+        spin_style = (
             f"QSpinBox {{ background:{_PANEL3}; color:{_TEXT}; border:1px solid {_LINE};"
             " border-radius:4px; padding:0 4px; height:28px; }}"
         )
-        lay.addWidget(self._spn_rounds)
 
         lay.addWidget(_lbl("Delay", f"color:{_MUTED};"))
-        spn_style = self._spn_rounds.styleSheet()
         self._spn_dmin = QSpinBox()
-        self._spn_dmin.setRange(0, 120); self._spn_dmin.setValue(5)
+        self._spn_dmin.setRange(0, 120); self._spn_dmin.setValue(8)
         self._spn_dmin.setFixedWidth(52)
-        self._spn_dmin.setStyleSheet(spn_style)
+        self._spn_dmin.setStyleSheet(spin_style)
         self._spn_dmax = QSpinBox()
-        self._spn_dmax.setRange(0, 120); self._spn_dmax.setValue(10)
+        self._spn_dmax.setRange(0, 120); self._spn_dmax.setValue(18)
         self._spn_dmax.setFixedWidth(52)
-        self._spn_dmax.setStyleSheet(spn_style)
+        self._spn_dmax.setStyleSheet(spin_style)
         lay.addWidget(self._spn_dmin)
         lay.addWidget(_lbl("–", f"color:{_MUTED};"))
         lay.addWidget(self._spn_dmax)
@@ -559,52 +569,23 @@ class AutoFourToolTab(QWidget):
         hl.addLayout(act_row)
         lay.addWidget(hdr)
 
-        # Inner tab bar (2 tabs — khớp demo)
+        # Inner tab bar
         tab_bar = QWidget()
         tab_bar.setFixedHeight(36)
         tab_bar.setStyleSheet(f"background:#13171c; border-bottom:1px solid {_LINE};")
         tbl = QHBoxLayout(tab_bar)
         tbl.setContentsMargins(10, 0, 10, 0)
         tbl.setSpacing(0)
-        self._btn_overview  = self._innertab("Phòng",   True)
-        self._btn_strategy  = self._innertab("Chiến Thuật", False)
+        self._btn_strategy  = self._innertab("Chiến Thuật", True)
         self._btn_browser   = self._innertab("Trình duyệt", False)
         self._btn_config    = self._innertab("Cấu hình", False)
-        self._btn_overview.clicked.connect(lambda: self._switch_inner(0))
-        self._btn_strategy.clicked.connect(lambda: self._switch_inner(1))
-        self._btn_browser.clicked.connect(lambda:  self._switch_inner(2))
-        self._btn_config.clicked.connect(lambda:   self._switch_inner(3))
-        tbl.addWidget(self._btn_overview)
+        self._btn_strategy.clicked.connect(lambda: self._switch_inner(0))
+        self._btn_browser.clicked.connect(lambda:  self._switch_inner(1))
+        self._btn_config.clicked.connect(lambda:   self._switch_inner(2))
         tbl.addWidget(self._btn_strategy)
         tbl.addWidget(self._btn_browser)
         tbl.addWidget(self._btn_config)
         tbl.addStretch()
-
-        # Quick exit room: P1/P2/P3 toggle + button (right side of tab bar)
-        _toggle_style = (
-            "QPushButton { background:#1d2229; color:#697581; border:1px solid #2e3740;"
-            " border-radius:3px; padding:0 7px; font-weight:700; font-size:11px; }"
-            f"QPushButton:checked {{ background:{_BLUE}; color:#fff; border-color:{_BLUE}; }}"
-            "QPushButton:pressed { opacity:0.85; }"
-        )
-        self._chk_exit_p1 = QPushButton("P1"); self._chk_exit_p1.setCheckable(True); self._chk_exit_p1.setChecked(True)
-        self._chk_exit_p2 = QPushButton("P2"); self._chk_exit_p2.setCheckable(True); self._chk_exit_p2.setChecked(True)
-        self._chk_exit_p3 = QPushButton("P3"); self._chk_exit_p3.setCheckable(True); self._chk_exit_p3.setChecked(True)
-        for tog in (self._chk_exit_p1, self._chk_exit_p2, self._chk_exit_p3):
-            tog.setFixedHeight(22)
-            tog.setStyleSheet(_toggle_style)
-            tbl.addWidget(tog)
-        tbl.addSpacing(6)
-        self._btn_exit_room = QPushButton("Thoát Phòng")
-        self._btn_exit_room.setFixedHeight(22)
-        self._btn_exit_room.setStyleSheet(
-            "QPushButton { background:#622b31; color:#fff; border:1px solid #a04040;"
-            " border-radius:3px; padding:0 9px; font-weight:700; font-size:11px; }"
-            "QPushButton:pressed { background:#7a3540; }"
-        )
-        self._btn_exit_room.clicked.connect(self._on_quick_exit_room)
-        tbl.addWidget(self._btn_exit_room)
-        tbl.addSpacing(6)
 
         lay.addWidget(tab_bar)
 
@@ -612,15 +593,11 @@ class AutoFourToolTab(QWidget):
         self._inner_stack = QStackedWidget()
         self._inner_stack.setStyleSheet(f"background:{_BG};")
 
-        # Pane 0: Tổng quan = ctx.room_tab (RoomControlTab)
-        self._inner_stack.addWidget(self._overview_stack)
-        self._build_overview_pages()
-
-        # Pane 1: Chiến Thuật = ctx.strategy_tab (StrategyTab)
+        # Pane 0: Chiến Thuật = ctx.strategy_tab (StrategyTab)
         self._inner_stack.addWidget(self._strategy_stack)
         self._build_strategy_pages()
 
-        # Pane 2: Trình duyệt = ctx.profiles_tab (ProfilesTabV2)
+        # Pane 1: Trình duyệt = ctx.profiles_tab (ProfilesTabV2)
         self._inner_stack.addWidget(self._browser_stack)
         self._build_browser_pages()
 
@@ -710,6 +687,56 @@ class AutoFourToolTab(QWidget):
                 ph.setStyleSheet(f"color:{_MUTED};")
                 self._config_stack.addWidget(ph)
 
+    def _build_room_panel(self) -> QWidget:
+        frame = QWidget()
+        frame.setMinimumWidth(520)
+        frame.setStyleSheet(f"background:#12161a; border-left:1px solid {_LINE};")
+        lay = QVBoxLayout(frame)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        header = QWidget()
+        header.setFixedHeight(44)
+        header.setStyleSheet(f"background:#12161a; border-bottom:1px solid {_LINE};")
+        hl = QHBoxLayout(header)
+        hl.setContentsMargins(10, 0, 10, 0)
+        hl.setSpacing(6)
+
+        hl.addWidget(_lbl("Phòng", f"color:{_TEXT}; font-weight:900; font-size:13px;"))
+        hl.addStretch()
+
+        toggle_style = (
+            f"QPushButton {{ background:{_PANEL2}; color:{_MUTED}; border:1px solid {_LINE};"
+            " border-radius:13px; padding:0 12px; font-weight:800; height:26px; }}"
+            f"QPushButton:checked {{ background:{_BLUE}; color:#fff; border-color:{_BLUE}; }}"
+        )
+        self._chk_exit_p1 = QPushButton("P1")
+        self._chk_exit_p2 = QPushButton("P2")
+        self._chk_exit_p3 = QPushButton("P3")
+        for btn in (self._chk_exit_p1, self._chk_exit_p2, self._chk_exit_p3):
+            btn.setCheckable(True)
+            btn.setFixedHeight(26)
+            btn.setStyleSheet(toggle_style)
+            hl.addWidget(btn)
+        self._chk_exit_p1.setChecked(True)
+        self._chk_exit_p2.setChecked(True)
+        self._chk_exit_p3.setChecked(True)
+
+        self._btn_exit_room = QPushButton("Thoát Phòng")
+        self._btn_exit_room.setFixedHeight(28)
+        self._btn_exit_room.setStyleSheet(
+            f"QPushButton {{ background:#7a2e35; color:#fff; border:1px solid {_RED};"
+            " border-radius:4px; padding:0 10px; font-weight:800; }}"
+        )
+        self._btn_exit_room.clicked.connect(self._on_quick_exit_room)
+        hl.addWidget(self._btn_exit_room)
+
+        lay.addWidget(header)
+        self._overview_stack.setStyleSheet(f"background:{_BG};")
+        self._build_overview_pages()
+        lay.addWidget(self._overview_stack, 1)
+        return frame
+
     def _build_activity(self) -> QWidget:
         frame = QWidget()
         frame.setFixedWidth(310)
@@ -776,16 +803,16 @@ class AutoFourToolTab(QWidget):
 
     def _switch_inner(self, idx: int):
         self._inner_stack.setCurrentIndex(idx)
-        self._btn_overview.setChecked(idx == 0)
-        self._btn_strategy.setChecked(idx == 1)
-        self._btn_browser.setChecked(idx == 2)
-        self._btn_config.setChecked(idx == 3)
+        self._btn_strategy.setChecked(idx == 0)
+        self._btn_browser.setChecked(idx == 1)
+        self._btn_config.setChecked(idx == 2)
 
     def _switch_log_filter(self, f: str):
         self._log_filter = f
-        self._btn_log_sel.setChecked(f == "sel")
-        self._btn_log_all.setChecked(f == "all")
-        self._btn_log_err.setChecked(f == "err")
+        if hasattr(self, "_btn_log_sel"):
+            self._btn_log_sel.setChecked(f == "sel")
+            self._btn_log_all.setChecked(f == "all")
+            self._btn_log_err.setChecked(f == "err")
         self._redraw_log()
 
     # ── Select tool ────────────────────────────────────────────────
@@ -837,11 +864,10 @@ class AutoFourToolTab(QWidget):
             self._select_slot(slot)
 
     def _get_auto_params(self):
-        """Lấy rounds + delay từ topbar spinboxes."""
-        rounds = int(self._spn_rounds.value())
+        """Lấy delay từ topbar spinboxes."""
         dmin = int(self._spn_dmin.value()) * 1000
         dmax = int(self._spn_dmax.value()) * 1000
-        return rounds, min(dmin, dmax), max(dmin, dmax)
+        return min(dmin, dmax), max(dmin, dmax)
 
     def _ensure_bridge(self, slot: int) -> bool:
         """Start bridge cho slot (nếu chưa chạy). Trả về True nếu OK."""
@@ -863,18 +889,18 @@ class AutoFourToolTab(QWidget):
 
     def start_tool(self, slot: int):
         ctx = self._contexts[slot - 1]
-        rounds, delay_min, delay_max = self._get_auto_params()
+        delay_min, delay_max = self._get_auto_params()
 
         if not self._ensure_bridge(slot):
             return
 
         # Bật auto play trên strategy_tab của slot này
         if ctx is not None and ctx.strategy_tab is not None:
-            ctx.strategy_tab.set_auto_play(True, rounds, delay_min, delay_max)
+            ctx.strategy_tab.set_auto_play(True, delay_min_ms=delay_min, delay_max_ms=delay_max)
 
         self._cards[slot - 1].set_running(True)
-        self._cards[slot - 1].set_meta(f"Auto Play: {rounds} ván")
-        self._log(slot, f"Auto Play BẬT — {rounds} ván, delay {delay_min//1000}-{delay_max//1000}s", "ok")
+        self._cards[slot - 1].set_meta("Auto Play: đang bật")
+        self._log(slot, f"Auto Play BẬT — chạy liên tục, delay {delay_min//1000}-{delay_max//1000}s", "ok")
 
     def stop_tool(self, slot: int):
         ctx = self._contexts[slot - 1]
@@ -917,7 +943,16 @@ class AutoFourToolTab(QWidget):
         def _work():
             for pid in ("P1", "P2", "P3"):
                 try:
+                    if hasattr(ctx.browser_manager, "reload_config"):
+                        ctx.browser_manager.reload_config()
                     ctx.browser_manager.open_browser(pid)
+                    try:
+                        managed = bool(ctx.browser_manager._is_managed_chrome_by_tool_enabled())
+                        app_mode = bool(ctx.browser_manager._browser_port_has_app_mode(ctx.browser_manager._get_port(pid)))
+                        if managed:
+                            self._bg_log.emit(slot, f"{pid}: managed Chrome AppMode={'OK' if app_mode else 'FAIL'}", "ok" if app_mode else "warn")
+                    except Exception:
+                        pass
                     self._bg_log.emit(slot, f"{pid}: trình duyệt đã mở", "ok")
                 except Exception as e:
                     self._bg_log.emit(slot, f"Lỗi mở browser {pid}: {e}", "err")
@@ -1002,6 +1037,118 @@ class AutoFourToolTab(QWidget):
                 except Exception:
                     log.exception("[AutoFourToolTab] dispatch slot=%d", ctx.slot)
                 n += 1
+        self._refresh_profile_room_signals()
+
+    def _refresh_profile_room_signals(self):
+        for slot, ctx in enumerate(self._contexts, start=1):
+            if slot - 1 >= len(self._cards):
+                continue
+            statuses = self._compute_profile_room_signals(ctx)
+            card = self._cards[slot - 1]
+            for pid, status in statuses.items():
+                card.set_profile_status(pid, status)
+
+    def _compute_profile_room_signals(self, ctx) -> dict[str, str]:
+        pids = ("P1", "P2", "P3")
+        result = {pid: "disconnected" for pid in pids}
+        room_engine = getattr(ctx, "room_engine", None) if ctx is not None else None
+        room_tab = getattr(ctx, "room_tab", None) if ctx is not None else None
+        if room_engine is None and room_tab is None:
+            return result
+
+        uid_by_pid: dict[str, str] = {}
+        table_by_pid: dict[str, frozenset[str]] = {}
+        table_members: dict[frozenset[str], set[str]] = {}
+
+        if room_engine is not None and hasattr(room_engine, "get_room_monitor_state"):
+            for pid in pids:
+                try:
+                    state = room_engine.get_room_monitor_state(pid) or {}
+                except Exception:
+                    continue
+                profiles = state.get("profiles") or {}
+                for profile, info in profiles.items():
+                    uid = str((info or {}).get("uid") or "").strip()
+                    if profile in pids and uid:
+                        uid_by_pid[profile] = uid
+
+        last_room_state = getattr(room_tab, "_last_room_state", {}) if room_tab is not None else {}
+        if isinstance(last_room_state, dict):
+            for pid in pids:
+                st = last_room_state.get(pid)
+                if st is None:
+                    continue
+                my_uid = str(getattr(st, "my_uid", "") or "").strip()
+                if my_uid:
+                    uid_by_pid[pid] = my_uid
+                players = getattr(st, "nguoi_choi", None) or []
+                room_uids = {
+                    str(getattr(player, "uid", "") or "").strip()
+                    for player in players
+                    if str(getattr(player, "uid", "") or "").strip()
+                }
+                count = int(getattr(st, "so_nguoi_hien_tai", 0) or 0)
+                if room_uids or count > 0 or getattr(st, "room_id", None) is not None:
+                    result[pid] = "connected"
+                if room_uids:
+                    key = frozenset(room_uids)
+                elif getattr(st, "room_id", None) is not None:
+                    key = frozenset({f"room:{getattr(st, 'room_id', None)}"})
+                else:
+                    key = frozenset()
+                if key:
+                    table_by_pid[pid] = key
+                    members = {
+                        profile
+                        for profile, uid in uid_by_pid.items()
+                        if uid and uid in room_uids
+                    }
+                    if my_uid:
+                        members.add(pid)
+                    table_members.setdefault(key, set()).update(members)
+
+        for pid in pids:
+            if uid_by_pid.get(pid):
+                result[pid] = "connected"
+
+        if room_engine is not None and hasattr(room_engine, "get_room_monitor_state"):
+            for pid in pids:
+                try:
+                    state = room_engine.get_room_monitor_state(pid) or {}
+                except Exception:
+                    continue
+                if not bool(state.get("roster_fresh")):
+                    continue
+                room_uids = {
+                    str(uid).strip()
+                    for uid in (state.get("room_uids") or [])
+                    if str(uid or "").strip()
+                }
+                own_uid = uid_by_pid.get(pid)
+                if not own_uid or own_uid not in room_uids:
+                    continue
+                key = frozenset(room_uids)
+                table_by_pid[pid] = key
+                members = {
+                    profile
+                    for profile, uid in uid_by_pid.items()
+                    if uid and uid in room_uids
+                }
+                table_members.setdefault(key, set()).update(members)
+
+        same_table_pids: set[str] = set()
+        for members in table_members.values():
+            if len(members) >= 2:
+                same_table_pids.update(members)
+
+        active_table_keys = {key for key in table_by_pid.values() if key}
+        for pid in pids:
+            if pid in same_table_pids:
+                result[pid] = "same_table"
+            elif table_by_pid.get(pid) and len(active_table_keys) >= 2:
+                result[pid] = "split_table"
+
+        return result
 
     # ── Log ────────────────────────────────────────────────────────
 
@@ -1027,6 +1174,8 @@ class AutoFourToolTab(QWidget):
         self._redraw_log()
 
     def _redraw_log(self):
+        if not hasattr(self, "_log_view"):
+            return
         f = self._log_filter
         sel = self._current_slot
         rows = []
@@ -1045,7 +1194,8 @@ class AutoFourToolTab(QWidget):
 
     def _clear_log(self):
         self._log_html.clear()
-        self._log_view.clear()
+        if hasattr(self, "_log_view"):
+            self._log_view.clear()
 
     def log_from_context(self, slot: int, msg: str, level: str = "info"):
         self._log(slot, msg, level)

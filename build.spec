@@ -5,6 +5,7 @@ from PyInstaller.utils.hooks import (
     collect_data_files,
     collect_dynamic_libs,
 )
+from glob import glob
 
 block_cipher = None
 
@@ -35,10 +36,10 @@ hiddenimports += ["cv2"]
 datas = [
     ("vision/opp", "vision/opp"),
     ("chrome_ext", "chrome_ext"),
-    ("config/config.json", "config"),
 	("config/games", "config/games"),
     ("icon.ico", "."),
 ]
+datas += [(p, "config") for p in glob("config/config*.json")]
 
 # --- Binaries/Datas bổ sung cho libs native (nacl/cbor2 thường là pyd/dll) ---
 binaries = []

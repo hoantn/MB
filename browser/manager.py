@@ -8,6 +8,7 @@ import time
 import ctypes
 import threading
 from typing import Dict, Optional
+from urllib.parse import quote
 import requests
 from .local_proxy import AuthHttpForwardProxy
 
@@ -81,6 +82,30 @@ def get_profile_window_position(profile_id: str, win_w: int) -> tuple[int, int]:
         x = int(left) + max(0, (available_w - window_w) // 2)
         x = min(max_x, x)
     return x, int(top)
+
+
+def get_managed_tool_window_geometry(profile_id: str, win_w: int, win_h: int) -> tuple[int, int, int, int]:
+    """Return a compact P1/P2/P3 row inside the primary work area."""
+    left, top, right, bottom = get_primary_work_area()
+    gap = 8
+    available_w = max(1, int(right) - int(left))
+    available_h = max(1, int(bottom) - int(top))
+    width = max(320, int(win_w))
+    height = max(240, int(win_h))
+    max_width = max(320, (available_w - gap * 2) // 3)
+    if width > max_width:
+        ratio = max_width / float(width)
+        width = max_width
+        height = max(240, int(height * ratio))
+    if height > available_h:
+        height = available_h
+
+    idx = {"P1": 0, "P2": 1, "P3": 2}.get(str(profile_id or "").upper(), 0)
+    total_w = width * 3 + gap * 2
+    start_x = int(left) + max(0, (available_w - total_w) // 2)
+    x = start_x + idx * (width + gap)
+    y = int(top)
+    return int(x), int(y), int(width), int(height)
 
 
 def get_default_chrome_path() -> str:
@@ -396,6 +421,31 @@ class BrowserManager:
                 return remaining_pids
             time.sleep(0.25)
 
+    def _browser_port_has_app_mode(self, port: int) -> bool:
+        """Return True when the browser process for this DevTools port was launched with --app."""
+        if os.name != "nt":
+            return False
+        needle = f"--remote-debugging-port={int(port)}"
+        cmd = (
+            "$ErrorActionPreference='SilentlyContinue'; "
+            "Get-CimInstance Win32_Process | "
+            "Where-Object { $_.Name -in @('GoogleChromePortable.exe', 'chrome.exe', 'msedge.exe') "
+            f"-and $_.CommandLine -like '*{needle}*' "
+            "-and $_.CommandLine -like '*--app=*' } | "
+            "Select-Object -First 1 -ExpandProperty ProcessId"
+        )
+        try:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", cmd],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=3,
+            )
+            return bool((result.stdout or "").strip())
+        except Exception:
+            return False
+
     def _find_visible_browser_window_by_port(self, port: int) -> Optional[int]:
         """Return the visible top-level browser HWND owned by one DevTools port."""
         pids = self._get_browser_pids_by_port(port)
@@ -470,6 +520,58 @@ class BrowserManager:
             win_w,
         )
 
+    def _is_managed_chrome_by_tool_enabled(self) -> bool:
+        try:
+            cfg = load_config(self._slot)
+            ui = cfg.get("ui") or {}
+            browser_ui = ui.get("browser") or {}
+            return bool(browser_ui.get("manage_chrome_by_tool", False))
+        except Exception:
+            return False
+
+    def _get_managed_launch_geometry(self, profile_id: str, win_w: int, win_h: int) -> tuple[int, int, int, int]:
+        saved = self._get_saved_window_position(profile_id, win_w, win_h)
+        if saved is not None:
+            x, y = saved
+            return int(x), int(y), int(win_w), int(win_h)
+        return get_managed_tool_window_geometry(profile_id, win_w, win_h)
+
+    def _move_browser_window_by_port(self, profile_id: str, port: int, x: int, y: int, w: int, h: int) -> bool:
+        hwnd = self._find_visible_browser_window_by_port(port)
+        if not hwnd or os.name != "nt":
+            return False
+        try:
+            SW_RESTORE = 9
+            hwnd_ptr = ctypes.c_void_p(hwnd)
+            user32 = ctypes.windll.user32
+            user32.ShowWindow(hwnd_ptr, SW_RESTORE)
+            ok = bool(user32.MoveWindow(hwnd_ptr, int(x), int(y), int(w), int(h), True))
+            log.info(
+                "Browser[%s] managed move hwnd=%s ok=%s window=%sx%s@%s,%s",
+                profile_id,
+                hwnd,
+                ok,
+                w,
+                h,
+                x,
+                y,
+            )
+            return ok
+        except Exception as e:
+            log.warning("Browser[%s] cannot move managed window: %s", profile_id, e)
+            return False
+
+    def arrange_managed_browser_window(self, profile_id: str) -> bool:
+        """Reposition one browser into its managed P1/P2/P3 tool layout."""
+        if not self._is_managed_chrome_by_tool_enabled():
+            return False
+        cfg = self.get_profile_config(profile_id)
+        scale = max(10, cfg.window.scale_percent) / 100.0
+        win_w = int(cfg.window.width * scale)
+        win_h = int(cfg.window.height * scale)
+        x, y, w, h = self._get_managed_launch_geometry(profile_id, win_w, win_h)
+        return self._move_browser_window_by_port(profile_id, self._get_port(profile_id), x, y, w, h)
+
     def save_current_browser_window_position(self, profile_id: str) -> tuple[bool, str]:
         """Persist the current visible browser position for one tool/profile pair."""
         pid = str(profile_id or "P1")
@@ -540,6 +642,30 @@ class BrowserManager:
         # Open clicks must be a cheap OS-level focus operation only.
         self._focus_browser_window_by_port(profile_id, port)
 
+    def _ensure_managed_target_url(self, profile_id: str, target_url: str) -> None:
+        url = str(target_url or "").strip()
+        if not url:
+            return
+        try:
+            tab = self.ensure_tab(profile_id)
+            if tab is not None:
+                tab.devtools.navigate(url)
+                log.info("Browser[%s] managed App Mode navigated to target URL: %s", profile_id, url)
+        except Exception as e:
+            log.warning("Browser[%s] cannot navigate managed App Mode to %s: %s", profile_id, url, e)
+
+    def _app_bootstrap_url(self, profile_id: str) -> str:
+        """Use a non-network URL that still forces Chromium to create an app window."""
+        title = quote(f"MB {profile_id}", safe="")
+        body = quote(
+            "<!doctype html><html><head><meta charset='utf-8'>"
+            f"<title>MB {profile_id}</title>"
+            "<style>html,body{margin:0;background:#05070a;color:#9aa4af;"
+            "font:13px Arial,sans-serif}</style></head><body></body></html>",
+            safe="",
+        )
+        return f"data:text/html;charset=utf-8,{body}#title={title}"
+
     def _open_target_url_once(
         self,
         profile_id: str,
@@ -555,7 +681,7 @@ class BrowserManager:
         def _navigate_once() -> None:
             # Chrome starts on about:blank. Keep one fixed startup pause so the
             # unpacked proxy-auth extension can register before the only navigation.
-            time.sleep(0.75)
+            time.sleep(1.5)
             if self._browser_generations.get(profile_id, 0) != generation:
                 return
             if not is_devtools_port_ready(self._get_port(profile_id)):
@@ -862,14 +988,40 @@ chrome.webRequest.onAuthRequired.addListener(
         port = self._get_port(profile_id)
         tool_index = self._tool_index
         tool_name = get_tool_name(tool_index)
+        manage_chrome_by_tool = self._is_managed_chrome_by_tool_enabled()
 
         # Chrome Portable may leave the launcher process while the real browser
         # process is already serving DevTools. Treat the DevTools page as the
         # source of truth so repeated "Open" clicks cannot spawn duplicates.
         if is_devtools_port_ready(port):
-            log.info("Browser for %s already open on DevTools port %s (reuse).", profile_id, port)
-            self._bring_existing_browser_to_front(profile_id, port)
-            return
+            if manage_chrome_by_tool and not self._browser_port_has_app_mode(port):
+                existing_pids = self._get_browser_pids_by_port(port)
+                log.info(
+                    "Browser[%s] dang mo kieu Chrome thuong tren port %s; relaunch App Mode: %s",
+                    profile_id,
+                    port,
+                    sorted(existing_pids),
+                )
+                self._clear_cached_browser_state(profile_id)
+                self._terminate_browser_pids(profile_id, existing_pids)
+                remaining_pids = self._wait_for_browser_pids_exit(port, timeout_sec=3.0)
+                if remaining_pids:
+                    log.warning(
+                        "Browser[%s] khong the relaunch App Mode vi process cu chua thoat: %s",
+                        profile_id,
+                        sorted(remaining_pids),
+                    )
+                    self._bring_existing_browser_to_front(profile_id, port)
+                    self.arrange_managed_browser_window(profile_id)
+                    self._ensure_managed_target_url(profile_id, self.get_profile_config(profile_id).target_url)
+                    return
+            else:
+                log.info("Browser for %s already open on DevTools port %s (reuse).", profile_id, port)
+                self._bring_existing_browser_to_front(profile_id, port)
+                if manage_chrome_by_tool:
+                    self.arrange_managed_browser_window(profile_id)
+                    self._ensure_managed_target_url(profile_id, self.get_profile_config(profile_id).target_url)
+                return
 
         # A browser from another manager/app instance may already own this port.
         # Wait for Portable Chrome to finish startup. If it remains stuck without
@@ -884,6 +1036,9 @@ chrome.webRequest.onAuthRequired.addListener(
             )
             if self._wait_for_devtools_port(port, timeout_sec=5.0):
                 self._bring_existing_browser_to_front(profile_id, port)
+                if manage_chrome_by_tool:
+                    self.arrange_managed_browser_window(profile_id)
+                    self._ensure_managed_target_url(profile_id, self.get_profile_config(profile_id).target_url)
                 return
 
             log.warning(
@@ -916,6 +1071,12 @@ chrome.webRequest.onAuthRequired.addListener(
             and is_official_chromium_path(chrome_path)
             and not profile_has_tool_extension(user_data_dir, ws_ext_dir)
         )
+        if manage_chrome_by_tool and needs_manual_extension:
+            manage_chrome_by_tool = False
+            log.warning(
+                "Browser[%s] tam tat App Mode vi can cai extension thu cong truoc.",
+                profile_id,
+            )
 
         # width/height/scale từ cấu hình window
         width = cfg.window.width
@@ -923,14 +1084,32 @@ chrome.webRequest.onAuthRequired.addListener(
         scale = max(10, cfg.window.scale_percent) / 100.0  # tránh 0
         win_w = int(width * scale)
         win_h = int(height * scale)
-        win_x, win_y = self._get_launch_window_position(profile_id, win_w, win_h)
+        if manage_chrome_by_tool:
+            win_x, win_y, win_w, win_h = self._get_managed_launch_geometry(profile_id, win_w, win_h)
+        else:
+            win_x, win_y = self._get_launch_window_position(profile_id, win_w, win_h)
 
         launched_new = False
         proc = self.processes.get(profile_id)
         if proc and proc.poll() is None:
             if is_devtools_port_ready(port):
-                log.info("Browser for %s already running (reuse).", profile_id)
-                self._bring_existing_browser_to_front(profile_id, port)
+                if manage_chrome_by_tool and not self._browser_port_has_app_mode(port):
+                    log.info("Browser[%s] live process is not App Mode; relaunch for managed layout.", profile_id)
+                    try:
+                        tab = self.tabs.pop(profile_id, None)
+                        if tab:
+                            tab.devtools.disconnect()
+                    except Exception:
+                        pass
+                    self._terminate_process_tree(proc, profile_id)
+                    self.processes.pop(profile_id, None)
+                    proc = None
+                else:
+                    log.info("Browser for %s already running (reuse).", profile_id)
+                    self._bring_existing_browser_to_front(profile_id, port)
+                    if manage_chrome_by_tool:
+                        self.arrange_managed_browser_window(profile_id)
+                        self._ensure_managed_target_url(profile_id, cfg.target_url)
             else:
                 log.warning(
                     "Browser for %s has live process but DevTools port %s is not ready; relaunch.",
@@ -1036,10 +1215,12 @@ chrome.webRequest.onAuthRequired.addListener(
             else:
                 log.info("Browser[%s] không dùng proxy", profile_id)
 
-            # Start blank so the proxy-auth extension can initialize before the
-            # one target navigation performed after DevTools attach.
+            # Start with a local app URL so the proxy-auth extension can
+            # initialize before the only target navigation. Do not use
+            # --app=about:blank: some Chromium Portable builds fall back to a
+            # normal tabbed window for that special URL.
             if cfg.target_url:
-                args.append("about:blank")
+                args.append(f"--app={self._app_bootstrap_url(profile_id)}" if manage_chrome_by_tool else "about:blank")
 
             try:
                 proc = subprocess.Popen(
@@ -1058,7 +1239,7 @@ chrome.webRequest.onAuthRequired.addListener(
                             port,
                         )
                 log.info(
-                    "Launched Chrome for %s (%s) on port %s, window=%sx%s@%s,%s, scale=%.2f, exe=%s",
+                    "Launched Chrome for %s (%s) on port %s, window=%sx%s@%s,%s, scale=%.2f, managed=%s, exe=%s",
                     profile_id,
                     tool_name,
                     port,
@@ -1067,6 +1248,7 @@ chrome.webRequest.onAuthRequired.addListener(
                     win_x,
                     win_y,
                     scale,
+                    manage_chrome_by_tool,
                     launch_chrome_path,
                 )
             except Exception as e:
@@ -1079,6 +1261,8 @@ chrome.webRequest.onAuthRequired.addListener(
                 tab = self.ensure_tab(profile_id)
                 if launched_new and cfg.target_url and tab:
                     self._open_target_url_once(profile_id, cfg.target_url, tab)
+                if manage_chrome_by_tool:
+                    self.arrange_managed_browser_window(profile_id)
             except Exception as e:
                 log.error("Không thể attach DevTools cho %s: %s", profile_id, e)
 

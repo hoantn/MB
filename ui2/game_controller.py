@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QApplication
 
 from browser.devtools import DevToolsClient
 from core.apply_trace import apply_trace
+from capture.runtime_coordinates import validate_runtime_coordinates
 
 class GameController:
     """
@@ -68,6 +69,18 @@ class GameController:
             raise RuntimeError(f"Không tìm thấy DevToolsClient cho profile {profile_id}")
         return self._devtools[profile_id]
 
+    def _validate_runtime_or_raise(self, profile_id: str, scope: str | None = None) -> None:
+        ok, msg = validate_runtime_coordinates(self._browser_manager, profile_id, self._current_cfg, scope=scope)
+        if not ok:
+            raise RuntimeError(
+                f"Tọa độ runtime của {profile_id} không khớp lúc Fix tọa độ: {msg}. "
+                "Hãy đưa cửa sổ về đúng kích thước đã fix hoặc fix lại tọa độ."
+            )
+
+    def _click_point(self, profile_id: str, x: int, y: int, scope: str | None = None) -> None:
+        self._validate_runtime_or_raise(profile_id, scope=scope)
+        self._client(profile_id).mouse_click(int(x), int(y))
+
     # ------------------------------------------------------------------ actions
 
     def click_bet(self, profile_id: str, bet: int) -> None:
@@ -105,7 +118,7 @@ class GameController:
 
         x = int(pos.get("x", 0))
         y = int(pos.get("y", 0))
-        self._client(profile_id).mouse_click(x, y)
+        self._click_point(profile_id, x, y, scope="bet_buttons")
 
     def click_exit_room_1(self, profile_id: str) -> None:
         """
@@ -146,7 +159,7 @@ class GameController:
 
         x = int(pos.get("x", 0))
         y = int(pos.get("y", 0))
-        self._client(profile_id).mouse_click(x, y)
+        self._click_point(profile_id, x, y, scope="exit_button")
         
     def click_exit_room_2(self, profile_id: str) -> None:
         """
@@ -181,7 +194,7 @@ class GameController:
 
         x = int(pos.get("x", 0))
         y = int(pos.get("y", 0))
-        self._client(profile_id).mouse_click(x, y)
+        self._click_point(profile_id, x, y, scope="exit_button2")
     
     def click_exit_room(self, profile_id: str) -> None:
         """Backward-compatible alias: dùng THOÁT PHÒNG #1."""
@@ -199,10 +212,7 @@ class GameController:
                 f"Chưa cấu hình nút Báo binh cho profile {profile_id} trong config.json"
             )
         apply_trace("click_binh_before_mouse", profile_id, x=int(pos.get("x", 0)), y=int(pos.get("y", 0)))
-        self._client(profile_id).mouse_click(
-            int(pos.get("x", 0)),
-            int(pos.get("y", 0)),
-        )
+        self._click_point(profile_id, int(pos.get("x", 0)), int(pos.get("y", 0)), scope="binh")
         apply_trace("click_binh_after_mouse", profile_id)
 
     def click_done(self, profile_id: str) -> None:
@@ -217,10 +227,7 @@ class GameController:
                 f"Chưa cấu hình nút Xong cho profile {profile_id} trong config.json"
             )
         apply_trace("click_done_before_mouse", profile_id, x=int(pos.get("x", 0)), y=int(pos.get("y", 0)))
-        self._client(profile_id).mouse_click(
-            int(pos.get("x", 0)),
-            int(pos.get("y", 0)),
-        )
+        self._click_point(profile_id, int(pos.get("x", 0)), int(pos.get("y", 0)), scope="done")
         apply_trace("click_done_after_mouse", profile_id)
 
     def click_taixiu_bet(self, profile_id: str, bet: int) -> None:
@@ -247,7 +254,7 @@ class GameController:
 
         x = int(pos.get("x", 0))
         y = int(pos.get("y", 0))
-        self._client(profile_id).mouse_click(x, y)
+        self._click_point(profile_id, x, y, scope="taixiu_bets")
 
     def click_tai(self, profile_id: str) -> None:
         """
@@ -270,7 +277,7 @@ class GameController:
 
         x = int(pos.get("x", 0))
         y = int(pos.get("y", 0))
-        self._client(profile_id).mouse_click(x, y)
+        self._click_point(profile_id, x, y, scope="taixiu_tai")
 
     def click_xiu(self, profile_id: str) -> None:
         """
@@ -293,7 +300,7 @@ class GameController:
 
         x = int(pos.get("x", 0))
         y = int(pos.get("y", 0))
-        self._client(profile_id).mouse_click(x, y)
+        self._click_point(profile_id, x, y, scope="taixiu_xiu")
         
     def click_taixiu_confirm(self, profile_id: str) -> None:
         """
@@ -316,7 +323,7 @@ class GameController:
 
         x = int(pos.get("x", 0))
         y = int(pos.get("y", 0))
-        self._client(profile_id).mouse_click(x, y)
+        self._click_point(profile_id, x, y, scope="taixiu_confirm")
         
     def play_tai_xiu_once(self, profile_id: str, bet: int, side: str, delay_ms: int) -> None:
         """
@@ -408,11 +415,11 @@ class GameController:
 
     def click_auto_spam_input(self, profile_id: str) -> None:
         pos = self._get_auto_spam_pos(profile_id, "message_input_profile")
-        self._client(profile_id).mouse_click(pos["x"], pos["y"])
+        self._click_point(profile_id, pos["x"], pos["y"])
 
     def click_auto_spam_send(self, profile_id: str) -> None:
         pos = self._get_auto_spam_pos(profile_id, "send_button_profile")
-        self._client(profile_id).mouse_click(pos["x"], pos["y"])
+        self._click_point(profile_id, pos["x"], pos["y"])
 
     def _insert_text_best_effort(self, profile_id: str, text: str) -> None:
         """

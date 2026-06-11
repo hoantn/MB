@@ -4,6 +4,7 @@ from core.logger import log
 from core.config import load_config
 from core.apply_trace import apply_trace
 from capture.region import get_game_region, get_slots
+from capture.runtime_coordinates import validate_runtime_coordinates
 from browser.manager import BrowserManager
 from engine.card import Card
 import time
@@ -357,6 +358,18 @@ def apply_arrangement(
     cfg = load_config(_slot)
     game_region = get_game_region(profile_id, slot=_slot)
     slots = get_slots(profile_id, slot=_slot)
+    required_runtime_scopes = ("region",) + tuple(f"slot_{idx}" for idx in range(1, 14))
+    for runtime_scope in required_runtime_scopes:
+        runtime_ok, runtime_msg = validate_runtime_coordinates(browser_manager, profile_id, cfg, scope=runtime_scope)
+        if not runtime_ok:
+            apply_trace("arrange_runtime_mismatch", profile_id, scope=runtime_scope, detail=runtime_msg)
+            log.warning(
+                "apply_arrangement[%s]: runtime coordinates mismatch scope=%s, stop to avoid wrong drag: %s",
+                profile_id,
+                runtime_scope,
+                runtime_msg,
+            )
+            return None
 
     # ---- UI apply: thời gian chờ sau mỗi lần kéo (drag_duration_ms) ----
     ui_cfg = cfg.get("ui") or {}

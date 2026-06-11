@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
+from glob import glob
 
 hiddenimports = ['requests', 'cbor2', 'nacl', 'websocket', 'PIL', 'cv2', 'numpy', 'imagehash']
 hiddenimports += [
@@ -20,8 +21,8 @@ datas = [
     ('vision\\opp', 'vision\\opp'),
     ('chrome_ext', 'chrome_ext'),
     ('icon.ico', '.'),
-    ('config\\config.json', 'config'),
 ]
+datas += [(p, 'config') for p in glob('config/config*.json')]
 datas += collect_data_files('PySide6')
 datas += collect_data_files('shiboken6')
 

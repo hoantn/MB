@@ -20,7 +20,7 @@
       "window": {
         "width": 1280,
         "height": 780,
-        "scale_percent": 51
+        "scale_percent": 34
       }
     },
     "P2": {
@@ -43,7 +43,7 @@
       "window": {
         "width": 1280,
         "height": 780,
-        "scale_percent": 51
+        "scale_percent": 34
       }
     },
     "P3": {
@@ -66,7 +66,7 @@
       "window": {
         "width": 1280,
         "height": 780,
-        "scale_percent": 51
+        "scale_percent": 34
       }
     }
   },
@@ -136,34 +136,220 @@
       "verify_drag": true,
       "verify_min_confidence": 0.7
     },
-    "active_game": "hit"
+    "active_game": "hit",
+    "browser": {
+      "manage_chrome_by_tool": true
+    }
   },
   "game_ui": {
     "bet_buttons": {},
     "bet_buttons_profile": {
-      "P1": {},
-      "P2": {},
-      "P3": {}
+      "P1": {
+        "100": {
+          "x": 120,
+          "y": 83
+        },
+        "500": {
+          "x": 207,
+          "y": 84
+        },
+        "1000": {
+          "x": 293,
+          "y": 83
+        },
+        "2000": {
+          "x": 122,
+          "y": 131
+        },
+        "5000": {
+          "x": 208,
+          "y": 131
+        },
+        "10000": {
+          "x": 294,
+          "y": 132
+        },
+        "20000": {
+          "x": 120,
+          "y": 179
+        },
+        "50000": {
+          "x": 209,
+          "y": 178
+        },
+        "100000": {
+          "x": 294,
+          "y": 178
+        },
+        "200000": {
+          "x": 132,
+          "y": 218
+        },
+        "500000": {
+          "x": 210,
+          "y": 219
+        },
+        "1000000": {
+          "x": 289,
+          "y": 218
+        }
+      },
+      "P2": {
+        "100": {
+          "x": 120,
+          "y": 83
+        },
+        "500": {
+          "x": 207,
+          "y": 84
+        },
+        "1000": {
+          "x": 293,
+          "y": 83
+        },
+        "2000": {
+          "x": 122,
+          "y": 131
+        },
+        "5000": {
+          "x": 208,
+          "y": 131
+        },
+        "10000": {
+          "x": 294,
+          "y": 132
+        },
+        "20000": {
+          "x": 120,
+          "y": 179
+        },
+        "50000": {
+          "x": 209,
+          "y": 178
+        },
+        "100000": {
+          "x": 294,
+          "y": 178
+        },
+        "200000": {
+          "x": 132,
+          "y": 218
+        },
+        "500000": {
+          "x": 210,
+          "y": 219
+        },
+        "1000000": {
+          "x": 289,
+          "y": 218
+        }
+      },
+      "P3": {
+        "100": {
+          "x": 120,
+          "y": 83
+        },
+        "500": {
+          "x": 207,
+          "y": 84
+        },
+        "1000": {
+          "x": 293,
+          "y": 83
+        },
+        "2000": {
+          "x": 122,
+          "y": 131
+        },
+        "5000": {
+          "x": 208,
+          "y": 131
+        },
+        "10000": {
+          "x": 294,
+          "y": 132
+        },
+        "20000": {
+          "x": 120,
+          "y": 179
+        },
+        "50000": {
+          "x": 209,
+          "y": 178
+        },
+        "100000": {
+          "x": 294,
+          "y": 178
+        },
+        "200000": {
+          "x": 132,
+          "y": 218
+        },
+        "500000": {
+          "x": 210,
+          "y": 219
+        },
+        "1000000": {
+          "x": 289,
+          "y": 218
+        }
+      }
     },
     "exit_button_profile": {
-      "P1": null,
-      "P2": null,
-      "P3": null
+      "P1": {
+        "x": 43,
+        "y": 43
+      },
+      "P2": {
+        "x": 43,
+        "y": 43
+      },
+      "P3": {
+        "x": 43,
+        "y": 43
+      }
     },
     "exit_button2_profile": {
-      "P1": null,
-      "P2": null,
-      "P3": null
+      "P1": {
+        "x": 48,
+        "y": 44
+      },
+      "P2": {
+        "x": 48,
+        "y": 44
+      },
+      "P3": {
+        "x": 48,
+        "y": 44
+      }
     },
     "binh_button_profile": {
-      "P1": null,
-      "P2": null,
-      "P3": null
+      "P1": {
+        "x": 389,
+        "y": 197
+      },
+      "P2": {
+        "x": 389,
+        "y": 197
+      },
+      "P3": {
+        "x": 389,
+        "y": 197
+      }
     },
     "done_button_profile": {
-      "P1": null,
-      "P2": null,
-      "P3": null
+      "P1": {
+        "x": 388,
+        "y": 171
+      },
+      "P2": {
+        "x": 388,
+        "y": 171
+      },
+      "P3": {
+        "x": 388,
+        "y": 171
+      }
     },
     "taixiu": {
       "tx_bet_values": [
@@ -176,37 +362,1801 @@
         "10000000"
       ],
       "tx_bet_points_profile": {
-        "P1": {},
-        "P2": {},
-        "P3": {}
+        "P1": {
+          "1000": {
+            "x": 49,
+            "y": 157
+          },
+          "10000": {
+            "x": 79,
+            "y": 157
+          },
+          "50000": {
+            "x": 108,
+            "y": 158
+          },
+          "100000": {
+            "x": 136,
+            "y": 158
+          },
+          "500000": {
+            "x": 164,
+            "y": 157
+          },
+          "1000000": {
+            "x": 193,
+            "y": 158
+          },
+          "10000000": {
+            "x": 221,
+            "y": 157
+          }
+        },
+        "P2": {
+          "1000": {
+            "x": 49,
+            "y": 157
+          },
+          "10000": {
+            "x": 79,
+            "y": 157
+          },
+          "50000": {
+            "x": 108,
+            "y": 158
+          },
+          "100000": {
+            "x": 136,
+            "y": 158
+          },
+          "500000": {
+            "x": 164,
+            "y": 157
+          },
+          "1000000": {
+            "x": 193,
+            "y": 158
+          },
+          "10000000": {
+            "x": 221,
+            "y": 157
+          }
+        },
+        "P3": {
+          "1000": {
+            "x": 49,
+            "y": 157
+          },
+          "10000": {
+            "x": 79,
+            "y": 157
+          },
+          "50000": {
+            "x": 108,
+            "y": 158
+          },
+          "100000": {
+            "x": 136,
+            "y": 158
+          },
+          "500000": {
+            "x": 164,
+            "y": 157
+          },
+          "1000000": {
+            "x": 193,
+            "y": 158
+          },
+          "10000000": {
+            "x": 221,
+            "y": 157
+          }
+        }
       },
       "tai_button_profile": {
-        "P1": null,
-        "P2": null,
-        "P3": null
+        "P1": {
+          "x": 81,
+          "y": 118
+        },
+        "P2": {
+          "x": 81,
+          "y": 118
+        },
+        "P3": {
+          "x": 81,
+          "y": 118
+        }
       },
       "xiu_button_profile": {
-        "P1": null,
-        "P2": null,
-        "P3": null
+        "P1": {
+          "x": 215,
+          "y": 118
+        },
+        "P2": {
+          "x": 215,
+          "y": 118
+        },
+        "P3": {
+          "x": 215,
+          "y": 118
+        }
       },
       "confirm_button_profile": {
-        "P1": null,
-        "P2": null,
-        "P3": null
+        "P1": {
+          "x": 148,
+          "y": 181
+        },
+        "P2": {
+          "x": 148,
+          "y": 181
+        },
+        "P3": {
+          "x": 148,
+          "y": 181
+        }
       }
     }
   },
   "capture": {
     "regions": {
-      "P1": null,
-      "P2": null,
-      "P3": null
+      "P1": {
+        "x": 0,
+        "y": 0,
+        "width": 419,
+        "height": 225
+      },
+      "P2": {
+        "x": 0,
+        "y": 0,
+        "width": 419,
+        "height": 225
+      },
+      "P3": {
+        "x": 0,
+        "y": 0,
+        "width": 419,
+        "height": 225
+      }
     },
     "slots": {
-      "P1": {},
-      "P2": {},
-      "P3": {}
+      "P1": {
+        "1": {
+          "x": 129,
+          "y": 47,
+          "width": 29,
+          "height": 41
+        },
+        "2": {
+          "x": 163,
+          "y": 47,
+          "width": 29,
+          "height": 42
+        },
+        "3": {
+          "x": 196,
+          "y": 47,
+          "width": 29,
+          "height": 40
+        },
+        "4": {
+          "x": 128,
+          "y": 93,
+          "width": 30,
+          "height": 40
+        },
+        "5": {
+          "x": 162,
+          "y": 93,
+          "width": 30,
+          "height": 39
+        },
+        "6": {
+          "x": 196,
+          "y": 92,
+          "width": 30,
+          "height": 40
+        },
+        "7": {
+          "x": 230,
+          "y": 92,
+          "width": 30,
+          "height": 41
+        },
+        "8": {
+          "x": 264,
+          "y": 91,
+          "width": 30,
+          "height": 42
+        },
+        "9": {
+          "x": 129,
+          "y": 136,
+          "width": 29,
+          "height": 41
+        },
+        "10": {
+          "x": 162,
+          "y": 136,
+          "width": 30,
+          "height": 41
+        },
+        "11": {
+          "x": 197,
+          "y": 136,
+          "width": 29,
+          "height": 42
+        },
+        "12": {
+          "x": 230,
+          "y": 137,
+          "width": 29,
+          "height": 39
+        },
+        "13": {
+          "x": 264,
+          "y": 137,
+          "width": 29,
+          "height": 40
+        }
+      },
+      "P2": {
+        "1": {
+          "x": 129,
+          "y": 47,
+          "width": 29,
+          "height": 41
+        },
+        "2": {
+          "x": 163,
+          "y": 47,
+          "width": 29,
+          "height": 42
+        },
+        "3": {
+          "x": 196,
+          "y": 47,
+          "width": 29,
+          "height": 40
+        },
+        "4": {
+          "x": 128,
+          "y": 93,
+          "width": 30,
+          "height": 40
+        },
+        "5": {
+          "x": 162,
+          "y": 93,
+          "width": 30,
+          "height": 39
+        },
+        "6": {
+          "x": 196,
+          "y": 92,
+          "width": 30,
+          "height": 40
+        },
+        "7": {
+          "x": 230,
+          "y": 92,
+          "width": 30,
+          "height": 41
+        },
+        "8": {
+          "x": 264,
+          "y": 91,
+          "width": 30,
+          "height": 42
+        },
+        "9": {
+          "x": 129,
+          "y": 136,
+          "width": 29,
+          "height": 41
+        },
+        "10": {
+          "x": 162,
+          "y": 136,
+          "width": 30,
+          "height": 41
+        },
+        "11": {
+          "x": 197,
+          "y": 136,
+          "width": 29,
+          "height": 42
+        },
+        "12": {
+          "x": 230,
+          "y": 137,
+          "width": 29,
+          "height": 39
+        },
+        "13": {
+          "x": 264,
+          "y": 137,
+          "width": 29,
+          "height": 40
+        }
+      },
+      "P3": {
+        "1": {
+          "x": 129,
+          "y": 47,
+          "width": 29,
+          "height": 41
+        },
+        "2": {
+          "x": 163,
+          "y": 47,
+          "width": 29,
+          "height": 42
+        },
+        "3": {
+          "x": 196,
+          "y": 47,
+          "width": 29,
+          "height": 40
+        },
+        "4": {
+          "x": 128,
+          "y": 93,
+          "width": 30,
+          "height": 40
+        },
+        "5": {
+          "x": 162,
+          "y": 93,
+          "width": 30,
+          "height": 39
+        },
+        "6": {
+          "x": 196,
+          "y": 92,
+          "width": 30,
+          "height": 40
+        },
+        "7": {
+          "x": 230,
+          "y": 92,
+          "width": 30,
+          "height": 41
+        },
+        "8": {
+          "x": 264,
+          "y": 91,
+          "width": 30,
+          "height": 42
+        },
+        "9": {
+          "x": 129,
+          "y": 136,
+          "width": 29,
+          "height": 41
+        },
+        "10": {
+          "x": 162,
+          "y": 136,
+          "width": 30,
+          "height": 41
+        },
+        "11": {
+          "x": 197,
+          "y": 136,
+          "width": 29,
+          "height": 42
+        },
+        "12": {
+          "x": 230,
+          "y": 137,
+          "width": 29,
+          "height": 39
+        },
+        "13": {
+          "x": 264,
+          "y": 137,
+          "width": 29,
+          "height": 40
+        }
+      }
+    },
+    "design": {
+      "P1": {
+        "region": {
+          "x": 235.63636363636363,
+          "y": 102.35294117647058,
+          "width": 708.3636363636365,
+          "height": 524.1176470588235
+        },
+        "slots": {
+          "1": {
+            "x": 395.6363636363636,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "2": {
+            "x": 498.9090909090909,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "3": {
+            "x": 602.1818181818182,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "4": {
+            "x": 395.6363636363636,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "5": {
+            "x": 498.9090909090909,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "6": {
+            "x": 602.1818181818182,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "7": {
+            "x": 705.4545454545455,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "8": {
+            "x": 807.2727272727274,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "9": {
+            "x": 395.6363636363636,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "10": {
+            "x": 498.9090909090909,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "11": {
+            "x": 600.7272727272727,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "12": {
+            "x": 704.0,
+            "y": 451.7647058823529,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "13": {
+            "x": 807.2727272727274,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          }
+        }
+      },
+      "P2": {
+        "region": {
+          "x": 235.63636363636363,
+          "y": 102.35294117647058,
+          "width": 708.3636363636365,
+          "height": 524.1176470588235
+        },
+        "slots": {
+          "1": {
+            "x": 395.6363636363636,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "2": {
+            "x": 498.9090909090909,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "3": {
+            "x": 602.1818181818182,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "4": {
+            "x": 395.6363636363636,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "5": {
+            "x": 498.9090909090909,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "6": {
+            "x": 602.1818181818182,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "7": {
+            "x": 705.4545454545455,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "8": {
+            "x": 807.2727272727274,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "9": {
+            "x": 395.6363636363636,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "10": {
+            "x": 498.9090909090909,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "11": {
+            "x": 600.7272727272727,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "12": {
+            "x": 704.0,
+            "y": 451.7647058823529,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "13": {
+            "x": 807.2727272727274,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          }
+        }
+      },
+      "P3": {
+        "region": {
+          "x": 235.63636363636363,
+          "y": 102.35294117647058,
+          "width": 708.3636363636365,
+          "height": 524.1176470588235
+        },
+        "slots": {
+          "1": {
+            "x": 395.6363636363636,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "2": {
+            "x": 498.9090909090909,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "3": {
+            "x": 602.1818181818182,
+            "y": 120.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "4": {
+            "x": 395.6363636363636,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "5": {
+            "x": 498.9090909090909,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "6": {
+            "x": 602.1818181818182,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "7": {
+            "x": 705.4545454545455,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "8": {
+            "x": 807.2727272727274,
+            "y": 285.88235294117646,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "9": {
+            "x": 395.6363636363636,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "10": {
+            "x": 498.9090909090909,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "11": {
+            "x": 600.7272727272727,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "12": {
+            "x": 704.0,
+            "y": 451.7647058823529,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          },
+          "13": {
+            "x": 807.2727272727274,
+            "y": 450.0,
+            "width": 87.27272727272727,
+            "height": 144.7058823529412
+          }
+        }
+      }
+    },
+    "runtime": {
+      "P1": {
+        "mode": "runtime_fixed",
+        "viewport": {
+          "width": 419,
+          "height": 226
+        },
+        "canvas": {
+          "left": 0,
+          "top": 0,
+          "width": 419,
+          "height": 226
+        },
+        "design": {
+          "width": 1560,
+          "height": 720
+        }
+      },
+      "P2": {
+        "mode": "runtime_fixed",
+        "viewport": {
+          "width": 419,
+          "height": 226
+        },
+        "canvas": {
+          "left": 0,
+          "top": 0,
+          "width": 419,
+          "height": 226
+        },
+        "design": {
+          "width": 1560,
+          "height": 720
+        }
+      },
+      "P3": {
+        "mode": "runtime_fixed",
+        "viewport": {
+          "width": 419,
+          "height": 226
+        },
+        "canvas": {
+          "left": 0,
+          "top": 0,
+          "width": 419,
+          "height": 226
+        },
+        "design": {
+          "width": 1560,
+          "height": 720
+        }
+      }
+    },
+    "runtime_scopes": {
+      "P1": {
+        "region": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "bet_buttons": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "binh": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "done": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_1": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_2": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_3": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_4": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_5": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_6": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_7": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_8": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_9": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_10": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_11": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_12": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_13": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "taixiu_tai": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "taixiu_xiu": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "taixiu_confirm": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "taixiu_bets": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        }
+      },
+      "P2": {
+        "region": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "bet_buttons": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "binh": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "done": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_1": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_2": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_3": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_4": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_5": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_6": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_7": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_8": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_9": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_10": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_11": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_12": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_13": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "taixiu_tai": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "taixiu_xiu": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "taixiu_confirm": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "taixiu_bets": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        }
+      },
+      "P3": {
+        "region": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "bet_buttons": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "binh": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "done": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_1": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_2": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_3": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_4": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_5": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_6": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_7": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_8": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_9": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_10": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_11": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_12": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "slot_13": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "taixiu_tai": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "taixiu_xiu": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "taixiu_confirm": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        },
+        "taixiu_bets": {
+          "mode": "runtime_fixed",
+          "viewport": {
+            "width": 419,
+            "height": 226
+          },
+          "canvas": {
+            "left": 0,
+            "top": 0,
+            "width": 419,
+            "height": 226
+          },
+          "design": {
+            "width": 1560,
+            "height": 720
+          }
+        }
+      }
     }
   },
   "auto_settings": {

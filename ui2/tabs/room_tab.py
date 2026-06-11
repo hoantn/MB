@@ -617,6 +617,7 @@ class RoomControlTab(QWidget):
     request_stop_room_task = Signal(str)
     request_refresh_room = Signal(str)
     request_auto_find_guest_room = Signal(str, dict)
+    profile_status_changed = Signal(str, str)
 
     def __init__(self, browser_manager: BrowserManager, parent=None):
         super().__init__(parent)
@@ -630,10 +631,11 @@ class RoomControlTab(QWidget):
         self._pid_to_index: Dict[str, int] = {}
         self._last_room_state: Dict[str, Optional[TrangThaiPhong]] = {"P1": None, "P2": None, "P3": None}
         self._task_state: Dict[str, Dict[str, bool]] = {
-            "P1": {"create": False, "join": False},
-            "P2": {"create": False, "join": False},
-            "P3": {"create": False, "join": False},
+            "P1": {"create": False, "join": False, "find": False},
+            "P2": {"create": False, "join": False, "find": False},
+            "P3": {"create": False, "join": False, "find": False},
         }
+        self._last_profile_status_text: Dict[str, str] = {"P1": "", "P2": "", "P3": ""}
 
         self._build_ui()
 
@@ -775,23 +777,30 @@ class RoomControlTab(QWidget):
         return card
 
     def _nav_status_text(self, pid: str) -> str:
-        tasks = self._task_state.get(pid) or {"create": False, "join": False}
+        tasks = self._task_state.get(pid) or {"create": False, "join": False, "find": False}
         if tasks.get("create"):
             return "Đang tạo phòng"
-        if tasks.get("join"):
-            return "Đang vào phòng"
+        if tasks.get("join") or tasks.get("find"):
+            return "Đang tìm phòng"
 
         st = self._last_room_state.get(pid)
-        if st is not None and getattr(st, "room_id", None) is not None:
-            bet = "-" if st.bet is None else str(st.bet)
-            so = f"{st.so_nguoi_hien_tai}/{st.so_nguoi_toi_da}"
-            return f"Phòng {st.room_id} | Cược {bet} | {so}"
+        if st is not None:
+            players = getattr(st, "nguoi_choi", None) or []
+            cur_count = int(getattr(st, "so_nguoi_hien_tai", 0) or 0)
+            if cur_count <= 0 and players:
+                cur_count = len(players)
+            if cur_count > 0:
+                max_count = int(getattr(st, "so_nguoi_toi_da", 0) or 0)
+                cur = str(cur_count)
+                max_players = str(max_count) if max_count > 0 else "-"
+                return f"Trong phòng {cur}/{max_players}"
 
-        if self.profile_nav.currentItem() is not None:
-            cur_pid = self.profile_nav.currentItem().data(Qt.UserRole)
-            if cur_pid == pid:
-                return "Đang chọn"
-        return "Sẵn sàng"
+            if getattr(st, "room_id", None) is not None:
+                cur = str(cur_count)
+                max_players = str(int(getattr(st, "so_nguoi_toi_da", 0) or 0) or "-")
+                return f"Trong phòng {cur}/{max_players}"
+
+        return "Ngoài sảnh"
 
     def _apply_nav_widget_style(self, pid: str) -> None:
         parts = self._nav_widgets.get(pid)
@@ -937,7 +946,7 @@ class RoomControlTab(QWidget):
 
     def _format_nav_text(self, pid: str) -> str:
         st = self._last_room_state.get(pid)
-        tasks = self._task_state.get(pid) or {"create": False, "join": False}
+        tasks = self._task_state.get(pid) or {"create": False, "join": False, "find": False}
 
         # Task tag (ưu tiên hiển thị)
         tag = ""
@@ -945,6 +954,8 @@ class RoomControlTab(QWidget):
             tag = "TẠO"
         elif tasks.get("join"):
             tag = "VÀO"
+        elif tasks.get("find"):
+            tag = "TÌM"
 
         if not st:
             base = f"{pid}"
@@ -966,12 +977,17 @@ class RoomControlTab(QWidget):
                 if it.data(Qt.UserRole) == pid:
                     parts = self._nav_widgets.get(pid)
                     if parts:
+                        text = self._nav_status_text(pid)
                         status = parts.get("status")
                         if isinstance(status, QLabel):
-                            status.setText(self._nav_status_text(pid))
+                            status.setText(text)
                         self._apply_nav_widget_style(pid)
                     else:
-                        it.setText(self._format_nav_text(pid))
+                        text = self._format_nav_text(pid)
+                        it.setText(text)
+                    if text != self._last_profile_status_text.get(pid):
+                        self._last_profile_status_text[pid] = text
+                        self.profile_status_changed.emit(pid, text)
                     break
         except Exception as e:
             log.exception("RoomTab _refresh_nav_item(%s) crashed: %s", pid, e)
@@ -1007,6 +1023,7 @@ class RoomControlTab(QWidget):
                 self._task_state[profile_id]["create"] = bool(dang_chay)
                 if bool(dang_chay):
                     self._task_state[profile_id]["join"] = False
+                    self._task_state[profile_id]["find"] = False
                 self._refresh_nav_item(profile_id)
         except Exception as e:
             log.exception(
@@ -1026,6 +1043,7 @@ class RoomControlTab(QWidget):
                 self._task_state[profile_id]["join"] = bool(dang_chay)
                 if bool(dang_chay):
                     self._task_state[profile_id]["create"] = False
+                    self._task_state[profile_id]["find"] = False
                 self._refresh_nav_item(profile_id)
         except Exception as e:
             log.exception(
@@ -1040,7 +1058,11 @@ class RoomControlTab(QWidget):
             return
         try:
             panel.dat_trang_thai_find(text, dang_chay)
-            # (không bắt buộc) nếu bạn muốn tag nav thì thêm task_state, còn không thì bỏ
+            if dang_chay is not None:
+                self._task_state[profile_id]["find"] = bool(dang_chay)
+                if bool(dang_chay):
+                    self._task_state[profile_id]["create"] = False
+                    self._task_state[profile_id]["join"] = False
             self._refresh_nav_item(profile_id)
         except Exception as e:
             log.exception("RoomControlTab dat_trang_thai_find crashed (pid=%s): %s", profile_id, e)

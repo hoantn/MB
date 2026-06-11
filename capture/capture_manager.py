@@ -14,7 +14,8 @@ from .region import (
     set_design_slot,
 )
 from core.logger import log
-from core.config import load_config, save_config
+from core.config import load_config
+from capture.runtime_coordinates import read_live_runtime_info
 
 DESIGN_W = 1280
 DESIGN_H = 720
@@ -88,6 +89,27 @@ class CaptureManager:
             * Đọc canvas Cocos hiện tại.
             * Từ design (1280x720) map ra screen mới → cập nhật regions + slots.
         """
+        # Runtime-fixed mode: never auto-scale coordinates. The coordinates saved
+        # in CaptureTab are valid only for the viewport/canvas recorded here.
+        cfg_slot = self._slot()
+        info = read_live_runtime_info(self.browser_manager, profile_id)
+        if not info:
+            msg = f"Không đọc được viewport/canvas hiện tại cho {profile_id}."
+            log.warning("fix_coordinates[%s]: %s", profile_id, msg)
+            return False, msg
+        vp = info.get("viewport") or {}
+        canvas_now = info.get("canvas") or {}
+        design = info.get("design") or {}
+        msg = (
+            f"Runtime hiện tại của {profile_id}: "
+            f"viewport={vp.get('width')}x{vp.get('height')}, "
+            f"canvas={canvas_now.get('width')}x{canvas_now.get('height')}, "
+            f"design={design.get('width')}x{design.get('height')}. "
+            "Metadata chỉ được lưu khi bạn lưu tọa độ từ tab Fix."
+        )
+        log.info("fix_coordinates[%s]: %s", profile_id, msg)
+        return True, msg
+
         # 1) Lấy tab + canvas Cocos hiện tại
         tab = self._get_or_attach_tab(profile_id)
         if not tab:

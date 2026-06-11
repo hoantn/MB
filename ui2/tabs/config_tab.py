@@ -211,6 +211,12 @@ class ConfigTab(QWidget):
         root.addLayout(row_room_apply)
 
         root.addWidget(grp_notify)
+        grp_browser = QGroupBox("Trình duyệt")
+        lay_browser = QVBoxLayout(grp_browser)
+        self.chk_manage_chrome_by_tool = QCheckBox("Mở quản lý Chrome theo Tool")
+        lay_browser.addWidget(self.chk_manage_chrome_by_tool)
+        lay_browser.addStretch(1)
+        root.addWidget(grp_browser)
         root.addWidget(grp_theme)
         root.addWidget(grp_tool_window)
 
@@ -259,12 +265,14 @@ class ConfigTab(QWidget):
                 self.cmb_game.setCurrentIndex(idx)
         ui_room = ui.get("room") or {}
         ui_apply = ui.get("apply") or {}
+        ui_browser = ui.get("browser") or {}
 
         delay_join_ms = int(ui_room.get("delay_join_ms", 500) or 0)
         delay_create_ms = int(ui_room.get("delay_create_ms", 800) or 0)
         exit_double_click_ms = int(ui_room.get("exit_double_click_ms", 130) or 0)
         notify_enter_exit = bool(ui_room.get("notify_enter_exit", True))
         mini_as_window = bool(ui_room.get("mini_as_window", False))
+        manage_chrome_by_tool = bool(ui_browser.get("manage_chrome_by_tool", False))
 
         delay_between_drag_ms = int(ui_apply.get("delay_between_drag_ms", 10) or 0)
         drag_duration_ms = int(ui_apply.get("drag_duration_ms", 120) or 0)
@@ -274,6 +282,7 @@ class ConfigTab(QWidget):
         self.spin_exit_double_click.setValue(exit_double_click_ms)
         self.chk_notify_enter_exit.setChecked(notify_enter_exit)
         self.chk_room_mini.setChecked(mini_as_window)
+        self.chk_manage_chrome_by_tool.setChecked(manage_chrome_by_tool)
         
         self.spin_delay_between_drag.setValue(delay_between_drag_ms)
         self.spin_drag_duration.setValue(drag_duration_ms)
@@ -290,6 +299,7 @@ class ConfigTab(QWidget):
         ui = cfg.setdefault("ui", {})
         ui_room = ui.setdefault("room", {})
         ui_apply = ui.setdefault("apply", {})
+        ui_browser = ui.setdefault("browser", {})
         old_tool_index = int(ui.get("tool_index", 1) or 1)
         new_tool_index = int(self.cmb_tool.currentIndex()) + 1
         if not self._embedded:
@@ -304,6 +314,7 @@ class ConfigTab(QWidget):
 
         ui_apply["delay_between_drag_ms"] = int(self.spin_delay_between_drag.value())
         ui_apply["drag_duration_ms"] = int(self.spin_drag_duration.value())
+        ui_browser["manage_chrome_by_tool"] = bool(self.chk_manage_chrome_by_tool.isChecked())
 
         try:
             save_config(cfg, self._slot)

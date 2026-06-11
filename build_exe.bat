@@ -85,7 +85,7 @@ xcopy /E /I /Y vision\opp dist\MBTool\vision\opp >nul
 if not exist dist\MBTool\config (
     mkdir dist\MBTool\config
 )
-copy /Y config\config.json dist\MBTool\config\config.json >nul
+copy /Y config\config*.json dist\MBTool\config\ >nul
 
 REM --- copy toàn bộ config/games/* ---
 if not exist dist\MBTool\config\games (

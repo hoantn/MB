@@ -22,6 +22,8 @@ from capture.region import set_game_region, get_game_region, set_slot, get_slots
 from core.logger import log
 from ui2.widgets.image_preview import ImagePreview
 from core.config import load_config, save_config
+from core.tool_instance import TOOL_MAX, TOOL_MIN
+from capture.runtime_coordinates import read_live_runtime_info, stamp_runtime_info
 
 class CaptureTab(QWidget):
     """Capture / DevTools tab.
@@ -40,8 +42,9 @@ class CaptureTab(QWidget):
     ) -> None:
         super().__init__(parent)
         self.browser_manager = browser_manager
+        self._root_browser_manager = browser_manager
         self.capture_manager = capture_manager
-        self._slot: int = getattr(browser_manager, "_slot", 1)
+        self._slot: int = max(TOOL_MIN, min(TOOL_MAX, int(getattr(browser_manager, "_slot", 1) or 1)))
 
         self.current_profile = "P1"
         self.current_full_pixmap: Optional[QPixmap] = None
@@ -78,6 +81,13 @@ class CaptureTab(QWidget):
 
         # Top controls
         top = QHBoxLayout()
+        top.addWidget(QLabel("Tool:"))
+        self.tool_combo = QComboBox()
+        self.tool_combo.addItems([f"Tool {i}" for i in range(TOOL_MIN, TOOL_MAX + 1)])
+        self.tool_combo.setCurrentIndex(self._slot - TOOL_MIN)
+        self.tool_combo.currentIndexChanged.connect(self._on_tool_changed)
+        top.addWidget(self.tool_combo)
+
         top.addWidget(QLabel("Profile:"))
         self.profile_combo = QComboBox()
         self.profile_combo.addItems(["P1", "P2", "P3"])
@@ -92,7 +102,7 @@ class CaptureTab(QWidget):
         apply_region_btn.clicked.connect(self.apply_region_from_selection)
         top.addWidget(apply_region_btn)
 
-        fix_btn = QPushButton("Fix nhanh tọa độ kéo")
+        fix_btn = QPushButton("Kiểm tra runtime")
         fix_btn.clicked.connect(self.fix_coordinates_clicked)
         top.addWidget(fix_btn)
         
@@ -150,6 +160,11 @@ class CaptureTab(QWidget):
         top.addStretch()
         root.addLayout(top)
 
+        self.status_label = QLabel("")
+        self.status_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        root.addWidget(self.status_label)
+        self._refresh_status_label()
+
         # Preview
         self.preview = ImagePreview(self)
         self.preview.selectionChanged.connect(self._on_selection_changed)
@@ -192,10 +207,149 @@ class CaptureTab(QWidget):
 
     # ------------------------------------------------------------------ Events / helpers
 
+    def _on_tool_changed(self, index: int) -> None:
+        slot = max(TOOL_MIN, min(TOOL_MAX, TOOL_MIN + int(index)))
+        if slot == self._slot:
+            return
+        self._slot = slot
+        root_slot = int(getattr(self._root_browser_manager, "_slot", 1) or 1)
+        if slot == root_slot:
+            self.browser_manager = self._root_browser_manager
+        else:
+            self.browser_manager = BrowserManager(slot=slot)
+        self.capture_manager = CaptureManager(self.browser_manager)
+        self.current_full_pixmap = None
+        self.current_selection = None
+        self._reset_pick_modes()
+        self.preview.setImage(QPixmap())
+        self._load_existing_region()
+        self._load_existing_slots()
+        self._refresh_status_label()
+
+    def _reset_pick_modes(self) -> None:
+        self._bet_pick_mode = False
+        self._bet_pick_bets = []
+        self._bet_pick_index = 0
+        self._exit_pick_mode = False
+        self._taixiu_pick_mode = False
+        self._taixiu_pick_side = ""
+        self._taixiu_pick_kind = ""
+        self._binh_pick_mode = False
+        self._done_pick_mode = False
+
+    def _refresh_status_label(self, extra: str = "") -> None:
+        size_text = "chua chup anh"
+        if self.current_full_pixmap is not None and not self.current_full_pixmap.isNull():
+            size_text = f"anh {self.current_full_pixmap.width()}x{self.current_full_pixmap.height()}"
+        text = f"Tool {self._slot} | {self.current_profile} | {size_text}"
+        if extra:
+            text = f"{text} | {extra}"
+        if hasattr(self, "status_label"):
+            self.status_label.setText(text)
+
+    def _publish_config_to_live_managers(self, cfg: dict) -> None:
+        managers = []
+        try:
+            managers.append(self.browser_manager)
+        except Exception:
+            pass
+        try:
+            managers.append(self._root_browser_manager)
+        except Exception:
+            pass
+
+        try:
+            win = self.window()
+            aft = getattr(win, "auto_four_tool_tab", None)
+            contexts = getattr(aft, "_contexts", []) or []
+            if 0 <= self._slot - 1 < len(contexts):
+                ctx = contexts[self._slot - 1]
+                if ctx is not None:
+                    bm = getattr(ctx, "browser_manager", None)
+                    if bm is not None:
+                        managers.append(bm)
+                    gc = getattr(ctx, "game_controller", None)
+                    if gc is not None and hasattr(gc, "_cfg"):
+                        gc._cfg = cfg
+        except Exception:
+            log.exception("[CaptureTab] publish config to AutoFourTool context failed slot=%s", self._slot)
+
+        try:
+            win = self.window()
+            bm = getattr(win, "browser_manager", None)
+            if bm is not None:
+                managers.append(bm)
+            gc = getattr(win, "game_controller", None)
+            if gc is not None and int(getattr(getattr(gc, "_browser_manager", None), "_slot", 1) or 1) == self._slot:
+                if hasattr(gc, "_cfg"):
+                    gc._cfg = cfg
+        except Exception:
+            pass
+
+        seen = set()
+        for bm in managers:
+            if bm is None:
+                continue
+            if id(bm) in seen:
+                continue
+            seen.add(id(bm))
+            try:
+                if int(getattr(bm, "_slot", 1) or 1) == self._slot:
+                    bm.config = cfg
+            except Exception:
+                pass
+
+    def _save_config_live(self, cfg: dict, scope: str | None = None) -> None:
+        self._stamp_runtime_metadata(cfg, scope=scope)
+        save_config(cfg, self._slot)
+        self._publish_config_to_live_managers(cfg)
+        self._refresh_status_label("da luu va nap runtime")
+
+    def _reload_live_config(self, scope: str | None = None) -> dict:
+        cfg = load_config(self._slot)
+        self._stamp_runtime_metadata(cfg, scope=scope)
+        save_config(cfg, self._slot)
+        self._publish_config_to_live_managers(cfg)
+        self._refresh_status_label("da nap lai runtime")
+        return cfg
+
+    def _stamp_runtime_metadata(
+        self,
+        cfg: dict,
+        profile_id: str | None = None,
+        scope: str | None = None,
+    ) -> None:
+        pid = profile_id or self.current_profile
+        try:
+            info = read_live_runtime_info(self.browser_manager, pid)
+            if info:
+                stamp_runtime_info(cfg, pid, info, scope=scope)
+        except Exception:
+            log.exception("[CaptureTab] cannot stamp runtime metadata slot=%s pid=%s", self._slot, pid)
+
+    def _point_warning(self, x: int, y: int) -> str:
+        if self.current_full_pixmap is None or self.current_full_pixmap.isNull():
+            return ""
+        width = self.current_full_pixmap.width()
+        height = self.current_full_pixmap.height()
+        if 0 <= int(x) < width and 0 <= int(y) < height:
+            return ""
+        return f"\n\nCANH BAO: diem x={x}, y={y} nam ngoai anh {width}x{height}."
+
+    def _rect_warning(self, x: int, y: int, w: int, h: int) -> str:
+        if self.current_full_pixmap is None or self.current_full_pixmap.isNull():
+            return ""
+        width = self.current_full_pixmap.width()
+        height = self.current_full_pixmap.height()
+        if int(w) > 0 and int(h) > 0 and int(x) >= 0 and int(y) >= 0 and int(x) + int(w) <= width and int(y) + int(h) <= height:
+            return ""
+        return f"\n\nCANH BAO: vung x={x}, y={y}, w={w}, h={h} nam ngoai anh {width}x{height}."
+
     def _on_profile_changed(self, pid: str) -> None:
         self.current_profile = pid
         self._load_existing_region()
         self._load_existing_slots()
+        self._refresh_status_label()
         
     def fix_coordinates_clicked(self) -> None:
         """
@@ -665,7 +819,36 @@ class CaptureTab(QWidget):
                     tx_xiu_profile[pid] = copy.deepcopy(src_xiu)
                 if isinstance(src_confirm, dict):
                     tx_confirm_profile[pid] = copy.deepcopy(src_confirm)
-            save_config(cfg, self._slot)
+            copied_scopes = (
+                "region",
+                "slots",
+                "slot_1",
+                "slot_2",
+                "slot_3",
+                "slot_4",
+                "slot_5",
+                "slot_6",
+                "slot_7",
+                "slot_8",
+                "slot_9",
+                "slot_10",
+                "slot_11",
+                "slot_12",
+                "slot_13",
+                "bet_buttons",
+                "exit_button",
+                "exit_button2",
+                "binh",
+                "done",
+                "taixiu_bets",
+                "taixiu_tai",
+                "taixiu_xiu",
+                "taixiu_confirm",
+            )
+            for pid in ("P1", "P2", "P3"):
+                for scope in copied_scopes:
+                    self._stamp_runtime_metadata(cfg, pid, scope=scope)
+            self._save_config_live(cfg)
 
             QMessageBox.information(
                 self,
@@ -786,12 +969,14 @@ class CaptureTab(QWidget):
 
             per_profile = profile_bets.setdefault(pid, {})
             per_profile[str(bet_key)] = {"x": cx, "y": cy}
-            save_config(cfg, self._slot)
+            scope = "taixiu_bets" if self._bet_pick_target == "taixiu" else "bet_buttons"
+            self._save_config_live(cfg, scope=scope)
 
             msg = (
                 f"Profile {pid} – đã lưu tọa độ cho Bet {bet_key}:\n"
                 f"x={cx}, y={cy}"
             )
+            msg += self._point_warning(cx, cy)
 
             self._bet_pick_index += 1
             if self._bet_pick_index >= len(self._bet_pick_bets):
@@ -850,7 +1035,7 @@ class CaptureTab(QWidget):
             profile_map = taixiu.setdefault(key, {"P1": None, "P2": None, "P3": None})
             profile_map[pid] = {"x": cx, "y": cy}
 
-            save_config(cfg, self._slot)
+            self._save_config_live(cfg, scope=f"taixiu_{kind}")
 
             self._taixiu_pick_mode = False
             self._taixiu_pick_side = ""
@@ -859,7 +1044,7 @@ class CaptureTab(QWidget):
             QMessageBox.information(
                 self,
                 "Fix nút Tài/Xỉu",
-                f"Đã lưu nút {label} cho {pid}: x={cx}, y={cy}",
+                f"Đã lưu nút {label} cho {pid}: x={cx}, y={cy}{self._point_warning(cx, cy)}",
             )
 
         except Exception as e:
@@ -901,7 +1086,8 @@ class CaptureTab(QWidget):
                 box_title = "Fix tọa độ thoát phòng 1"
 
             exit_profiles[pid] = {"x": cx, "y": cy}
-            save_config(cfg, self._slot)
+            scope = "exit_button2" if int(getattr(self, "_exit_pick_index", 1)) == 2 else "exit_button"
+            self._save_config_live(cfg, scope=scope)
 
             self._exit_pick_mode = False
 
@@ -909,7 +1095,7 @@ class CaptureTab(QWidget):
                 self,
                 box_title,
                 f"Profile {pid} – đã lưu tọa độ EXIT #{self._exit_pick_index}:\n"
-                f"x={cx}, y={cy}",
+                f"x={cx}, y={cy}{self._point_warning(cx, cy)}",
             )
 
         except Exception as e:
@@ -937,12 +1123,12 @@ class CaptureTab(QWidget):
                 {"P1": None, "P2": None, "P3": None},
             )
             profile_map[pid] = {"x": cx, "y": cy}
-            save_config(cfg, self._slot)
+            self._save_config_live(cfg, scope="binh")
             self._binh_pick_mode = False
             QMessageBox.information(
                 self,
                 "Fix Binh",
-                f"Đã lưu nút Báo binh cho {pid}: x={cx}, y={cy}",
+                f"Đã lưu nút Báo binh cho {pid}: x={cx}, y={cy}{self._point_warning(cx, cy)}",
             )
         except Exception as e:
             self._binh_pick_mode = False
@@ -965,12 +1151,12 @@ class CaptureTab(QWidget):
                 {"P1": None, "P2": None, "P3": None},
             )
             profile_map[pid] = {"x": cx, "y": cy}
-            save_config(cfg, self._slot)
+            self._save_config_live(cfg, scope="done")
             self._done_pick_mode = False
             QMessageBox.information(
                 self,
                 "Fix Xong",
-                f"Đã lưu nút Xong cho {pid}: x={cx}, y={cy}",
+                f"Đã lưu nút Xong cho {pid}: x={cx}, y={cy}{self._point_warning(cx, cy)}",
             )
         except Exception as e:
             self._done_pick_mode = False
@@ -992,6 +1178,7 @@ class CaptureTab(QWidget):
         pix = QPixmap.fromImage(qimage)
         self.current_full_pixmap = pix
         self.preview.setImage(pix)
+        self._refresh_status_label("da chup tu trinh duyet")
 
     def apply_region_from_selection(self) -> None:
         if not self.current_selection:
@@ -1001,10 +1188,11 @@ class CaptureTab(QWidget):
         x, y, w, h = self.current_selection
         region = {"x": int(x), "y": int(y), "width": int(w), "height": int(h)}
         set_game_region(self.current_profile, region, slot=self._slot)
+        self._reload_live_config(scope="region")
         QMessageBox.information(
             self,
             "Đã lưu vùng game",
-            f"Profile {self.current_profile}: x={x}, y={y}, w={w}, h={h}",
+            f"Profile {self.current_profile}: x={x}, y={y}, w={w}, h={h}{self._rect_warning(x, y, w, h)}",
         )
 
     def load_slot_config(self) -> None:
@@ -1031,8 +1219,9 @@ class CaptureTab(QWidget):
             "height": int(self.slot_h_spin.value()),
         }
         set_slot(pid, idx, rect, slot=self._slot)
+        self._reload_live_config(scope=f"slot_{idx}")
         QMessageBox.information(
             self,
             "Đã lưu slot",
-            f"Profile {pid}, slot {idx}: {rect}",
+            f"Profile {pid}, slot {idx}: {rect}{self._rect_warning(rect['x'], rect['y'], rect['width'], rect['height'])}",
         )

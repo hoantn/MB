@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Kendz MB Tool 12 cho P2",
+  "version": "0.2.0",
+  "description": "Hook WebSocket cá»§a game Máº­u Binh Ä‘á»ƒ thu tháº­p vÃ  Ä‘iá»u khiá»ƒn phÃ²ng/vÃ¡n.",
+  "permissions": [
+    "proxy",
+    "storage",
+    "tabs",
+    "webRequest",
+    "webRequestAuthProvider"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*/*",
+        "http://*/*"
+      ],
+      "js": [
+        "content_script.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "inject_ws_hook.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

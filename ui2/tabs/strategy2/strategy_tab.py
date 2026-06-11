@@ -209,8 +209,8 @@ class StrategyTab(QWidget):
         self._sap_lang_combo: Optional[SapLangCombo] = None
         self._auto_play_enabled: bool = False
         self._auto_play_remaining: int = 0
-        self._auto_play_delay_min_ms: int = 5000
-        self._auto_play_delay_max_ms: int = 10000
+        self._auto_play_delay_min_ms: int = 8000
+        self._auto_play_delay_max_ms: int = 18000
         self._auto_play_hand_key: Optional[str] = None
         self._auto_play_pending_key: Optional[str] = None
         self._auto_play_applied_profile_keys = set()
@@ -1071,7 +1071,6 @@ class StrategyTab(QWidget):
         notifier = getattr(self, "_auto_settings_notifier", None)
         if (
             not self._auto_play_enabled
-            or self._auto_play_remaining <= 0
             or notifier is None
             or not notifier.is_missing_3p_enabled()
         ):
@@ -1094,7 +1093,6 @@ class StrategyTab(QWidget):
             notifier = getattr(self, "_auto_settings_notifier", None)
             if (
                 not self._auto_play_enabled
-                or self._auto_play_remaining <= 0
                 or notifier is None
                 or not notifier.is_missing_3p_enabled()
             ):
@@ -1109,10 +1107,10 @@ class StrategyTab(QWidget):
         except Exception:
             log.exception("[AUTO-PLAY] missing 3P alert check failed")
 
-    def set_auto_play(self, enabled: bool, rounds: int = 0, delay_min_ms: int = 5000, delay_max_ms: int = 10000) -> None:
+    def set_auto_play(self, enabled: bool, rounds: int = 0, delay_min_ms: int = 8000, delay_max_ms: int = 18000) -> None:
         self._auto_play_session += 1
         self._auto_play_enabled = bool(enabled)
-        self._auto_play_remaining = max(0, int(rounds or 0)) if enabled else 0
+        self._auto_play_remaining = -1 if enabled else 0
         a = max(0, int(delay_min_ms or 0))
         b = max(0, int(delay_max_ms or 0))
         self._auto_play_delay_min_ms = min(a, b)
@@ -1126,8 +1124,9 @@ class StrategyTab(QWidget):
         self._auto_reset_internal_cycle()
         if not self._auto_play_enabled:
             self._missing_3p_alert_timer.stop()
+        state_text = "bật liên tục" if self._auto_play_enabled else "tắt"
         self._auto_play_log(
-            f"Auto Play {'bật' if self._auto_play_enabled else 'tắt'} | còn {self._auto_play_remaining} ván | delay={self._auto_play_delay_min_ms}-{self._auto_play_delay_max_ms}ms"
+            f"Auto Play {state_text} | delay={self._auto_play_delay_min_ms}-{self._auto_play_delay_max_ms}ms"
         )
         self._sync_auto_play_sink_state()
 
@@ -1260,7 +1259,7 @@ class StrategyTab(QWidget):
         self._auto_play_internal_sap_ham_done = False
 
     def _auto_finish_round_if_ready(self) -> None:
-        """Consume one Auto round only after every visible profile has finished apply."""
+        """Finalize current Auto round only after every visible profile has finished apply."""
         if not self._auto_should_decrement_round():
             return
         round_key = self._auto_current_round_key()
@@ -1268,11 +1267,6 @@ class StrategyTab(QWidget):
             return
         self._auto_play_counted_round_keys.add(round_key)
         self._auto_commit_round_mode(round_key)
-        self._auto_play_remaining -= 1
-        if self._auto_play_remaining <= 0:
-            self._auto_play_enabled = False
-            self._missing_3p_alert_timer.stop()
-            self._auto_play_log("Auto Play hoàn tất số ván, đã tắt.")
         self._sync_auto_play_sink_state()
 
     def _auto_release_pending_group(self, expected_group_keys: Dict[str, str]) -> None:
@@ -1290,7 +1284,7 @@ class StrategyTab(QWidget):
                     self._auto_play_applied_profile_keys.discard(key)
         self._auto_play_hand_key = None
         self._auto_play_pending_key = None
-        if not has_started and self._auto_play_enabled and self._auto_play_remaining > 0:
+        if not has_started and self._auto_play_enabled:
             session = self._auto_play_session
             QTimer.singleShot(0, lambda s=session: self._maybe_run_auto_play(s))
 
@@ -1343,7 +1337,7 @@ class StrategyTab(QWidget):
         self._auto_play_applied_profile_keys.discard(profile_key)
         self._auto_play_hand_key = None
         self._auto_play_pending_key = None
-        if self._auto_play_enabled and self._auto_play_remaining > 0:
+        if self._auto_play_enabled:
             session = self._auto_play_session
             QTimer.singleShot(1000, lambda s=session: self._maybe_run_auto_play(s))
 
@@ -1364,7 +1358,7 @@ class StrategyTab(QWidget):
     def _maybe_run_auto_play(self, expected_session: Optional[int] = None) -> None:
         if expected_session is not None and expected_session != self._auto_play_session:
             return
-        if not self._auto_play_enabled or self._auto_play_remaining <= 0:
+        if not self._auto_play_enabled:
             return
 
         hand_key = self._current_auto_play_hand_key()

@@ -1,15 +1,15 @@
-const LOG_PREFIX = "[MB WS BG]";
+﻿const LOG_PREFIX = "[MB WS BG]";
 const BRIDGE_BASE = "http://127.0.0.1:9527";
-const PROFILE_ID = "P2";  // extension này gắn với profile P2
+const PROFILE_ID = "P2";  // extension nÃ y gáº¯n vá»›i profile P2
 const EXTENSION_VERSION = "0.2.0";
 
 // ===== CPU SAFETY SWITCHES =====
-// Tắt log toàn bộ frame để tránh ngốn CPU. Bật khi cần debug.
+// Táº¯t log toÃ n bá»™ frame Ä‘á»ƒ trÃ¡nh ngá»‘n CPU. Báº­t khi cáº§n debug.
 const DEBUG_ALL_FRAMES = false;
-// Log các cmd quan trọng (nhẹ hơn rất nhiều so với log toàn frame)
+// Log cÃ¡c cmd quan trá»ng (nháº¹ hÆ¡n ráº¥t nhiá»u so vá»›i log toÃ n frame)
 const DEBUG_IMPORTANT_CMDS = false;
 
-// Lưu vài frame gần nhất để debug (giữ lại, nhưng không log liên tục)
+// LÆ°u vÃ i frame gáº§n nháº¥t Ä‘á»ƒ debug (giá»¯ láº¡i, nhÆ°ng khÃ´ng log liÃªn tá»¥c)
 const lastFrames = [];
 
 function pushFrame(frame) {
@@ -38,7 +38,7 @@ function tryExtractTaiXiuFrame(url, data) {
     }
   } catch (e) {}
 
-  // Client gửi dạng:
+  // Client gá»­i dáº¡ng:
   // ["6","MiniGame","taixiuPlugin",{"cmd":1005}]
   if (Array.isArray(parsed) && parsed.length >= 4) {
     const zone = parsed[1];
@@ -54,7 +54,7 @@ function tryExtractTaiXiuFrame(url, data) {
     }
   }
 
-  // Sau khi đã biết URL là WS Tài/Xỉu, server thường trả object thẳng
+  // Sau khi Ä‘Ã£ biáº¿t URL lÃ  WS TÃ i/Xá»‰u, server thÆ°á»ng tráº£ object tháº³ng
   if (activeTaiXiuWsUrls.has(url)) {
     if (parsed && typeof parsed === "object") {
       return {
@@ -66,7 +66,7 @@ function tryExtractTaiXiuFrame(url, data) {
 
   return null;
 }
-// ===================== GỬI EVENT VỀ PYTHON =====================
+// ===================== Gá»¬I EVENT Vá»€ PYTHON =====================
 
 async function sendEventToPython(event) {
   try {
@@ -81,15 +81,15 @@ async function sendEventToPython(event) {
       keepalive: true,
     });
   } catch (e) {
-    // HTTP bridge chưa chạy thì thôi
+    // HTTP bridge chÆ°a cháº¡y thÃ¬ thÃ´i
   }
 }
 
-// URL WebSocket của game Mậu Binh sẽ dùng để gửi command
+// URL WebSocket cá»§a game Máº­u Binh sáº½ dÃ¹ng Ä‘á»ƒ gá»­i command
 let activeGameWsUrl = null;
-// URL WebSocket đã thấy traffic Tài/Xỉu
+// URL WebSocket Ä‘Ã£ tháº¥y traffic TÃ i/Xá»‰u
 const activeTaiXiuWsUrls = new Set();
-// ===================== NHẬN FRAME TỪ CONTENT SCRIPT =====================
+// ===================== NHáº¬N FRAME Tá»ª CONTENT SCRIPT =====================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || message.type !== "MB_WS_FRAME") return;
@@ -97,7 +97,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const { direction, url, data } = message;
   const frame = { direction, url, data };
   pushFrame(frame);
-  // ===== TÀI/XỈU: forward raw WS về Python =====
+  // ===== TÃ€I/Xá»ˆU: forward raw WS vá» Python =====
   try {
     const txInfo = tryExtractTaiXiuFrame(url, data);
     if (txInfo) {
@@ -110,8 +110,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     }
   } catch (e) {}
-  // ⚠️ Trước đây log mọi SEND/RECV sẽ cực ngốn CPU (đặc biệt khi WS bắn liên tục).
-  // Chỉ log nếu bật DEBUG_ALL_FRAMES.
+  // âš ï¸ TrÆ°á»›c Ä‘Ã¢y log má»i SEND/RECV sáº½ cá»±c ngá»‘n CPU (Ä‘áº·c biá»‡t khi WS báº¯n liÃªn tá»¥c).
+  // Chá»‰ log náº¿u báº­t DEBUG_ALL_FRAMES.
   if (DEBUG_ALL_FRAMES) {
     if (direction === "send") {
       log("SEND", url, data);
@@ -153,7 +153,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } catch (e) {}
   }
 
-  // Chỉ parse khi là frame RECV để tìm cmd=300/200/202/606/205
+  // Chá»‰ parse khi lÃ  frame RECV Ä‘á»ƒ tÃ¬m cmd=300/200/202/606/205
   if (direction === "recv") {
     try {
       let payload = null;
@@ -178,7 +178,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (payload && typeof payload === "object") {
         const cmd = payload.cmd;
 
-        // Thấy cmd=300 hoặc cmd=202 → gán URL này làm "game socket"
+        // Tháº¥y cmd=300 hoáº·c cmd=202 â†’ gÃ¡n URL nÃ y lÃ m "game socket"
         if (cmd === 300 || cmd === 202) {
           activeGameWsUrl = url;
         }
@@ -187,11 +187,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           log("CMD", cmd, "payload=", payload);
         }
 
-        // 300: danh sách phòng lobby
+        // 300: danh sÃ¡ch phÃ²ng lobby
         if (cmd === 300) {
           sendEventToPython({ kind: "room_list", payload });
 
-        // 200: realtime event trong phòng (join/leave/...)
+        // 200: realtime event trong phÃ²ng (join/leave/...)
         } else if (cmd === 200) {
           // P2 only: forward JOIN (t=1) + LEAVE (t=2)
           const t = payload?.t;
@@ -209,21 +209,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // 205: realtime table balances (uid -> gold)
         } else if (cmd === 205) {
           sendEventToPython({ kind: "room_balance", payload });
-        // 202: snapshot phòng hiện tại
+        // 202: snapshot phÃ²ng hiá»‡n táº¡i
         } else if (cmd === 202) {
           sendEventToPython({ kind: "room_snapshot", payload });
 
-		// 850..854: PHỎM (deal / discard / snapshot / eat / other actions)
+		// 850..854: PHá»ŽM (deal / discard / snapshot / eat / other actions)
 		} else if (cmd === 850 || cmd === 851 || cmd === 852 || cmd === 853 || cmd === 854) {
-		  // Gửi raw payload về Python (để engine/phom tự parse)
+		  // Gá»­i raw payload vá» Python (Ä‘á»ƒ engine/phom tá»± parse)
 		  sendEventToPython({ kind: "phom_ws", payload });
 
-        // 750: POKER - phân vai Dealer/SB/BB + lpi (vòng xoay)
+        // 750: POKER - phÃ¢n vai Dealer/SB/BB + lpi (vÃ²ng xoay)
         } else if (cmd === 750) {
-          // Gửi raw payload về Python để UI + predictor xử lý
+          // Gá»­i raw payload vá» Python Ä‘á»ƒ UI + predictor xá»­ lÃ½
           sendEventToPython({ kind: "poker_roles", payload });
 
-        // 600: bài (13 lá) của người chơi (tuỳ game dùng mã nào)
+        // 600: bÃ i (13 lÃ¡) cá»§a ngÆ°á»i chÆ¡i (tuá»³ game dÃ¹ng mÃ£ nÃ o)
         } else if (cmd === 600 && Array.isArray(payload.cs)) {
           sendEventToPython({
             kind: "cards_snapshot",
@@ -244,14 +244,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-// ===================== BUILD PAYLOAD GỬI NGƯỢC GAME =====================
+// ===================== BUILD PAYLOAD Gá»¬I NGÆ¯á»¢C GAME =====================
 
 function buildWsPayload(cmd) {
   const action = cmd.action;
   if (!action) return null;
 
   if (action === "update_room_list") {
-    // Yêu cầu server gửi lại danh sách phòng ChinesePoker (gid=4)
+    // YÃªu cáº§u server gá»­i láº¡i danh sÃ¡ch phÃ²ng ChinesePoker (gid=4)
     const payload = [6, "Simms", "channelPlugin", { cmd: 300, aid: "1", gid: 4 }];
     return JSON.stringify(payload);
   }
@@ -271,7 +271,7 @@ function buildWsPayload(cmd) {
   return null;
 }
 
-// ===================== PULL COMMAND TỪ PYTHON =====================
+// ===================== PULL COMMAND Tá»ª PYTHON =====================
 
 async function pollCommandsLoop() {
   try {
@@ -288,18 +288,18 @@ async function pollCommandsLoop() {
 
       const wsPayload = buildWsPayload(cmd);
       if (!wsPayload) {
-        // Command không hợp lệ → bỏ
+        // Command khÃ´ng há»£p lá»‡ â†’ bá»
         setTimeout(pollCommandsLoop, 150);
         return;
       }
 
-      // Gắn payload + URL game socket hiện tại (nếu đã biết)
+      // Gáº¯n payload + URL game socket hiá»‡n táº¡i (náº¿u Ä‘Ã£ biáº¿t)
       cmd.ws_payload = wsPayload;
       if (activeGameWsUrl) {
         cmd.target_ws_url = activeGameWsUrl;
       }
 
-      // Gửi command xuống tất cả tab (chỉ tab có content_script mới nhận)
+      // Gá»­i command xuá»‘ng táº¥t cáº£ tab (chá»‰ tab cÃ³ content_script má»›i nháº­n)
       chrome.tabs.query({}, (tabs) => {
         for (const tab of tabs) {
           if (!tab.id) continue;
@@ -316,7 +316,7 @@ async function pollCommandsLoop() {
       });
     }
   } catch (e) {
-    // bridge chưa chạy / lỗi mạng
+    // bridge chÆ°a cháº¡y / lá»—i máº¡ng
   } finally {
     setTimeout(pollCommandsLoop, 150);
   }
@@ -326,9 +326,13 @@ sendEventToPython({ kind: "extension_ready", version: EXTENSION_VERSION });
 pollCommandsLoop();
 log("service worker started");
 
-// ===================== LẤY PROXY CREDS TỪ PYTHON =====================
+// ===================== Láº¤Y PROXY CREDS Tá»ª PYTHON =====================
 
-async function getProxyCreds() {
+function sleepProxyCreds(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getProxyCredsOnce() {
   try {
     const resp = await fetch(BRIDGE_BASE + "/mb-proxy-creds", {
       method: "POST",
@@ -354,7 +358,18 @@ async function getProxyCreds() {
   }
 }
 
-// ===================== PROXY AUTH (LẤY TỪ CONFIG QUA BRIDGE) =====================
+async function getProxyCreds() {
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    const creds = await getProxyCredsOnce();
+    if (creds) {
+      return creds;
+    }
+    await sleepProxyCreds(150);
+  }
+  return null;
+}
+
+// ===================== PROXY AUTH (Láº¤Y Tá»ª CONFIG QUA BRIDGE) =====================
 
 const MAX_PROXY_AUTH_RETRIES = 3;
 const retryMap = new Map();
@@ -363,7 +378,7 @@ console.log("MB Proxy Auth", PROFILE_ID, "loaded");
 
 chrome.webRequest.onAuthRequired.addListener(
   (details, callback) => {
-    // Dùng IIFE async để có thể await fetch nhưng vẫn gọi callback theo asyncBlocking
+    // DÃ¹ng IIFE async Ä‘á»ƒ cÃ³ thá»ƒ await fetch nhÆ°ng váº«n gá»i callback theo asyncBlocking
     (async () => {
       try {
         console.log("MB Proxy Auth", PROFILE_ID, "onAuthRequired", {
@@ -375,7 +390,7 @@ chrome.webRequest.onAuthRequired.addListener(
           challenger: details.challenger,
         });
 
-        // Chỉ xử lý auth cho proxy (407 từ proxy), tránh đụng 401 của website
+        // Chá»‰ xá»­ lÃ½ auth cho proxy (407 tá»« proxy), trÃ¡nh Ä‘á»¥ng 401 cá»§a website
         if (!details.isProxy) {
           callback({});
           return;
@@ -397,7 +412,7 @@ chrome.webRequest.onAuthRequired.addListener(
 
         const creds = await getProxyCreds();
         if (!creds) {
-          // Không lấy được credential → để Chrome tự xử lý (popup, v.v.)
+          // KhÃ´ng láº¥y Ä‘Æ°á»£c credential â†’ Ä‘á»ƒ Chrome tá»± xá»­ lÃ½ (popup, v.v.)
           callback({});
           return;
         }
@@ -417,3 +432,4 @@ chrome.webRequest.onAuthRequired.addListener(
   { urls: ["<all_urls>"] },
   ["asyncBlocking"]
 );
+

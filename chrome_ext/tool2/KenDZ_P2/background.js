@@ -1,15 +1,15 @@
-const LOG_PREFIX = "[MB WS BG]";
+﻿const LOG_PREFIX = "[MB WS BG]";
 const BRIDGE_BASE = "http://127.0.0.1:9528";
-const PROFILE_ID = "P2";  // extension nÃ y gáº¯n vá»›i profile P2
+const PROFILE_ID = "P2";  // extension nÃƒÂ y gÃ¡ÂºÂ¯n vÃ¡Â»â€ºi profile P2
 const EXTENSION_VERSION = "0.2.0";
 
 // ===== CPU SAFETY SWITCHES =====
-// Táº¯t log toÃ n bá»™ frame Ä‘á»ƒ trÃ¡nh ngá»‘n CPU. Báº­t khi cáº§n debug.
+// TÃ¡ÂºÂ¯t log toÃƒÂ n bÃ¡Â»â„¢ frame Ã„â€˜Ã¡Â»Æ’ trÃƒÂ¡nh ngÃ¡Â»â€˜n CPU. BÃ¡ÂºÂ­t khi cÃ¡ÂºÂ§n debug.
 const DEBUG_ALL_FRAMES = false;
-// Log cÃ¡c cmd quan trá»ng (nháº¹ hÆ¡n ráº¥t nhiá»u so vá»›i log toÃ n frame)
+// Log cÃƒÂ¡c cmd quan trÃ¡Â»Âng (nhÃ¡ÂºÂ¹ hÃ†Â¡n rÃ¡ÂºÂ¥t nhiÃ¡Â»Âu so vÃ¡Â»â€ºi log toÃƒÂ n frame)
 const DEBUG_IMPORTANT_CMDS = false;
 
-// LÆ°u vÃ i frame gáº§n nháº¥t Ä‘á»ƒ debug (giá»¯ láº¡i, nhÆ°ng khÃ´ng log liÃªn tá»¥c)
+// LÃ†Â°u vÃƒÂ i frame gÃ¡ÂºÂ§n nhÃ¡ÂºÂ¥t Ã„â€˜Ã¡Â»Æ’ debug (giÃ¡Â»Â¯ lÃ¡ÂºÂ¡i, nhÃ†Â°ng khÃƒÂ´ng log liÃƒÂªn tÃ¡Â»Â¥c)
 const lastFrames = [];
 
 function pushFrame(frame) {
@@ -38,7 +38,7 @@ function tryExtractTaiXiuFrame(url, data) {
     }
   } catch (e) {}
 
-  // Client gá»­i dáº¡ng:
+  // Client gÃ¡Â»Â­i dÃ¡ÂºÂ¡ng:
   // ["6","MiniGame","taixiuPlugin",{"cmd":1005}]
   if (Array.isArray(parsed) && parsed.length >= 4) {
     const zone = parsed[1];
@@ -54,7 +54,7 @@ function tryExtractTaiXiuFrame(url, data) {
     }
   }
 
-  // Sau khi Ä‘Ã£ biáº¿t URL lÃ  WS TÃ i/Xá»‰u, server thÆ°á»ng tráº£ object tháº³ng
+  // Sau khi Ã„â€˜ÃƒÂ£ biÃ¡ÂºÂ¿t URL lÃƒÂ  WS TÃƒÂ i/XÃ¡Â»â€°u, server thÃ†Â°Ã¡Â»Âng trÃ¡ÂºÂ£ object thÃ¡ÂºÂ³ng
   if (activeTaiXiuWsUrls.has(url)) {
     if (parsed && typeof parsed === "object") {
       return {
@@ -66,7 +66,7 @@ function tryExtractTaiXiuFrame(url, data) {
 
   return null;
 }
-// ===================== Gá»¬I EVENT Vá»€ PYTHON =====================
+// ===================== GÃ¡Â»Â¬I EVENT VÃ¡Â»â‚¬ PYTHON =====================
 
 async function sendEventToPython(event) {
   try {
@@ -81,15 +81,15 @@ async function sendEventToPython(event) {
       keepalive: true,
     });
   } catch (e) {
-    // HTTP bridge chÆ°a cháº¡y thÃ¬ thÃ´i
+    // HTTP bridge chÃ†Â°a chÃ¡ÂºÂ¡y thÃƒÂ¬ thÃƒÂ´i
   }
 }
 
-// URL WebSocket cá»§a game Máº­u Binh sáº½ dÃ¹ng Ä‘á»ƒ gá»­i command
+// URL WebSocket cÃ¡Â»Â§a game MÃ¡ÂºÂ­u Binh sÃ¡ÂºÂ½ dÃƒÂ¹ng Ã„â€˜Ã¡Â»Æ’ gÃ¡Â»Â­i command
 let activeGameWsUrl = null;
-// URL WebSocket Ä‘Ã£ tháº¥y traffic TÃ i/Xá»‰u
+// URL WebSocket Ã„â€˜ÃƒÂ£ thÃ¡ÂºÂ¥y traffic TÃƒÂ i/XÃ¡Â»â€°u
 const activeTaiXiuWsUrls = new Set();
-// ===================== NHáº¬N FRAME Tá»ª CONTENT SCRIPT =====================
+// ===================== NHÃ¡ÂºÂ¬N FRAME TÃ¡Â»Âª CONTENT SCRIPT =====================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || message.type !== "MB_WS_FRAME") return;
@@ -97,7 +97,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const { direction, url, data } = message;
   const frame = { direction, url, data };
   pushFrame(frame);
-  // ===== TÃ€I/Xá»ˆU: forward raw WS vá» Python =====
+  // ===== TÃƒâ‚¬I/XÃ¡Â»Ë†U: forward raw WS vÃ¡Â»Â Python =====
   try {
     const txInfo = tryExtractTaiXiuFrame(url, data);
     if (txInfo) {
@@ -110,8 +110,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     }
   } catch (e) {}
-  // âš ï¸ TrÆ°á»›c Ä‘Ã¢y log má»i SEND/RECV sáº½ cá»±c ngá»‘n CPU (Ä‘áº·c biá»‡t khi WS báº¯n liÃªn tá»¥c).
-  // Chá»‰ log náº¿u báº­t DEBUG_ALL_FRAMES.
+  // Ã¢Å¡Â Ã¯Â¸Â TrÃ†Â°Ã¡Â»â€ºc Ã„â€˜ÃƒÂ¢y log mÃ¡Â»Âi SEND/RECV sÃ¡ÂºÂ½ cÃ¡Â»Â±c ngÃ¡Â»â€˜n CPU (Ã„â€˜Ã¡ÂºÂ·c biÃ¡Â»â€¡t khi WS bÃ¡ÂºÂ¯n liÃƒÂªn tÃ¡Â»Â¥c).
+  // ChÃ¡Â»â€° log nÃ¡ÂºÂ¿u bÃ¡ÂºÂ­t DEBUG_ALL_FRAMES.
   if (DEBUG_ALL_FRAMES) {
     if (direction === "send") {
       log("SEND", url, data);
@@ -153,7 +153,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } catch (e) {}
   }
 
-  // Chá»‰ parse khi lÃ  frame RECV Ä‘á»ƒ tÃ¬m cmd=300/200/202/606/205
+  // ChÃ¡Â»â€° parse khi lÃƒÂ  frame RECV Ã„â€˜Ã¡Â»Æ’ tÃƒÂ¬m cmd=300/200/202/606/205
   if (direction === "recv") {
     try {
       let payload = null;
@@ -178,7 +178,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (payload && typeof payload === "object") {
         const cmd = payload.cmd;
 
-        // Tháº¥y cmd=300 hoáº·c cmd=202 â†’ gÃ¡n URL nÃ y lÃ m "game socket"
+        // ThÃ¡ÂºÂ¥y cmd=300 hoÃ¡ÂºÂ·c cmd=202 Ã¢â€ â€™ gÃƒÂ¡n URL nÃƒÂ y lÃƒÂ m "game socket"
         if (cmd === 300 || cmd === 202) {
           activeGameWsUrl = url;
         }
@@ -187,11 +187,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           log("CMD", cmd, "payload=", payload);
         }
 
-        // 300: danh sÃ¡ch phÃ²ng lobby
+        // 300: danh sÃƒÂ¡ch phÃƒÂ²ng lobby
         if (cmd === 300) {
           sendEventToPython({ kind: "room_list", payload });
 
-        // 200: realtime event trong phÃ²ng (join/leave/...)
+        // 200: realtime event trong phÃƒÂ²ng (join/leave/...)
         } else if (cmd === 200) {
           // P2 only: forward JOIN (t=1) + LEAVE (t=2)
           const t = payload?.t;
@@ -209,21 +209,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // 205: realtime table balances (uid -> gold)
         } else if (cmd === 205) {
           sendEventToPython({ kind: "room_balance", payload });
-        // 202: snapshot phÃ²ng hiá»‡n táº¡i
+        // 202: snapshot phÃƒÂ²ng hiÃ¡Â»â€¡n tÃ¡ÂºÂ¡i
         } else if (cmd === 202) {
           sendEventToPython({ kind: "room_snapshot", payload });
 
-		// 850..854: PHá»ŽM (deal / discard / snapshot / eat / other actions)
+		// 850..854: PHÃ¡Â»Å½M (deal / discard / snapshot / eat / other actions)
 		} else if (cmd === 850 || cmd === 851 || cmd === 852 || cmd === 853 || cmd === 854) {
-		  // Gá»­i raw payload vá» Python (Ä‘á»ƒ engine/phom tá»± parse)
+		  // GÃ¡Â»Â­i raw payload vÃ¡Â»Â Python (Ã„â€˜Ã¡Â»Æ’ engine/phom tÃ¡Â»Â± parse)
 		  sendEventToPython({ kind: "phom_ws", payload });
 
-        // 750: POKER - phÃ¢n vai Dealer/SB/BB + lpi (vÃ²ng xoay)
+        // 750: POKER - phÃƒÂ¢n vai Dealer/SB/BB + lpi (vÃƒÂ²ng xoay)
         } else if (cmd === 750) {
-          // Gá»­i raw payload vá» Python Ä‘á»ƒ UI + predictor xá»­ lÃ½
+          // GÃ¡Â»Â­i raw payload vÃ¡Â»Â Python Ã„â€˜Ã¡Â»Æ’ UI + predictor xÃ¡Â»Â­ lÃƒÂ½
           sendEventToPython({ kind: "poker_roles", payload });
 
-        // 600: bÃ i (13 lÃ¡) cá»§a ngÆ°á»i chÆ¡i (tuá»³ game dÃ¹ng mÃ£ nÃ o)
+        // 600: bÃƒÂ i (13 lÃƒÂ¡) cÃ¡Â»Â§a ngÃ†Â°Ã¡Â»Âi chÃ†Â¡i (tuÃ¡Â»Â³ game dÃƒÂ¹ng mÃƒÂ£ nÃƒÂ o)
         } else if (cmd === 600 && Array.isArray(payload.cs)) {
           sendEventToPython({
             kind: "cards_snapshot",
@@ -244,14 +244,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-// ===================== BUILD PAYLOAD Gá»¬I NGÆ¯á»¢C GAME =====================
+// ===================== BUILD PAYLOAD GÃ¡Â»Â¬I NGÃ†Â¯Ã¡Â»Â¢C GAME =====================
 
 function buildWsPayload(cmd) {
   const action = cmd.action;
   if (!action) return null;
 
   if (action === "update_room_list") {
-    // YÃªu cáº§u server gá»­i láº¡i danh sÃ¡ch phÃ²ng ChinesePoker (gid=4)
+    // YÃƒÂªu cÃ¡ÂºÂ§u server gÃ¡Â»Â­i lÃ¡ÂºÂ¡i danh sÃƒÂ¡ch phÃƒÂ²ng ChinesePoker (gid=4)
     const payload = [6, "Simms", "channelPlugin", { cmd: 300, aid: "1", gid: 4 }];
     return JSON.stringify(payload);
   }
@@ -271,7 +271,7 @@ function buildWsPayload(cmd) {
   return null;
 }
 
-// ===================== PULL COMMAND Tá»ª PYTHON =====================
+// ===================== PULL COMMAND TÃ¡Â»Âª PYTHON =====================
 
 async function pollCommandsLoop() {
   try {
@@ -288,18 +288,18 @@ async function pollCommandsLoop() {
 
       const wsPayload = buildWsPayload(cmd);
       if (!wsPayload) {
-        // Command khÃ´ng há»£p lá»‡ â†’ bá»
+        // Command khÃƒÂ´ng hÃ¡Â»Â£p lÃ¡Â»â€¡ Ã¢â€ â€™ bÃ¡Â»Â
         setTimeout(pollCommandsLoop, 150);
         return;
       }
 
-      // Gáº¯n payload + URL game socket hiá»‡n táº¡i (náº¿u Ä‘Ã£ biáº¿t)
+      // GÃ¡ÂºÂ¯n payload + URL game socket hiÃ¡Â»â€¡n tÃ¡ÂºÂ¡i (nÃ¡ÂºÂ¿u Ã„â€˜ÃƒÂ£ biÃ¡ÂºÂ¿t)
       cmd.ws_payload = wsPayload;
       if (activeGameWsUrl) {
         cmd.target_ws_url = activeGameWsUrl;
       }
 
-      // Gá»­i command xuá»‘ng táº¥t cáº£ tab (chá»‰ tab cÃ³ content_script má»›i nháº­n)
+      // GÃ¡Â»Â­i command xuÃ¡Â»â€˜ng tÃ¡ÂºÂ¥t cÃ¡ÂºÂ£ tab (chÃ¡Â»â€° tab cÃƒÂ³ content_script mÃ¡Â»â€ºi nhÃ¡ÂºÂ­n)
       chrome.tabs.query({}, (tabs) => {
         for (const tab of tabs) {
           if (!tab.id) continue;
@@ -316,7 +316,7 @@ async function pollCommandsLoop() {
       });
     }
   } catch (e) {
-    // bridge chÆ°a cháº¡y / lá»—i máº¡ng
+    // bridge chÃ†Â°a chÃ¡ÂºÂ¡y / lÃ¡Â»â€”i mÃ¡ÂºÂ¡ng
   } finally {
     setTimeout(pollCommandsLoop, 150);
   }
@@ -326,9 +326,13 @@ sendEventToPython({ kind: "extension_ready", version: EXTENSION_VERSION });
 pollCommandsLoop();
 log("service worker started");
 
-// ===================== Láº¤Y PROXY CREDS Tá»ª PYTHON =====================
+// ===================== LÃ¡ÂºÂ¤Y PROXY CREDS TÃ¡Â»Âª PYTHON =====================
 
-async function getProxyCreds() {
+function sleepProxyCreds(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getProxyCredsOnce() {
   try {
     const resp = await fetch(BRIDGE_BASE + "/mb-proxy-creds", {
       method: "POST",
@@ -354,7 +358,18 @@ async function getProxyCreds() {
   }
 }
 
-// ===================== PROXY AUTH (Láº¤Y Tá»ª CONFIG QUA BRIDGE) =====================
+async function getProxyCreds() {
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    const creds = await getProxyCredsOnce();
+    if (creds) {
+      return creds;
+    }
+    await sleepProxyCreds(150);
+  }
+  return null;
+}
+
+// ===================== PROXY AUTH (LÃ¡ÂºÂ¤Y TÃ¡Â»Âª CONFIG QUA BRIDGE) =====================
 
 const MAX_PROXY_AUTH_RETRIES = 3;
 const retryMap = new Map();
@@ -363,7 +378,7 @@ console.log("MB Proxy Auth", PROFILE_ID, "loaded");
 
 chrome.webRequest.onAuthRequired.addListener(
   (details, callback) => {
-    // DÃ¹ng IIFE async Ä‘á»ƒ cÃ³ thá»ƒ await fetch nhÆ°ng váº«n gá»i callback theo asyncBlocking
+    // DÃƒÂ¹ng IIFE async Ã„â€˜Ã¡Â»Æ’ cÃƒÂ³ thÃ¡Â»Æ’ await fetch nhÃ†Â°ng vÃ¡ÂºÂ«n gÃ¡Â»Âi callback theo asyncBlocking
     (async () => {
       try {
         console.log("MB Proxy Auth", PROFILE_ID, "onAuthRequired", {
@@ -375,7 +390,7 @@ chrome.webRequest.onAuthRequired.addListener(
           challenger: details.challenger,
         });
 
-        // Chá»‰ xá»­ lÃ½ auth cho proxy (407 tá»« proxy), trÃ¡nh Ä‘á»¥ng 401 cá»§a website
+        // ChÃ¡Â»â€° xÃ¡Â»Â­ lÃƒÂ½ auth cho proxy (407 tÃ¡Â»Â« proxy), trÃƒÂ¡nh Ã„â€˜Ã¡Â»Â¥ng 401 cÃ¡Â»Â§a website
         if (!details.isProxy) {
           callback({});
           return;
@@ -397,7 +412,7 @@ chrome.webRequest.onAuthRequired.addListener(
 
         const creds = await getProxyCreds();
         if (!creds) {
-          // KhÃ´ng láº¥y Ä‘Æ°á»£c credential â†’ Ä‘á»ƒ Chrome tá»± xá»­ lÃ½ (popup, v.v.)
+          // KhÃƒÂ´ng lÃ¡ÂºÂ¥y Ã„â€˜Ã†Â°Ã¡Â»Â£c credential Ã¢â€ â€™ Ã„â€˜Ã¡Â»Æ’ Chrome tÃ¡Â»Â± xÃ¡Â»Â­ lÃƒÂ½ (popup, v.v.)
           callback({});
           return;
         }
@@ -417,4 +432,5 @@ chrome.webRequest.onAuthRequired.addListener(
   { urls: ["<all_urls>"] },
   ["asyncBlocking"]
 );
+
 
