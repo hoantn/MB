@@ -12,6 +12,7 @@ from engine.card import Card
 from engine.rules import evaluate_5cards
 from engine.scorer import evaluate_3cards
 from engine.arranger_parts.money_score import _score_max_money
+from engine.arranger_parts.human_choice import HumanChoiceCandidate, select_human_choice
 from core.constants import RANK_ORDER
 
 
@@ -458,6 +459,7 @@ def arrange_13_cards(
     ] = {}
     best_money_key = None
     best_money_idx = None
+    money_candidates: List[HumanChoiceCandidate] = []
 
     # Lưu thêm score tuple để sort sau: [t1]+d1+[t2]+d2+[t3m]+d3padded
     # score dùng list[int] để so lexicographic rẻ.
@@ -831,6 +833,19 @@ def arrange_13_cards(
                 # Auto Play can reuse it without starting another 72k pass.
                 money_e3 = (_map_3_to_5_scale(e3[0]), e3[1])
                 money_score = float(_score_max_money(e1, e2, money_e3))
+                money_candidates.append(
+                    HumanChoiceCandidate(
+                        idx1=idx1,
+                        idx2=v_idx2,
+                        idx3=idx3,
+                        e1=e1,
+                        e2=e2,
+                        e3=e3,
+                        score_tuple=sc,
+                        style_tuple=st,
+                        money_score=money_score,
+                    )
+                )
                 money_key = _money_sort_key(money_score, sc, st)
                 if best_money_key is None or money_key > best_money_key:
                     best_money_key = money_key
@@ -918,6 +933,9 @@ def arrange_13_cards(
     reps_idx_full: List[Tuple[Tuple[int, int, int, int, int], Tuple[int, int, int, int, int], Tuple[int, int, int]]] = [
         (idx1, idx2, idx3) for _e1, _e2, _e3, _sc, _st, idx1, idx2, idx3 in reps
     ]
+    human_money = select_human_choice(money_candidates)
+    if human_money is not None:
+        best_money_idx = (human_money.idx1, human_money.idx2, human_money.idx3)
     _arrange_cache_set(cache_key, reps_idx_full)
     _arrange_money_cache_set(cache_key, best_money_idx)
 

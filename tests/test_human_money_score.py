@@ -342,6 +342,24 @@ class HumanMoneyScoreTests(unittest.TestCase):
         ]
         self.assertEqual(_money_types(codes), (5, 2, 1))
 
+    def test_same_straight_two_pair_anchor_prefers_live_top_pair(self):
+        # If chi1 remains straight and chi2 remains two-pair, a human-style
+        # Money choice should not leave chi3 dead when a top pair is available.
+        codes = [
+            "2T", "7R", "JT", "2B", "3C", "3T", "4B",
+            "4T", "TR", "JB", "QC", "KT", "AR",
+        ]
+        self.assertEqual(_money_types(codes), (4, 2, 1))
+
+    def test_multi_pair_full_house_line_keeps_live_top_pair(self):
+        # Many-pair/xam hands need post-money distribution: keep the full-house
+        # anchor, but still preserve a real top pair when available.
+        codes = [
+            "6R", "AC", "AB", "3T", "4R", "4T", "KR",
+            "KB", "5R", "5B", "5T", "8C", "8T",
+        ]
+        self.assertEqual(_money_types(codes), (6, 2, 1))
+
 
 if __name__ == "__main__":
     unittest.main()
