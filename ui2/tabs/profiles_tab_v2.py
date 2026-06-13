@@ -787,6 +787,8 @@ class ProfilesTabV2(ProfileTab):
         # 2) Nếu thiếu host/port mà có API key -> thử "Get" để base tự fill
         api_key = (self.tmproxy_api_key_edit.text() or "").strip()
         if (not host_raw or port <= 0) and api_key:
+            self.tmproxy_status_label.setText("Check proxy: Hay bam Get truoc, sau khi co host/port thi Check lai.")
+            return
             try:
                 # reuse đúng nút gốc (đã có handler trong ProfileTab)
                 self.tmproxy_get_btn.click()
@@ -801,6 +803,30 @@ class ProfilesTabV2(ProfileTab):
             return
 
         host = self._normalize_host_for_socket(host_raw)
+
+        self.tmproxy_status_label.setText(f"Check proxy: dang kiem tra TCP -> {host}:{port}")
+        self._set_proxy_task_buttons_enabled(False)
+
+        def _work():
+            return self._tcp_check(host, port, timeout_sec=3.0)
+
+        def _ok(result):
+            ok, err = result
+            if ok:
+                self.tmproxy_status_label.setText(f"Check proxy: OK (TCP) -> {host}:{port}")
+            else:
+                self.tmproxy_status_label.setText(f"Check proxy: FAIL -> {host}:{port} ({err})")
+
+        self._tasks.run(
+            key=f"{self._slot}:{self.profile_combo.currentText()}:proxy_check",
+            name=f"Tool {self._slot} proxy check",
+            fn=_work,
+            on_success=_ok,
+            on_error=lambda err: self.tmproxy_status_label.setText(f"Check proxy: FAIL ({err})"),
+            on_finished=lambda _res: self._set_proxy_task_buttons_enabled(True),
+            timeout_ms=6_000,
+        )
+        return
 
         ok, err = self._tcp_check(host, port, timeout_sec=3.0)
         if ok:
@@ -1059,15 +1085,32 @@ class ProfilesTabV2(ProfileTab):
             QMessageBox.warning(self, "Loi", "BrowserManager khong ho tro delete_profile_user_data().")
             return
 
-        ok_all = True
-        for pid in ("P1", "P2", "P3"):
-            if not bm.delete_profile_user_data(pid):
-                ok_all = False
-                QMessageBox.warning(self, "Loi", f"Khong the xoa runtime trinh duyet cua {pid}. Vui long xem log.")
-                break
+        self._btn_delete_all_profiles.setEnabled(False)
+        self._btn_delete_profile.setEnabled(False)
+        self._current_status_label.setText("Status: Dang xoa runtime P1/P2/P3...")
 
-        if ok_all:
-            QMessageBox.information(self, "Hoan tat", "Da xoa runtime trinh duyet cua P1, P2, P3.")
+        def _work():
+            failed = []
+            for pid in ("P1", "P2", "P3"):
+                if not bm.delete_profile_user_data(pid):
+                    failed.append(pid)
+            return failed
+
+        def _ok(failed):
+            if failed:
+                self._current_status_label.setText(f"Status: Xoa runtime loi {', '.join(failed)}")
+            else:
+                self._current_status_label.setText("Status: Da xoa runtime P1/P2/P3")
+
+        self._tasks.run(
+            key=f"{self._slot}:delete_runtime_all",
+            name=f"Tool {self._slot} delete runtime ALL",
+            fn=_work,
+            on_success=_ok,
+            on_error=lambda err: self._current_status_label.setText(f"Status: Xoa runtime loi: {err}"),
+            on_finished=lambda _res: (self._btn_delete_all_profiles.setEnabled(True), self._btn_delete_profile.setEnabled(True)),
+            timeout_ms=60_000,
+        )
         return
 
         """
@@ -1163,16 +1206,20 @@ class ProfilesTabV2(ProfileTab):
             QMessageBox.warning(self, "Loi", "BrowserManager khong ho tro delete_profile_user_data().")
             return
 
-        ok = bm.delete_profile_user_data(pid)
-        if ok:
-            QMessageBox.information(
-                self,
-                "Hoan tat",
-                f"Da xoa runtime trinh duyet cua {pid}.\n"
-                "Lan mo trinh duyet tiep theo se copy lai tu Profile sach/goc.",
-            )
-        else:
-            QMessageBox.warning(self, "Loi", f"Khong the xoa runtime trinh duyet cua {pid}. Vui long xem log.")
+        self._btn_delete_all_profiles.setEnabled(False)
+        self._btn_delete_profile.setEnabled(False)
+        self._current_status_label.setText(f"Status: Dang xoa runtime {pid}...")
+        self._tasks.run(
+            key=f"{self._slot}:{pid}:delete_runtime",
+            name=f"Tool {self._slot} {pid} delete runtime",
+            fn=lambda: bm.delete_profile_user_data(pid),
+            on_success=lambda ok, p=pid: self._current_status_label.setText(
+                f"Status: Da xoa runtime {p}" if ok else f"Status: Xoa runtime {p} that bai"
+            ),
+            on_error=lambda err, p=pid: self._current_status_label.setText(f"Status: Xoa runtime {p} loi: {err}"),
+            on_finished=lambda _res: (self._btn_delete_all_profiles.setEnabled(True), self._btn_delete_profile.setEnabled(True)),
+            timeout_ms=40_000,
+        )
         return
 
         """

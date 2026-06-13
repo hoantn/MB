@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import queue
+import time
 import traceback
 import atexit
 import faulthandler
@@ -40,6 +41,7 @@ from db.database import init_db
 
 # License
 from ui2.license.manager import LicenseManager, LicenseState
+from ui2.license.product import LICENSE_APP_VERSION, LICENSE_SERVER_URL
 from ui2.license.ui_activate_dialog import ActivateLicenseDialog
 
 # Heavy modules (only init after license OK)
@@ -306,7 +308,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # =========================
         # License bootstrap (must be early; do NOT start heavy stuff yet)
         # =========================
-        self.license_manager = LicenseManager(base_url="https://kiem.go88c.us", app_version="0.1")
+        self.license_manager = LicenseManager(base_url=LICENSE_SERVER_URL, app_version=LICENSE_APP_VERSION)
         self.license_manager.state_changed.connect(self._on_license_state_changed)
 
         # Start after UI is ready
@@ -650,7 +652,9 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
         tabs.addTab(self.strategy_room_splitter, "Chiến Thuật")
         # self.strategy_room_splitter.hide()
-        tabs.addTab(self.xao_vang_tab, "Xào Vàng")
+        # Xao Vang is embedded per-tool inside Auto Play. Keep the legacy
+        # instance alive for compatibility, but do not expose the global tab.
+        self.xao_vang_tab.hide()
         # Tab Auto Play: quản lý nhiều tool slot đồng thời
         try:
             self.auto_four_tool_tab = AutoFourToolTab(self)
@@ -729,7 +733,9 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
         self.room_engine.sig_player_joined.connect(self._on_player_joined_toast)
         self.room_engine.sig_player_left.connect(self._on_player_left_toast)
-        self.room_engine.sig_gold_monitor_changed.connect(self.gold_threshold_notifier.check)
+        self.room_engine.sig_gold_monitor_changed.connect(
+            lambda profiles: self.gold_threshold_notifier.check(profiles, tool_slot=1)
+        )
 
         # Legacy Tai/Xiu manual tab is optional; Xao Vang keeps using the same game-controller entrypoint.
         if ENABLE_TAIXIU and ENABLE_TAIXIU_LEGACY_TOOLS and self.taixiu_control_tab is not None:
@@ -1343,9 +1349,12 @@ class MainWindow(QMainWindow, WebSocketGateway):
             return
 
         max_per_tick = 15
+        deadline = time.perf_counter() + 0.008
         n = 0
 
         while n < max_per_tick:
+            if time.perf_counter() >= deadline:
+                break
             try:
                 evt = self._ws_event_queue.get_nowait()
             except queue.Empty:

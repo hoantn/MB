@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import threading
+import time
 from collections import deque
 
 
@@ -40,7 +41,13 @@ class StagedScheduler:
         if not snapshot:
             return
 
-        self.job_q.clear()
+        while self.job_q:
+            try:
+                dropped_key, _stage, _kind, dropped_hash, _codes = self.job_q.popleft()
+                if tab._scheduled_hash.get(dropped_key) == dropped_hash:
+                    tab._scheduled_hash[dropped_key] = None
+            except Exception:
+                continue
 
         # Chỉ còn 1 job duy nhất cho mỗi key: EXTRA/ALL
         for k in ordered_keys:
@@ -71,6 +78,8 @@ class StagedScheduler:
         cur_codes = tab._ngu_base_codes if k == "NGU" else (tab._codes_slot_order.get(k) or [])
         if len(cur_codes) != 13 or tab._hand_hash(cur_codes) != h:
             # ván đã đổi / snapshot mismatch -> bỏ job
+            if tab._scheduled_hash.get(k) == h:
+                tab._scheduled_hash[k] = None
             self.run_next_job(tab)
             return
 
@@ -103,8 +112,11 @@ class StagedScheduler:
         ngu_updated = False
         p_changed_any = False
 
+        deadline = time.perf_counter() + 0.010
         processed = 0
         while processed < 6:
+            if time.perf_counter() >= deadline:
+                break
             try:
                 item = tab._q.get_nowait()
             except Exception:
@@ -118,6 +130,8 @@ class StagedScheduler:
                 key, _gen, sugg, err, stage, kind, h = item
 
             if err is not None:
+                if h is not None and tab._scheduled_hash.get(key) == h:
+                    tab._scheduled_hash[key] = None
                 if key == tab.active_profile:
                     tab.view.set_p_status("Lỗi gợi ý")
                 if key == "NGU":
@@ -127,6 +141,8 @@ class StagedScheduler:
                 continue
 
             suggs = sugg or []
+            if not suggs and h is not None and tab._scheduled_hash.get(key) == h:
+                tab._scheduled_hash[key] = None
 
             if stage == "BASE":
                 if key == "NGU":

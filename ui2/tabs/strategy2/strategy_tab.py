@@ -124,6 +124,7 @@ class StrategyTab(QWidget):
         room_engine=None,
         layout_store=None,
         game_controller=None,
+        action_gate=None,
         auto_play_log_sink=None,
         auto_settings_notifier=None,
     ):
@@ -142,6 +143,7 @@ class StrategyTab(QWidget):
         self._room_engine = room_engine
         self._layout_store = layout_store if layout_store is not None else ws_layout_store
         self._game_controller = game_controller
+        self._action_gate = action_gate
 
         self.capture_manager = (
             getattr(parent, "capture_manager", None)
@@ -286,6 +288,7 @@ class StrategyTab(QWidget):
         room_engine=None,
         layout_store=None,
         game_controller=None,
+        action_gate=None,
         auto_play_log_sink=None,
         auto_settings_notifier=None,
     ) -> None:
@@ -296,6 +299,8 @@ class StrategyTab(QWidget):
             self._layout_store = layout_store
         if game_controller is not None:
             self._game_controller = game_controller
+        if action_gate is not None:
+            self._action_gate = action_gate
         if auto_play_log_sink is not None:
             self._auto_play_log_sink = auto_play_log_sink
         if auto_settings_notifier is not None:
@@ -669,6 +674,11 @@ class StrategyTab(QWidget):
         self._suggestions[pid] = []
         self._suggestions_render[pid] = []
         self._selected_index[pid] = -1
+        try:
+            self._scheduled_hash[pid] = None
+            self._scheduled_hash["NGU"] = None
+        except Exception:
+            pass
         try:
             self._confirmed_apply_tokens.pop(pid, None)
         except Exception:
@@ -1508,12 +1518,24 @@ class StrategyTab(QWidget):
                 )
 
             elif plan.kind == "intentional_foul":
-                self._auto_play_log("OPP ăn sập làng không thể chạy | dùng Binh Lủng 3P.")
-                self._auto_apply_intentional_foul_random(
-                    plan.suggestions,
-                    hand_key,
-                    expected_room_context_key=self._auto_room_context_key(room_context),
+                foul_pids = set(plan.report_binh_pids or self.profiles)
+                self._auto_play_log(
+                    f"OPP quet khong the chay | dung Binh Lung {','.join(sorted(foul_pids))}."
                 )
+                if foul_pids == set(self.profiles):
+                    self._auto_apply_intentional_foul_random(
+                        plan.suggestions,
+                        hand_key,
+                        expected_room_context_key=self._auto_room_context_key(room_context),
+                    )
+                else:
+                    self._auto_apply_suggestions_random(
+                        plan.suggestions,
+                        no_complete_pids=foul_pids,
+                        expected_profile_keys={pid: self._auto_profile_apply_key(pid) for pid in self.profiles},
+                        dependency_groups=plan.dependency_groups,
+                        expected_room_context_key=self._auto_room_context_key(room_context),
+                    )
 
             elif plan.kind == "internal_balance":
                 ready_pids = list((plan.suggestions or {}).keys())

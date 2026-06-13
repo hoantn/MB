@@ -10,7 +10,7 @@ Chiến Thuật → nhúng ctx.strategy_tab (StrategyTab đang hoạt động)
 from __future__ import annotations
 
 import queue
-import threading
+import time
 from datetime import datetime
 from typing import List, Optional
 
@@ -19,11 +19,14 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSplitter, QStackedWidget, QFrame, QTextEdit,
-    QSizePolicy, QSpinBox, QScrollArea,
+    QSizePolicy, QSpinBox, QScrollArea, QDialog, QFormLayout,
+    QDialogButtonBox, QLineEdit,
 )
 
-from core.config import AUTO_TOOL_SLOTS
+from core.config import AUTO_TOOL_SLOTS, load_config, save_config
 from core.logger import log
+from core.gold_threshold_notifier import ToolSlotGoldThresholdNotifier
+from ui2.runtime.task_runner import UiTaskResult, UiTaskRunner
 
 # ── Màu demo ──────────────────────────────────────────────────────
 _BG     = "#0f1216"
@@ -55,6 +58,37 @@ def _circle(size: int, color: str) -> QLabel:
     r = size // 2
     w.setStyleSheet(f"background:{color}; border-radius:{r}px;")
     return w
+
+
+def _format_money(value) -> str:
+    try:
+        v = float(value)
+    except Exception:
+        return "-"
+    sign = "-" if v < 0 else ""
+    v = abs(v)
+    units = ((1_000_000_000, "B"), (1_000_000, "M"), (1_000, "K"))
+    for base, suffix in units:
+        if v >= base:
+            x = v / base
+            text = f"{x:.1f}".rstrip("0").rstrip(".")
+            return f"{sign}{text}{suffix}"
+    return f"{sign}{int(v)}"
+
+
+def _parse_money_input(text: str) -> Optional[int]:
+    raw = str(text or "").strip().replace(",", "").replace(" ", "")
+    if not raw:
+        return None
+    mult = 1
+    suffix = raw[-1:].lower()
+    if suffix in ("k", "m", "b"):
+        raw = raw[:-1]
+        mult = {"k": 1_000, "m": 1_000_000, "b": 1_000_000_000}[suffix]
+    try:
+        return int(float(raw) * mult)
+    except Exception:
+        return None
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -160,8 +194,9 @@ class ToolSlotCard(QFrame):
         self._running = False
         self._p_dots: dict[str, QLabel] = {}
         self._p_cells: dict[str, QWidget] = {}
+        self._p_gold_labels: dict[str, QLabel] = {}
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setMinimumHeight(90)
+        self.setMinimumHeight(112)
         self.setCursor(Qt.PointingHandCursor)
         self._build()
         self._refresh()
@@ -187,6 +222,10 @@ class ToolSlotCard(QFrame):
 
         top.addWidget(self._dot)
         top.addWidget(self._lbl_name, 1)
+        self._lbl_profit = QLabel("-")
+        self._lbl_profit.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._lbl_profit.setStyleSheet(f"color:{_MUTED}; font-size:11px; font-weight:800;")
+        top.addWidget(self._lbl_profit)
         top.addWidget(self._switch)
 
         # Row 2: meta
@@ -201,21 +240,29 @@ class ToolSlotCard(QFrame):
         grid_row.setSpacing(4)
         for pid in ("P1", "P2", "P3"):
             cell = QWidget()
-            cell.setFixedHeight(26)
+            cell.setFixedHeight(38)
             cell.setStyleSheet(
                 f"background:{_PANEL3}; border:1px solid {_LINE2}; border-radius:3px;"
             )
             self._p_cells[pid] = cell
-            cl = QHBoxLayout(cell)
+            cl = QVBoxLayout(cell)
             cl.setContentsMargins(5, 2, 5, 2)
-            cl.setSpacing(0)
+            cl.setSpacing(1)
+            top_line = QHBoxLayout()
+            top_line.setSpacing(2)
             plbl = QLabel(pid)
             plbl.setStyleSheet("color:#b9c1ca; font-size:10px; font-weight:800;")
             dot_p = _circle(5, self._COL_OFF)
-            cl.addWidget(plbl)
-            cl.addStretch()
-            cl.addWidget(dot_p)
+            top_line.addWidget(plbl)
+            top_line.addStretch()
+            top_line.addWidget(dot_p)
+            gold_lbl = QLabel("-")
+            gold_lbl.setAlignment(Qt.AlignCenter)
+            gold_lbl.setStyleSheet("color:#9ba7b3; font-size:9px; font-weight:700;")
+            cl.addLayout(top_line)
+            cl.addWidget(gold_lbl)
             self._p_dots[pid] = dot_p
+            self._p_gold_labels[pid] = gold_lbl
             grid_row.addWidget(cell)
         grid_row.addStretch()
 
@@ -252,6 +299,20 @@ class ToolSlotCard(QFrame):
         )
         cell.setToolTip(tip)
         dot.setStyleSheet(f"background:{color}; border-radius:2px;")
+
+    def set_gold_state(self, p_gold: dict[str, Optional[int]], profit: Optional[int]):
+        for pid in ("P1", "P2", "P3"):
+            lbl = self._p_gold_labels.get(pid)
+            if lbl is not None:
+                lbl.setText(_format_money((p_gold or {}).get(pid)))
+        if profit is None:
+            self._lbl_profit.setText("-")
+            self._lbl_profit.setStyleSheet(f"color:{_MUTED}; font-size:11px; font-weight:800;")
+            return
+        color = _GREEN if profit > 0 else (_RED if profit < 0 else _MUTED)
+        sign = "+" if profit > 0 else ""
+        self._lbl_profit.setText(f"{sign}{_format_money(profit)}")
+        self._lbl_profit.setStyleSheet(f"color:{color}; font-size:11px; font-weight:900;")
 
     def _refresh(self):
         # Dot trạng thái (circle thuần màu)
@@ -303,12 +364,20 @@ class AutoFourToolTab(QWidget):
         self._strategy_stack  = QStackedWidget()
         self._browser_stack   = QStackedWidget()
         self._config_stack    = QStackedWidget()
+        self._xao_vang_stack  = QStackedWidget()
         self._log_html: List[str] = []
 
         # Log filter: "sel" | "all" | "err"
         self._log_filter = "sel"
+        self._tasks = UiTaskRunner(self)
+        self._poll_cursor = 0
+        self._log_redraw_pending = False
+        self._profile_signal_cache: dict[tuple[int, str], str] = {}
+        self._gold_cache: dict[tuple[int, str], Optional[int]] = {}
+        self._capital_cache: dict[int, dict[str, Optional[int]]] = {}
 
         self._bg_log.connect(self._log)
+        self._tasks.rejected.connect(self._on_task_rejected)
         self._init_tool_contexts()
         self._start_slot_bridges()
 
@@ -349,13 +418,21 @@ class AutoFourToolTab(QWidget):
                 ctx.build_widgets(parent=self)
                 if ctx.strategy_tab is not None:
                     try:
+                        base_notifier = getattr(self.parent(), "gold_threshold_notifier", None)
+                        slot_notifier = (
+                            ToolSlotGoldThresholdNotifier(base_notifier, slot)
+                            if base_notifier is not None
+                            else None
+                        )
                         ctx.strategy_tab.set_runtime_services(
                             room_engine=ctx.room_engine,
                             layout_store=ctx.layout_store,
                             game_controller=ctx.game_controller,
                             auto_play_log_sink=_SlotAutoLogSink(self, slot),
-                            auto_settings_notifier=getattr(self.parent(), "gold_threshold_notifier", None),
+                            auto_settings_notifier=slot_notifier,
                         )
+                        if slot_notifier is not None and getattr(ctx, "room_engine", None) is not None:
+                            ctx.room_engine.sig_gold_monitor_changed.connect(slot_notifier.check)
                     except Exception:
                         log.exception("[AutoFourToolTab] attach Strategy runtime slot=%d failed", slot)
                 self._contexts.append(ctx)
@@ -477,6 +554,10 @@ class AutoFourToolTab(QWidget):
 
         hdr = QHBoxLayout()
         hdr.addWidget(_lbl("Danh sách Tool", f"color:{_TEXT}; font-weight:800;"))
+        self._lbl_total_profit = QLabel("-")
+        self._lbl_total_profit.setAlignment(Qt.AlignCenter)
+        self._lbl_total_profit.setStyleSheet(f"color:{_MUTED}; font-size:11px; font-weight:900;")
+        hdr.addWidget(self._lbl_total_profit, 1)
         hdr.addStretch()
         hdr.addWidget(_lbl(f"{AUTO_TOOL_SLOTS} cụm / {AUTO_TOOL_SLOTS * 3}P", f"color:{_MUTED}; font-size:11px;"))
         lay.addLayout(hdr)
@@ -559,10 +640,12 @@ class AutoFourToolTab(QWidget):
         self._btn_open_browsers  = self._detailbtn("Mở 3 trình duyệt",  "#343b45")
         self._btn_reconnect_all  = self._detailbtn("Kết nối lại ALL",    "#254c7d", _BLUE)
         self._btn_reset_proxy    = self._detailbtn("Reset Proxy ALL",    "#5d4218", _AMBER)
+        self._btn_set_capital    = self._detailbtn("Mốc vốn", "#263646", _BLUE)
         self._btn_open_browsers.clicked.connect(self._on_open_browsers)
         self._btn_reconnect_all.clicked.connect(self._on_reconnect_all)
         self._btn_reset_proxy.clicked.connect(self._on_reset_proxy)
-        for b in (self._btn_open_browsers, self._btn_reconnect_all, self._btn_reset_proxy):
+        self._btn_set_capital.clicked.connect(self._on_set_capital_from_gold)
+        for b in (self._btn_open_browsers, self._btn_reconnect_all, self._btn_reset_proxy, self._btn_set_capital):
             act_row.addWidget(b)
 
         hl.addLayout(info_col, 1)
@@ -577,12 +660,15 @@ class AutoFourToolTab(QWidget):
         tbl.setContentsMargins(10, 0, 10, 0)
         tbl.setSpacing(0)
         self._btn_strategy  = self._innertab("Chiến Thuật", True)
+        self._btn_xao_vang  = self._innertab("Xào Vàng", False)
         self._btn_browser   = self._innertab("Trình duyệt", False)
         self._btn_config    = self._innertab("Cấu hình", False)
         self._btn_strategy.clicked.connect(lambda: self._switch_inner(0))
-        self._btn_browser.clicked.connect(lambda:  self._switch_inner(1))
-        self._btn_config.clicked.connect(lambda:   self._switch_inner(2))
+        self._btn_xao_vang.clicked.connect(lambda: self._switch_inner(1))
+        self._btn_browser.clicked.connect(lambda:  self._switch_inner(2))
+        self._btn_config.clicked.connect(lambda:   self._switch_inner(3))
         tbl.addWidget(self._btn_strategy)
+        tbl.addWidget(self._btn_xao_vang)
         tbl.addWidget(self._btn_browser)
         tbl.addWidget(self._btn_config)
         tbl.addStretch()
@@ -597,10 +683,15 @@ class AutoFourToolTab(QWidget):
         self._inner_stack.addWidget(self._strategy_stack)
         self._build_strategy_pages()
 
-        # Pane 1: Trình duyệt = ctx.profiles_tab (ProfilesTabV2)
+        # Pane 1: Xào Vàng = ctx.xao_vang_tab (XaoVangTab per-slot)
+        self._inner_stack.addWidget(self._xao_vang_stack)
+        self._build_xao_vang_pages()
+
+        # Pane 2: Trình duyệt = ctx.profiles_tab (ProfilesTabV2)
         self._inner_stack.addWidget(self._browser_stack)
         self._build_browser_pages()
 
+        # Pane 3: Cấu hình = ctx.config_tab (ConfigTab per-slot)
         self._inner_stack.addWidget(self._config_stack)
         self._build_config_pages()
 
@@ -616,6 +707,99 @@ class AutoFourToolTab(QWidget):
             f"QPushButton:pressed {{ background:{bg}; opacity:0.8; }}"
         )
         return b
+
+    def _set_detail_actions_enabled(self, enabled: bool) -> None:
+        for btn in (
+            getattr(self, "_btn_open_browsers", None),
+            getattr(self, "_btn_reconnect_all", None),
+            getattr(self, "_btn_reset_proxy", None),
+            getattr(self, "_btn_set_capital", None),
+        ):
+            if btn is not None:
+                btn.setEnabled(bool(enabled))
+
+    def _load_capital(self, slot: int) -> dict[str, Optional[int]]:
+        slot = int(slot or 1)
+        if slot in self._capital_cache:
+            return dict(self._capital_cache[slot])
+        data: dict[str, Optional[int]] = {"P1": None, "P2": None, "P3": None}
+        try:
+            cfg = load_config(slot)
+            raw = ((cfg.get("ui") or {}).get("auto_play_capital") or {})
+            for pid in ("P1", "P2", "P3"):
+                val = raw.get(pid)
+                data[pid] = int(val) if val is not None else None
+        except Exception:
+            pass
+        self._capital_cache[slot] = dict(data)
+        return data
+
+    def _save_capital(self, slot: int, values: dict[str, Optional[int]]) -> None:
+        slot = int(slot or 1)
+        clean = {
+            pid: (int(values[pid]) if values.get(pid) is not None else None)
+            for pid in ("P1", "P2", "P3")
+        }
+        cfg = load_config(slot)
+        ui = cfg.setdefault("ui", {})
+        ui["auto_play_capital"] = clean
+        save_config(cfg, slot)
+        self._capital_cache[slot] = dict(clean)
+
+    def _current_gold_by_profile(self, ctx) -> dict[str, Optional[int]]:
+        golds: dict[str, Optional[int]] = {"P1": None, "P2": None, "P3": None}
+        room_engine = getattr(ctx, "room_engine", None)
+        if room_engine is not None and hasattr(room_engine, "get_profile_gold_state"):
+            try:
+                state = room_engine.get_profile_gold_state() or {}
+                for pid in ("P1", "P2", "P3"):
+                    val = (state.get(pid) or {}).get("gold")
+                    golds[pid] = int(val) if val is not None else None
+            except Exception:
+                pass
+        return golds
+
+    def _profit_for_slot(self, slot: int, golds: dict[str, Optional[int]]) -> Optional[int]:
+        capital = self._load_capital(slot)
+        if any(capital.get(pid) is None for pid in ("P1", "P2", "P3")):
+            return None
+        if any((golds or {}).get(pid) is None for pid in ("P1", "P2", "P3")):
+            return None
+        try:
+            return sum(int(golds[pid]) - int(capital[pid]) for pid in ("P1", "P2", "P3"))
+        except Exception:
+            return None
+
+    def _update_total_profit_label(self) -> None:
+        lbl = getattr(self, "_lbl_total_profit", None)
+        if lbl is None:
+            return
+        total = 0
+        count = 0
+        for slot in range(1, AUTO_TOOL_SLOTS + 1):
+            profit = self._gold_cache.get((slot, "profit"))
+            if profit is None:
+                continue
+            try:
+                total += int(profit)
+                count += 1
+            except Exception:
+                continue
+        if count <= 0:
+            lbl.setText("-")
+            lbl.setStyleSheet(f"color:{_MUTED}; font-size:11px; font-weight:900;")
+            return
+        color = _GREEN if total > 0 else (_RED if total < 0 else _MUTED)
+        sign = "+" if total > 0 else ""
+        lbl.setText(f"Tổng {sign}{_format_money(total)}")
+        lbl.setStyleSheet(f"color:{color}; font-size:11px; font-weight:900;")
+
+    def _on_task_rejected(self, res: UiTaskResult) -> None:
+        try:
+            slot = int(str(res.key).split(":", 1)[0])
+        except Exception:
+            slot = self._current_slot
+        self._log(slot, f"{res.name}: {res.error}", "warn")
 
     def _innertab(self, text: str, active: bool) -> QPushButton:
         b = QPushButton(text)
@@ -674,6 +858,18 @@ class AutoFourToolTab(QWidget):
                 self._browser_stack.addWidget(ph)
 
     # ── Activity log ───────────────────────────────────────────────
+
+    def _build_xao_vang_pages(self):
+        """Pane Xao Vang = ctx.xao_vang_tab (XaoVangTab per-slot)."""
+        for slot in range(1, AUTO_TOOL_SLOTS + 1):
+            ctx = self._contexts[slot - 1]
+            if ctx is not None and getattr(ctx, "xao_vang_tab", None) is not None:
+                self._xao_vang_stack.addWidget(ctx.xao_vang_tab)
+            else:
+                ph = QLabel(f"Xao Vang Tool {slot} - loi khoi tao")
+                ph.setAlignment(Qt.AlignCenter)
+                ph.setStyleSheet(f"color:{_MUTED};")
+                self._xao_vang_stack.addWidget(ph)
 
     def _build_config_pages(self):
         """Pane Cau hinh = ctx.config_tab (ConfigTab per-slot)."""
@@ -804,8 +1000,9 @@ class AutoFourToolTab(QWidget):
     def _switch_inner(self, idx: int):
         self._inner_stack.setCurrentIndex(idx)
         self._btn_strategy.setChecked(idx == 0)
-        self._btn_browser.setChecked(idx == 1)
-        self._btn_config.setChecked(idx == 2)
+        self._btn_xao_vang.setChecked(idx == 1)
+        self._btn_browser.setChecked(idx == 2)
+        self._btn_config.setChecked(idx == 3)
 
     def _switch_log_filter(self, f: str):
         self._log_filter = f
@@ -824,6 +1021,7 @@ class AutoFourToolTab(QWidget):
             card.set_selected(card.slot == slot)
         self._overview_stack.setCurrentIndex(idx)
         self._strategy_stack.setCurrentIndex(idx)
+        self._xao_vang_stack.setCurrentIndex(idx)
         self._browser_stack.setCurrentIndex(idx)
         self._config_stack.setCurrentIndex(idx)
 
@@ -957,7 +1155,15 @@ class AutoFourToolTab(QWidget):
                 except Exception as e:
                     self._bg_log.emit(slot, f"Lỗi mở browser {pid}: {e}", "err")
 
-        threading.Thread(target=_work, daemon=True, name=f"open-browsers-slot{slot}").start()
+        self._set_detail_actions_enabled(False)
+        self._tasks.run(
+            key=f"{slot}:open_browsers",
+            name=f"Tool {slot} - mo 3 trinh duyet",
+            fn=_work,
+            on_error=lambda err, s=slot: self._log(s, f"Mo trinh duyet loi: {err}", "err"),
+            on_finished=lambda _res: self._set_detail_actions_enabled(True),
+            timeout_ms=90_000,
+        )
 
     def _on_reconnect_all(self):
         slot = self._current_slot
@@ -976,7 +1182,15 @@ class AutoFourToolTab(QWidget):
                 except Exception as e:
                     self._bg_log.emit(slot, f"{pid}: lỗi kết nối lại: {e}", "err")
 
-        threading.Thread(target=_work, daemon=True, name=f"reconnect-slot{slot}").start()
+        self._set_detail_actions_enabled(False)
+        self._tasks.run(
+            key=f"{slot}:reconnect_all",
+            name=f"Tool {slot} - ket noi lai ALL",
+            fn=_work,
+            on_error=lambda err, s=slot: self._log(s, f"Ket noi lai ALL loi: {err}", "err"),
+            on_finished=lambda _res: self._set_detail_actions_enabled(True),
+            timeout_ms=45_000,
+        )
 
     def _on_quick_exit_room(self):
         slot = self._current_slot
@@ -992,11 +1206,104 @@ class AutoFourToolTab(QWidget):
             self._log(slot, "Chưa chọn profile để thoát phòng", "warn")
             return
         for pid in pids:
+            lease = None
             try:
+                gate = getattr(ctx, "action_gate", None)
+                if gate is not None:
+                    lease, busy = gate.try_acquire(pid, "room:exit", owner="AutoFourToolTab")
+                    if lease is None:
+                        self._log(
+                            slot,
+                            f"{pid} dang ban ({getattr(busy, 'action', 'action')}); bo qua Thoat Phong",
+                            "warn",
+                        )
+                        continue
                 ctx.gateway.gui_lenh_thoat_phong(pid)
                 self._log(slot, f"Đã gửi lệnh thoát phòng → {pid}", "ok")
             except Exception as e:
                 self._log(slot, f"Lỗi thoát phòng {pid}: {e}", "err")
+            finally:
+                if lease is not None:
+                    try:
+                        ctx.action_gate.release(lease)
+                    except Exception:
+                        pass
+
+    def _on_set_capital_from_gold(self):
+        slot = self._current_slot
+        ctx = self._contexts[slot - 1]
+        if ctx is None:
+            self._log(slot, "Khong co context de lay moc von", "err")
+            return
+        golds = self._current_gold_by_profile(ctx)
+        saved = self._load_capital(slot)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Moc von Tool {slot}")
+        dlg.setModal(True)
+        layout = QVBoxLayout(dlg)
+        form = QFormLayout()
+        edits: dict[str, QLineEdit] = {}
+        for pid in ("P1", "P2", "P3"):
+            edit = QLineEdit()
+            val = saved.get(pid)
+            if val is None:
+                val = golds.get(pid)
+            edit.setText("" if val is None else str(int(val)))
+            edit.setPlaceholderText("VD: 100000, 100K, 1.5M")
+            edits[pid] = edit
+            current = _format_money(golds.get(pid))
+            form.addRow(f"{pid} (hien tai {current})", edit)
+        layout.addLayout(form)
+
+        btn_current = QPushButton("Lay vang hien tai")
+        btn_current.setFixedHeight(28)
+        btn_current.setStyleSheet(
+            f"background:#263646; color:#fff; border:1px solid {_BLUE};"
+            " border-radius:4px; padding:0 10px; font-weight:700;"
+        )
+        layout.addWidget(btn_current)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        layout.addWidget(buttons)
+
+        def fill_current():
+            missing = [pid for pid in ("P1", "P2", "P3") if golds.get(pid) is None]
+            if missing:
+                self._log(slot, f"Chua co vang hien tai cho {','.join(missing)}", "warn")
+                return
+            for pid in ("P1", "P2", "P3"):
+                edits[pid].setText(str(int(golds[pid])))
+
+        btn_current.clicked.connect(fill_current)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+
+        if dlg.exec() != QDialog.Accepted:
+            return
+
+        values: dict[str, Optional[int]] = {}
+        for pid in ("P1", "P2", "P3"):
+            val = _parse_money_input(edits[pid].text())
+            if val is None:
+                self._log(slot, f"Moc von {pid} khong hop le", "warn")
+                return
+            values[pid] = val
+
+        self._save_capital(slot, values)
+        profit = self._profit_for_slot(slot, golds)
+        self._log(
+            slot,
+            "Da lay moc von: "
+            + " | ".join(f"{pid}={_format_money(values[pid])}" for pid in ("P1", "P2", "P3")),
+            "ok",
+        )
+        try:
+            self._gold_cache[(slot, "profit")] = profit
+            self._cards[slot - 1].set_gold_state(golds, profit)
+            self._update_total_profit_label()
+        except Exception:
+            pass
 
     def _on_reset_proxy(self):
         slot = self._current_slot
@@ -1016,28 +1323,57 @@ class AutoFourToolTab(QWidget):
                 except Exception as e:
                     self._bg_log.emit(slot, f"{pid}: lỗi reset proxy: {e}", "err")
 
-        threading.Thread(target=_work, daemon=True, name=f"reset-proxy-slot{slot}").start()
+        self._set_detail_actions_enabled(False)
+        self._tasks.run(
+            key=f"{slot}:reset_proxy_all",
+            name=f"Tool {slot} - reset proxy ALL",
+            fn=_work,
+            on_error=lambda err, s=slot: self._log(s, f"Reset Proxy ALL loi: {err}", "err"),
+            on_finished=lambda _res: self._set_detail_actions_enabled(True),
+            timeout_ms=60_000,
+        )
 
     # ── Event polling ──────────────────────────────────────────────
 
     def _poll_tool_events(self):
-        # Slot 1: main.py relay event vào ctx.event_queue (xem _handle_bridge_event).
-        # Slot 2+: per-tool bridge tự push event vào ctx.event_queue.
-        for ctx in self._contexts:
+        # Keep UI responsive under 12-tool bursts: process a small time slice
+        # per timer tick, never drop events. Remaining queued events stay for
+        # the next tick in the same per-tool FIFO queue.
+        if not self._contexts:
+            return
+
+        deadline = time.perf_counter() + 0.010
+        count = len(self._contexts)
+        start_idx = int(getattr(self, "_poll_cursor", 0) or 0) % count
+        next_idx = start_idx
+        processed_any = False
+
+        for offset in range(count):
+            idx = (start_idx + offset) % count
+            ctx = self._contexts[idx]
+            next_idx = (idx + 1) % count
             if ctx is None:
                 continue
             n = 0
             while n < 30:
+                if time.perf_counter() >= deadline:
+                    self._poll_cursor = next_idx
+                    if processed_any:
+                        self._refresh_profile_room_signals()
+                    return
                 try:
                     evt = ctx.event_queue.get_nowait()
                 except queue.Empty:
                     break
                 try:
                     ctx.dispatch_event(evt)
+                    processed_any = True
                 except Exception:
                     log.exception("[AutoFourToolTab] dispatch slot=%d", ctx.slot)
                 n += 1
-        self._refresh_profile_room_signals()
+        self._poll_cursor = next_idx
+        if processed_any:
+            self._refresh_profile_room_signals()
 
     def _refresh_profile_room_signals(self):
         for slot, ctx in enumerate(self._contexts, start=1):
@@ -1046,7 +1382,26 @@ class AutoFourToolTab(QWidget):
             statuses = self._compute_profile_room_signals(ctx)
             card = self._cards[slot - 1]
             for pid, status in statuses.items():
+                cache_key = (slot, pid)
+                if self._profile_signal_cache.get(cache_key) == status:
+                    continue
+                self._profile_signal_cache[cache_key] = status
                 card.set_profile_status(pid, status)
+            golds = self._current_gold_by_profile(ctx)
+            changed = False
+            for pid, gold in golds.items():
+                key = (slot, pid)
+                if self._gold_cache.get(key) != gold:
+                    self._gold_cache[key] = gold
+                    changed = True
+            profit = self._profit_for_slot(slot, golds)
+            profit_key = (slot, "profit")
+            if self._gold_cache.get(profit_key) != profit:
+                self._gold_cache[profit_key] = profit
+                changed = True
+            if changed:
+                card.set_gold_state(golds, profit)
+        self._update_total_profit_label()
 
     def _compute_profile_room_signals(self, ctx) -> dict[str, str]:
         pids = ("P1", "P2", "P3")
@@ -1171,9 +1526,16 @@ class AutoFourToolTab(QWidget):
         self._log_html.append(row)
         if len(self._log_html) > 500:
             self._log_html = self._log_html[-400:]
-        self._redraw_log()
+        self._schedule_log_redraw()
+
+    def _schedule_log_redraw(self):
+        if self._log_redraw_pending:
+            return
+        self._log_redraw_pending = True
+        QTimer.singleShot(80, self._redraw_log)
 
     def _redraw_log(self):
+        self._log_redraw_pending = False
         if not hasattr(self, "_log_view"):
             return
         f = self._log_filter
@@ -1185,6 +1547,8 @@ class AutoFourToolTab(QWidget):
             if f == "err" and r["level"] not in ("err", "warn"):
                 continue
             rows.append(r["html"])
+        if len(rows) > 250:
+            rows = rows[-250:]
         self._log_view.setHtml(
             f'<div style="font-family:Segoe UI,Arial,sans-serif;font-size:11px;">'
             + "".join(rows) + "</div>"
@@ -1194,6 +1558,7 @@ class AutoFourToolTab(QWidget):
 
     def _clear_log(self):
         self._log_html.clear()
+        self._log_redraw_pending = False
         if hasattr(self, "_log_view"):
             self._log_view.clear()
 

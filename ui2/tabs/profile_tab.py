@@ -22,6 +22,7 @@ from core.proxyno1_provider import (
     proxyno1_change_ip_for_profile,
     proxyno1_get_proxy_info_for_profile,
 )
+from ui2.runtime.task_runner import UiTaskResult, UiTaskRunner
 
 class ProfileTab(QWidget):
     """Quản lý cấu hình trình duyệt / profile (P1, P2, P3).
@@ -39,6 +40,8 @@ class ProfileTab(QWidget):
         super().__init__(parent)
         self.browser_manager = browser_manager
         self._slot: int = getattr(browser_manager, "_slot", 1)
+        self._tasks = UiTaskRunner(self)
+        self._tasks.rejected.connect(self._on_task_rejected)
 
         self.profile_combo = QComboBox()
         self.profile_combo.addItems(["P1", "P2", "P3"])
@@ -383,7 +386,7 @@ class ProfileTab(QWidget):
         # Bật / tắt ô API + nút Get/Reset theo loại proxy
         self._update_tmproxy_controls_enabled()
 
-    def save_profile(self) -> None:
+    def save_profile(self, silent: bool = False) -> None:
         pid = self.profile_combo.currentText()
         cfg = load_config(self._slot)
         self._ensure_profiles_root(cfg)
@@ -507,7 +510,11 @@ class ProfileTab(QWidget):
         if hasattr(self.browser_manager, "reload_config"):
             self.browser_manager.reload_config()
 
-        QMessageBox.information(self, "Lưu cấu hình", f"Đã lưu cấu hình cho {pid}")
+        if not silent:
+            QMessageBox.information(self, "Lưu cấu hình", f"Đã lưu cấu hình cho {pid}")
+
+    def _on_task_rejected(self, res: UiTaskResult) -> None:
+        self._set_tmproxy_status(res.error or "Tác vụ đang chạy, vui lòng chờ.", "orange")
 
     def reload_config(self) -> None:
         if hasattr(self.browser_manager, "reload_config"):
@@ -520,7 +527,15 @@ class ProfileTab(QWidget):
     def open_browser(self) -> None:
         pid = self.profile_combo.currentText()
         if hasattr(self.browser_manager, "open_browser"):
-            self.browser_manager.open_browser(pid)
+            self._set_tmproxy_status(f"{pid}: dang mo trinh duyet...", "orange")
+            self._tasks.run(
+                key=f"{self._slot}:{pid}:open_browser",
+                name=f"Tool {self._slot} {pid} open browser",
+                fn=lambda: self.browser_manager.open_browser(pid),
+                on_success=lambda _v, p=pid: self._set_tmproxy_status(f"{p}: da mo trinh duyet", "green"),
+                on_error=lambda err, p=pid: self._set_tmproxy_status(f"{p}: loi mo trinh duyet: {err}", "red"),
+                timeout_ms=45_000,
+            )
         else:
             QMessageBox.warning(
                 self, "Lỗi", "BrowserManager không hỗ trợ open_browser()."
@@ -529,7 +544,18 @@ class ProfileTab(QWidget):
     def close_browser(self) -> None:
         pid = self.profile_combo.currentText()
         if hasattr(self.browser_manager, "close_browser"):
-            self.browser_manager.close_browser(pid)
+            self._set_tmproxy_status(f"{pid}: dang dong trinh duyet...", "orange")
+            self._tasks.run(
+                key=f"{self._slot}:{pid}:close_browser",
+                name=f"Tool {self._slot} {pid} close browser",
+                fn=lambda: self.browser_manager.close_browser(pid),
+                on_success=lambda ok, p=pid: self._set_tmproxy_status(
+                    f"{p}: da dong trinh duyet" if ok else f"{p}: chua dong het tien trinh trinh duyet",
+                    "green" if ok else "red",
+                ),
+                on_error=lambda err, p=pid: self._set_tmproxy_status(f"{p}: loi dong trinh duyet: {err}", "red"),
+                timeout_ms=30_000,
+            )
         else:
             QMessageBox.warning(
                 self, "Lỗi", "BrowserManager không hỗ trợ close_browser()."
@@ -629,6 +655,127 @@ class ProfileTab(QWidget):
         msg = str(data.get("message", "Đã gọi ProxyNo1 change-key-ip."))
         return msg
 
+    def _set_proxy_task_buttons_enabled(self, enabled: bool) -> None:
+        self.tmproxy_get_btn.setEnabled(bool(enabled))
+        self.tmproxy_reset_btn.setEnabled(bool(enabled))
+
+    def _save_proxyno1_key_for_pid(self, pid: str, api_key: str) -> None:
+        cfg = load_config(self._slot)
+        self._ensure_profiles_root(cfg)
+        prof = cfg["profiles"].get(pid, {}) or {}
+        proxy = prof.get("proxy", {}) or {}
+        proxy["proxyno1_api_key"] = api_key
+        proxy["provider"] = "proxyno1"
+        prof["proxy"] = proxy
+        cfg["profiles"][pid] = prof
+        save_config(cfg, self._slot)
+
+    def _apply_proxyno1_info_to_fields(self, info: Dict[str, Any]) -> str:
+        host = str(info.get("host", "") or "")
+        http_port = int(info.get("http_port", 0) or 0)
+        socks_port = int(info.get("socks5_port", info.get("socks_port", 0) or 0))
+        user_val = str(info.get("username", "") or "")
+        pass_val = str(info.get("password", "") or "")
+        tm_type = (self.tmproxy_type_combo.currentData() or "https").lower()
+
+        used_protocol = ""
+        port_val = 0
+        if tm_type == "socks5" and socks_port > 0:
+            used_protocol = "socks5"
+            port_val = socks_port
+        elif tm_type in ("https", "http") and http_port > 0:
+            used_protocol = "http"
+            port_val = http_port
+        else:
+            used_protocol = str(info.get("protocol", "") or "")
+            port_val = int(info.get("port", 0) or 0)
+
+        if not host or port_val <= 0:
+            raise RuntimeError("ProxyNo1 khong tra ve host/port hop le.")
+
+        self.proxy_type_combo.blockSignals(True)
+        if self.proxy_type_combo.currentIndex() != 5:
+            self.proxy_type_combo.setCurrentIndex(5)
+        self.proxy_type_combo.blockSignals(False)
+        self.proxy_host_edit.setText(host)
+        self.proxy_port_spin.setValue(port_val)
+        self.proxy_user_edit.setText(user_val)
+        self.proxy_pass_edit.setText(pass_val)
+        return used_protocol or "auto"
+
+    def _run_proxyno1_get_task(self, pid: str, api_key: str) -> None:
+        self._save_proxyno1_key_for_pid(pid, api_key)
+        self._set_proxy_task_buttons_enabled(False)
+        self._set_tmproxy_status("ProxyNo1: dang lay thong tin proxy...", "orange")
+
+        def _work():
+            ok, msg, info = proxyno1_get_proxy_info_for_profile(pid, slot=self._slot)
+            if not ok or not info:
+                raise RuntimeError(msg)
+            return info
+
+        def _ok(info):
+            used_protocol = self._apply_proxyno1_info_to_fields(info)
+            self.save_profile(silent=True)
+            self._set_tmproxy_status(f"ProxyNo1: Lay proxy thanh cong ({used_protocol})", "green")
+
+        self._tasks.run(
+            key=f"{self._slot}:{pid}:proxyno1_get",
+            name=f"Tool {self._slot} {pid} ProxyNo1 Get",
+            fn=_work,
+            on_success=_ok,
+            on_error=lambda err: self._set_tmproxy_status(f"ProxyNo1 loi: {err}", "red"),
+            on_finished=lambda _res: self._set_proxy_task_buttons_enabled(True),
+            timeout_ms=25_000,
+        )
+
+    def _run_tmproxy_get_task(self, pid: str, api_key: str) -> None:
+        self._set_proxy_task_buttons_enabled(False)
+        self._set_tmproxy_status("Dang lay proxy (get-current)...", "orange")
+        self._tasks.run(
+            key=f"{self._slot}:{pid}:tmproxy_get",
+            name=f"Tool {self._slot} {pid} TMProxy Get",
+            fn=lambda: self._call_tmproxy_api(api_key, new_proxy=False),
+            on_success=lambda data: (self._apply_tmproxy_data_to_fields(data), self.save_profile(silent=True), self._set_tmproxy_status("Get proxy thanh cong (current)", "green")),
+            on_error=lambda err: self._set_tmproxy_status(f"TM-PROXY loi: {err}", "red"),
+            on_finished=lambda _res: self._set_proxy_task_buttons_enabled(True),
+            timeout_ms=25_000,
+        )
+
+    def _run_proxyno1_reset_task(self, pid: str, api_key: str) -> None:
+        self._save_proxyno1_key_for_pid(pid, api_key)
+        self._set_proxy_task_buttons_enabled(False)
+        self._set_tmproxy_status("ProxyNo1: dang doi IP (Reset)...", "orange")
+
+        def _work():
+            ok, msg = proxyno1_change_ip_for_profile(pid, slot=self._slot)
+            if not ok:
+                raise RuntimeError(msg)
+            return msg
+
+        self._tasks.run(
+            key=f"{self._slot}:{pid}:proxyno1_reset",
+            name=f"Tool {self._slot} {pid} ProxyNo1 Reset",
+            fn=_work,
+            on_success=lambda msg: self._set_tmproxy_status(f"ProxyNo1: {msg}", "green"),
+            on_error=lambda err: self._set_tmproxy_status(f"ProxyNo1 loi: {err}", "red"),
+            on_finished=lambda _res: self._set_proxy_task_buttons_enabled(True),
+            timeout_ms=25_000,
+        )
+
+    def _run_tmproxy_reset_task(self, pid: str, api_key: str) -> None:
+        self._set_proxy_task_buttons_enabled(False)
+        self._set_tmproxy_status("Dang doi IP (get-new-proxy)...", "orange")
+        self._tasks.run(
+            key=f"{self._slot}:{pid}:tmproxy_reset",
+            name=f"Tool {self._slot} {pid} TMProxy Reset",
+            fn=lambda: self._call_tmproxy_api(api_key, new_proxy=True),
+            on_success=lambda data: (self._apply_tmproxy_data_to_fields(data), self.save_profile(silent=True), self._set_tmproxy_status("Doi IP TM-PROXY thanh cong", "green")),
+            on_error=lambda err: self._set_tmproxy_status(f"TM-PROXY loi: {err}", "red"),
+            on_finished=lambda _res: self._set_proxy_task_buttons_enabled(True),
+            timeout_ms=25_000,
+        )
+
     def on_tmproxy_get_clicked(self) -> None:
         """
         Nút Get:
@@ -646,6 +793,12 @@ class ProfileTab(QWidget):
             return
 
         idx = self.proxy_type_combo.currentIndex()
+        if idx == 5:
+            self._run_proxyno1_get_task(pid, api_key)
+            return
+        if idx == 4:
+            self._run_tmproxy_get_task(pid, api_key)
+            return
 
         # Branch ProxyNo1: dùng protocol do người dùng chọn (HTTPS / SOCKS5)
         if idx == 5:
@@ -662,7 +815,7 @@ class ProfileTab(QWidget):
 
             # 2) Gọi key-status → lấy host + cả 2 port HTTP/SOCKS5
             self._set_tmproxy_status("ProxyNo1: đang lấy thông tin proxy...", "orange")
-            ok, msg, info = proxyno1_get_proxy_info_for_profile(pid)
+            ok, msg, info = proxyno1_get_proxy_info_for_profile(pid, slot=self._slot)
             if not ok or not info:
                 self._set_tmproxy_status(f"ProxyNo1 lỗi: {msg}", "red")
                 QMessageBox.critical(self, "ProxyNo1", msg)
@@ -761,6 +914,12 @@ class ProfileTab(QWidget):
             return
 
         idx = self.proxy_type_combo.currentIndex()
+        if idx == 5:
+            self._run_proxyno1_reset_task(pid, api_key)
+            return
+        if idx == 4:
+            self._run_tmproxy_reset_task(pid, api_key)
+            return
 
         # ProxyNo1 branch
         if idx == 5:

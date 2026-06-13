@@ -9,7 +9,6 @@ from typing import Any, Dict, Optional
 import requests
 
 from core.logger import log
-from core.tool_instance import get_tool_name
 
 
 PROFILE_IDS = ("P1", "P2", "P3")
@@ -38,12 +37,12 @@ class GoldThresholdNotifier:
 
     def __init__(self, config: Optional[GoldThresholdConfig] = None) -> None:
         self._config = config or GoldThresholdConfig()
-        self._below_by_pid: Dict[str, bool] = {pid: False for pid in PROFILE_IDS}
-        self._above_by_pid: Dict[str, bool] = {pid: False for pid in PROFILE_IDS}
-        self._last_gold_by_pid: Dict[str, int] = {}
+        self._below_by_key: Dict[str, bool] = {}
+        self._above_by_key: Dict[str, bool] = {}
+        self._last_gold_by_key: Dict[str, int] = {}
         self._sap_lang_alerted_keys: Dict[str, None] = {}
         self._missing_3p_alerted_keys: Dict[str, None] = {}
-        self._missing_3p_last_sent_at: float = 0.0
+        self._missing_3p_last_sent_at_by_tool: Dict[int, float] = {}
         self._queue: "queue.Queue[Optional[tuple[str, str, str]]]" = queue.Queue(maxsize=32)
         self._stop_event = threading.Event()
         self._worker = threading.Thread(
@@ -86,21 +85,34 @@ class GoldThresholdNotifier:
     def update_config(self, config: GoldThresholdConfig) -> None:
         """Cache config in RAM and re-arm state without emitting alerts."""
         self._config = config
-        self._below_by_pid = {
-            pid: bool(gold < config.min_threshold)
-            for pid, gold in self._last_gold_by_pid.items()
-            if pid in PROFILE_IDS
+        self._below_by_key = {
+            key: bool(gold < config.min_threshold)
+            for key, gold in self._last_gold_by_key.items()
         }
-        self._above_by_pid = {
-            pid: bool(gold > config.max_threshold)
-            for pid, gold in self._last_gold_by_pid.items()
-            if pid in PROFILE_IDS
+        self._above_by_key = {
+            key: bool(gold > config.max_threshold)
+            for key, gold in self._last_gold_by_key.items()
         }
-        for pid in PROFILE_IDS:
-            self._below_by_pid.setdefault(pid, False)
-            self._above_by_pid.setdefault(pid, False)
 
-    def check(self, profiles: Dict[str, Dict[str, Any]]) -> None:
+    @staticmethod
+    def _slot_int(tool_slot: int | str | None) -> int:
+        try:
+            slot = int(tool_slot or 1)
+        except Exception:
+            slot = 1
+        return max(1, slot)
+
+    @classmethod
+    def _tool_label(cls, tool_slot: int | str | None) -> str:
+        slot = cls._slot_int(tool_slot)
+        return f"Tool {max(1, slot)}"
+
+    @classmethod
+    def _profile_key(cls, tool_slot: int | str | None, pid: str) -> str:
+        slot = cls._slot_int(tool_slot)
+        return f"tool{max(1, slot)}:{pid}"
+
+    def check(self, profiles: Dict[str, Dict[str, Any]], tool_slot: int = 1) -> None:
         """Evaluate threshold crossings from a RoomEngine monitoring snapshot."""
         cfg = self._config
 
@@ -114,40 +126,43 @@ class GoldThresholdNotifier:
             except Exception:
                 continue
 
-            self._last_gold_by_pid[pid] = gold
+            profile_key = self._profile_key(tool_slot, pid)
+            self._last_gold_by_key[profile_key] = gold
             if cfg.min_enabled and cfg.min_threshold > 0:
-                was_below = bool(self._below_by_pid.get(pid, False))
+                was_below = bool(self._below_by_key.get(profile_key, False))
                 if gold < cfg.min_threshold and not was_below:
-                    self._below_by_pid[pid] = True
-                    self._enqueue_alert("MIN", pid)
+                    self._below_by_key[profile_key] = True
+                    self._enqueue_alert("MIN", tool_slot, pid)
                 elif gold > cfg.min_threshold:
-                    self._below_by_pid[pid] = False
+                    self._below_by_key[profile_key] = False
 
             if cfg.max_enabled and cfg.max_threshold > 0:
-                was_above = bool(self._above_by_pid.get(pid, False))
+                was_above = bool(self._above_by_key.get(profile_key, False))
                 if gold > cfg.max_threshold and not was_above:
-                    self._above_by_pid[pid] = True
-                    self._enqueue_alert("MAX", pid)
+                    self._above_by_key[profile_key] = True
+                    self._enqueue_alert("MAX", tool_slot, pid)
                 elif gold < cfg.max_threshold:
-                    self._above_by_pid[pid] = False
+                    self._above_by_key[profile_key] = False
 
     def send_test(self) -> bool:
         """Queue a test message using the current cached config."""
         cfg = self._config
         if not cfg.bot_token or not cfg.chat_id:
             return False
-        return self._enqueue(cfg.bot_token, cfg.chat_id, f"[Test Telegram] {get_tool_name()}")
+        return self._enqueue(cfg.bot_token, cfg.chat_id, "[Test Telegram] Tool 1")
 
     def is_intentional_foul_enabled(self) -> bool:
         """Return the cached feature toggle without reading config.json."""
         return bool(self._config.intentional_foul_enabled)
 
-    def send_bi_sap_lang(self, hand_key: str) -> bool:
+    def send_bi_sap_lang(self, hand_key: str, tool_slot: int = 1) -> bool:
         """Queue one best-effort alert per hand when intentional foul is applied."""
         cfg = self._config
-        key = str(hand_key or "").strip()
-        if not cfg.intentional_foul_enabled or not key:
+        raw_key = str(hand_key or "").strip()
+        if not cfg.intentional_foul_enabled or not raw_key:
             return False
+        slot = self._slot_int(tool_slot)
+        key = f"tool{slot}:{raw_key}"
         if key in self._sap_lang_alerted_keys:
             return False
         self._sap_lang_alerted_keys[key] = None
@@ -157,25 +172,28 @@ class GoldThresholdNotifier:
         if not cfg.bot_token or not cfg.chat_id:
             log.warning("[GOLD-ALERT] skip bị sập làng: thiếu token hoặc chat_id")
             return False
-        return self._enqueue(cfg.bot_token, cfg.chat_id, f"[BỊ SẬP LÀNG] {get_tool_name()}")
+        return self._enqueue(cfg.bot_token, cfg.chat_id, f"[BỊ SẬP LÀNG] {self._tool_label(tool_slot)}")
 
     def is_missing_3p_enabled(self) -> bool:
         """Return the cached toggle for the new-hand room integrity alert."""
         return bool(self._config.missing_3p_enabled)
 
-    def send_missing_3p(self, hand_key: str) -> bool:
+    def send_missing_3p(self, hand_key: str, tool_slot: int = 1) -> bool:
         """Queue at most one missing-3P alert for a WS hand burst."""
         cfg = self._config
-        key = str(hand_key or "").strip()
-        if not cfg.missing_3p_enabled or not key:
+        raw_key = str(hand_key or "").strip()
+        if not cfg.missing_3p_enabled or not raw_key:
             return False
+        slot = self._slot_int(tool_slot)
+        key = f"tool{slot}:{raw_key}"
         if key in self._missing_3p_alerted_keys:
             return False
 
         # P1/P2/P3 WS snapshots may arrive in nearby polls. Coalesce that burst
         # without starting a timer thread or touching the database.
         now = time.monotonic()
-        if (now - self._missing_3p_last_sent_at) < 2.0:
+        last_sent_at = float(self._missing_3p_last_sent_at_by_tool.get(slot, 0.0) or 0.0)
+        if (now - last_sent_at) < 2.0:
             return False
 
         self._missing_3p_alerted_keys[key] = None
@@ -185,9 +203,9 @@ class GoldThresholdNotifier:
         if not cfg.bot_token or not cfg.chat_id:
             log.warning("[GOLD-ALERT] skip thiếu 3P: thiếu token hoặc chat_id")
             return False
-        queued = self._enqueue(cfg.bot_token, cfg.chat_id, f"[THIẾU 3P] {get_tool_name()}")
+        queued = self._enqueue(cfg.bot_token, cfg.chat_id, f"[THIẾU 3P] {self._tool_label(tool_slot)}")
         if queued:
-            self._missing_3p_last_sent_at = now
+            self._missing_3p_last_sent_at_by_tool[slot] = now
         return queued
 
     def stop(self) -> None:
@@ -199,12 +217,12 @@ class GoldThresholdNotifier:
         except queue.Full:
             pass
 
-    def _enqueue_alert(self, label: str, pid: str) -> None:
+    def _enqueue_alert(self, label: str, tool_slot: int, pid: str) -> None:
         cfg = self._config
         if not cfg.bot_token or not cfg.chat_id:
             log.warning("[GOLD-ALERT] skip %s: thiếu token hoặc chat_id", pid)
             return
-        self._enqueue(cfg.bot_token, cfg.chat_id, f"[{label}] {get_tool_name()} - {pid}")
+        self._enqueue(cfg.bot_token, cfg.chat_id, f"[{label}] {self._tool_label(tool_slot)} - {pid}")
 
     def _enqueue(self, token: str, chat_id: str, message: str) -> bool:
         try:
@@ -233,3 +251,32 @@ class GoldThresholdNotifier:
             except Exception as exc:
                 # requests exceptions may contain the URL, which embeds the bot token.
                 log.warning("[GOLD-ALERT] gửi Telegram lỗi: %s", type(exc).__name__)
+
+
+class ToolSlotGoldThresholdNotifier:
+    """Per-tool adapter that preserves the old StrategyTab notifier interface."""
+
+    def __init__(self, base: GoldThresholdNotifier, tool_slot: int) -> None:
+        self.base = base
+        self.tool_slot = GoldThresholdNotifier._slot_int(tool_slot)
+
+    def check(self, profiles: Dict[str, Dict[str, Any]]) -> None:
+        self.base.check(profiles, tool_slot=self.tool_slot)
+
+    def send_test(self) -> bool:
+        return self.base.send_test()
+
+    def update_config(self, config: GoldThresholdConfig) -> None:
+        self.base.update_config(config)
+
+    def is_intentional_foul_enabled(self) -> bool:
+        return self.base.is_intentional_foul_enabled()
+
+    def send_bi_sap_lang(self, hand_key: str) -> bool:
+        return self.base.send_bi_sap_lang(hand_key, tool_slot=self.tool_slot)
+
+    def is_missing_3p_enabled(self) -> bool:
+        return self.base.is_missing_3p_enabled()
+
+    def send_missing_3p(self, hand_key: str) -> bool:
+        return self.base.send_missing_3p(hand_key, tool_slot=self.tool_slot)

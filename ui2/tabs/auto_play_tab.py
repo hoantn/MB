@@ -60,6 +60,7 @@ class AutoPlayTab(QWidget):
 
         self.log_box = QPlainTextEdit()
         self.log_box.setReadOnly(True)
+        self.log_box.document().setMaximumBlockCount(100)
         root.addWidget(self.log_box, 1)
 
     def _on_toggle(self) -> None:
@@ -82,6 +83,6 @@ class AutoPlayTab(QWidget):
 
     def append_log(self, text: str) -> None:
         self._logs.append(str(text))
-        self.log_box.setPlainText("\n".join(self._logs))
+        self.log_box.appendPlainText(str(text))
         bar = self.log_box.verticalScrollBar()
         bar.setValue(bar.maximum())

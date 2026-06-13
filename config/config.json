@@ -537,13 +537,18 @@
     "tool_window_geometries": {
       "tool1": {
         "x": 0,
-        "y": 23,
+        "y": 291,
         "width": 1920,
-        "height": 1017
+        "height": 755
       }
     },
     "browser": {
       "manage_chrome_by_tool": true
+    },
+    "auto_play_capital": {
+      "P1": 100000,
+      "P2": 9739,
+      "P3": 207722
     }
   },
   "profiles": {
@@ -559,7 +564,9 @@
         "tmproxy_api_key": "fcb86c608fc5ddaacefb3c2f815742ee",
         "tmproxy_type": "https",
         "proxyno1_api_key": "wQXFse4PmbA82MHi0C6MnB1780375586",
-        "provider": "proxyno1"
+        "provider": "proxyno1",
+        "proxyno1_last_status_at": "2026-06-12T12:23:24",
+        "proxyno1_last_status_msg": "Thành công"
       },
       "window": {
         "width": 1280,

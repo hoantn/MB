@@ -10,8 +10,8 @@ class Extension606ContractTests(unittest.TestCase):
     def test_all_extensions_have_ready_version_and_layout_forwarding(self):
         manifests = sorted((ROOT / "chrome_ext").rglob("manifest.json"))
         backgrounds = sorted((ROOT / "chrome_ext").rglob("background.js"))
-        self.assertEqual(len(manifests), 33)
-        self.assertEqual(len(backgrounds), 33)
+        self.assertEqual(len(manifests), 39)
+        self.assertEqual(len(backgrounds), 39)
 
         for manifest in manifests:
             with self.subTest(manifest=str(manifest)):

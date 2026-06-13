@@ -43,6 +43,7 @@ from typing import Dict, List, Optional, Tuple
 import os
 import threading
 import queue
+import time
 from PySide6.QtWidgets import (
     QWidget,
     QHBoxLayout,
@@ -712,11 +713,16 @@ class DashboardTab(QWidget):
         Hàm này được gọi định kỳ bởi self._suggest_timer trong main thread.
         """
         try:
-            while True:
+            deadline = time.perf_counter() + 0.010
+            processed = 0
+            while processed < 8:
+                if time.perf_counter() >= deadline:
+                    break
                 try:
                     status, pid, gen, suggestions, message = self._suggest_queue.get_nowait()
                 except queue.Empty:
                     break
+                processed += 1
 
                 # Bỏ qua kết quả cũ (generation thấp hơn)
                 if gen != self._suggest_generation.get(pid):

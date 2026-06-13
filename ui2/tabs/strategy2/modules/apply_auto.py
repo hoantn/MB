@@ -18,6 +18,7 @@ from engine.foul_rules import is_no_foul, is_no_foul_slot_layout
 from ui2.tabs.strategy2.modules.apply_diagnostics import record_apply_failure
 from ui2.bridge.ws_layout_store import ws_layout_store
 from ui2.tabs.strategy2.modules.apply_confirmation import confirm_and_repair_layout
+from ui2.tabs.strategy2.modules.action_gate import acquire_profile_action, release_profile_action
 
 
 def _layout_matches_target(final_codes: List[str], target_codes: List[str]) -> bool:
@@ -202,7 +203,12 @@ def apply_suggestion_dashboard_style(
         return False
 
     _slot = getattr(getattr(tab, "browser_manager", None), "_slot", 1)
+    action_lease = acquire_profile_action(tab, pid, "apply", owner="apply_auto")
+    if action_lease is False:
+        apply_trace("apply_reject_action_gate", pid)
+        return False
     if not _acquire_apply_lock(_slot, pid):
+        release_profile_action(tab, action_lease)
         apply_trace("apply_reject_cross_tab_lock", pid)
         log.warning("[Strategy2] AUTO skip: slot=%d pid=%s đang apply ở tab khác", _slot, pid)
         return False
@@ -415,6 +421,7 @@ def apply_suggestion_dashboard_style(
                 tab._ws_freeze[pid] = False
             except Exception:
                 pass
+            release_profile_action(tab, action_lease)
 
     t = threading.Thread(target=_worker_apply, name=f"MB-Strategy2-Apply-{pid}", daemon=True)
     tab._apply_threads[pid] = t
@@ -423,6 +430,7 @@ def apply_suggestion_dashboard_style(
         t.start()
     except Exception:
         _release_apply_lock(_slot, pid)
+        release_profile_action(tab, action_lease)
         tab._apply_threads.pop(pid, None)
         return False
     return True

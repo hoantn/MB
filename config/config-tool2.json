@@ -13,9 +13,7 @@
         "tmproxy_api_key": "fcb86c608fc5ddaacefb3c2f815742ee",
         "tmproxy_type": "https",
         "proxyno1_api_key": "6Iyhfn1xdRArliFgrFmXqc1780250041",
-        "provider": "proxyno1",
-        "proxyno1_last_change_at": "2026-06-11T05:22:33",
-        "proxyno1_last_message": "Đổi IP thành công"
+        "provider": "proxyno1"
       },
       "window": {
         "width": 1280,
@@ -36,9 +34,7 @@
         "tmproxy_api_key": "0dbaaf04399cac6331792cf50b32a901",
         "tmproxy_type": "https",
         "proxyno1_api_key": "rO4y8DKe831sY4yL4BPj7a1780250042",
-        "provider": "proxyno1",
-        "proxyno1_last_change_at": "2026-06-08T22:08:56",
-        "proxyno1_last_message": "Đổi IP thành công"
+        "provider": "proxyno1"
       },
       "window": {
         "width": 1280,
@@ -59,9 +55,7 @@
         "tmproxy_api_key": "27339f4405281b70d31669f64226fe0e",
         "tmproxy_type": "https",
         "proxyno1_api_key": "r69clzeNvO0A3RzDeuGec41780250041",
-        "provider": "proxyno1",
-        "proxyno1_last_change_at": "2026-06-08T18:12:42",
-        "proxyno1_last_message": "Đổi IP thành công"
+        "provider": "proxyno1"
       },
       "window": {
         "width": 1280,
@@ -75,8 +69,8 @@
     "browser_window_positions": {
       "tool2": {
         "P1": {
-          "x": -1930,
-          "y": 392
+          "x": -552,
+          "y": 385
         },
         "P2": {
           "x": -1292,

@@ -30,8 +30,9 @@ class XaoVangTab(QWidget):
 
     request_play_tai_xiu = Signal(str, dict)
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, *, slot: int = 1) -> None:
         super().__init__(parent)
+        self._slot = max(1, int(slot or 1))
         self._profiles = ["P1", "P2", "P3"]
         self._selected_profile = "P1"
         self._selected_side = "tai"
@@ -192,6 +193,7 @@ class XaoVangTab(QWidget):
         self.log_box.setReadOnly(True)
         self.log_box.setObjectName("xv_log")
         self.log_box.setMinimumHeight(110)
+        self.log_box.document().setMaximumBlockCount(80)
         root.addWidget(self.log_box, 1)
 
     def _build_button_section(self, title: str):
@@ -240,7 +242,7 @@ class XaoVangTab(QWidget):
     def _load_chip_values(self) -> List[int]:
         """Read chips that are actually configured for every profile."""
         try:
-            cfg = load_config()
+            cfg = load_config(self._slot)
             taixiu = ((cfg.get("game_ui") or {}).get("taixiu") or {})
             configured = {self._parse_int(x) for x in (taixiu.get("tx_bet_values") or [])}
             configured = {x for x in configured if x > 0}
@@ -287,7 +289,7 @@ class XaoVangTab(QWidget):
 
     def _load_default_delay(self) -> int:
         try:
-            return int((((load_config().get("ui") or {}).get("taixiu") or {}).get("delay_ms", 100)))
+            return int((((load_config(self._slot).get("ui") or {}).get("taixiu") or {}).get("delay_ms", 100)))
         except Exception:
             return 100
 
@@ -549,8 +551,9 @@ class XaoVangTab(QWidget):
         self._set_global_busy(False)
 
     def _append_log(self, text: str) -> None:
-        self._logs.appendleft(f"[{datetime.now().strftime('%H:%M:%S')}] {text}")
-        self.log_box.setPlainText("\n".join(self._logs))
+        line = f"[{datetime.now().strftime('%H:%M:%S')}] {text}"
+        self._logs.append(line)
+        self.log_box.appendPlainText(line)
 
     def _side_text(self, side: str) -> str:
         return "TÀI" if side == "tai" else "XỈU"

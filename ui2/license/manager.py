@@ -11,7 +11,7 @@ from .anti_debug import detect_debugger_risk
 from .fingerprint import get_fingerprint_hash, get_fingerprint_raw
 from .storage import load_cache, save_cache, LicenseCache
 from .client import LicenseApiClient
-from .verify import verify_entitlements, check_expiry
+from .verify import verify_entitlements, check_expiry, check_product
 
 
 @dataclass
@@ -46,6 +46,13 @@ class LicenseManager(QObject):
             return None
         lid = (cache.license_id or "").strip()
         return lid or None
+
+    def get_cached_license_key(self) -> Optional[str]:
+        cache = load_cache(self.fp_hash)
+        if cache is None:
+            return None
+        key = (cache.license_key or "").strip()
+        return key or None
 
     def start(self) -> None:
         risk, reason = detect_debugger_risk()
@@ -95,6 +102,11 @@ class LicenseManager(QObject):
                             signing_pub_b64=cache.signing_pub_b64,
                         )
                         if ok_sig2:
+                            ok_product2, _ = check_product(payload2)
+                            if not ok_product2:
+                                self.state = LicenseState(ok=False, reason="PRODUCT_MISMATCH", payload=None)
+                                self.state_changed.emit(self.state)
+                                return
                             ok_exp2, _ = check_expiry(payload2)
                             if ok_exp2:
                                 payload2["offline_hours"] = 0.0
@@ -120,6 +132,12 @@ class LicenseManager(QObject):
 
         if not ok_sig:
             self.state = LicenseState(ok=False, reason="CACHE_SIGNATURE_INVALID", payload=None)
+            self.state_changed.emit(self.state)
+            return
+
+        ok_product, reason_product = check_product(payload)
+        if not ok_product:
+            self.state = LicenseState(ok=False, reason=reason_product, payload=None)
             self.state_changed.emit(self.state)
             return
 

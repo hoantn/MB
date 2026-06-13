@@ -15,6 +15,7 @@ from core.logger import log
 from engine.action import apply_arrangement, compute_moves
 from engine.card import Card
 from ui2.bridge.ws_layout_store import ws_layout_store
+from ui2.tabs.strategy2.modules.action_gate import acquire_profile_action, release_profile_action
 
 
 def _ui_call(tab, fn: Callable[[], None], delay_ms: int = 0) -> None:
@@ -181,7 +182,11 @@ def apply_manual_dashboard_style(
         apply_slot = int(getattr(getattr(tab, "browser_manager", None), "_slot", 1) or 1)
     except Exception:
         apply_slot = 1
+    action_lease = acquire_profile_action(tab, pid, "apply", owner="apply_manual")
+    if action_lease is False:
+        return
     if not _acquire_apply_lock(apply_slot, pid):
+        release_profile_action(tab, action_lease)
         log.warning("[Strategy2] MANUAL skip: slot=%d pid=%s is already applying", apply_slot, pid)
         return
 
@@ -403,7 +408,16 @@ def apply_manual_dashboard_style(
                 _release_apply_lock(apply_slot, pid)
             except Exception:
                 pass
+            release_profile_action(tab, action_lease)
 
     t = threading.Thread(target=_worker_apply, name=f"MB-Strategy2-Apply-{pid}", daemon=True)
     tab._apply_threads[pid] = t
-    t.start()
+    try:
+        t.start()
+    except Exception:
+        try:
+            _release_apply_lock(apply_slot, pid)
+        except Exception:
+            pass
+        release_profile_action(tab, action_lease)
+        tab._apply_threads.pop(pid, None)

@@ -80,18 +80,26 @@ class RoomEngine(QObject):
     # args: profile_id, error text. Worker thread emits this when sync click fails.
     sig_join_click_error = Signal(str, str)
 
+    # args: mode, profile_id, error text. Worker thread emits this when a room
+    # click fails; UI state is updated back on the Qt thread.
+    sig_room_click_error = Signal(str, str, str)
+
     def __init__(
         self,
         room_tab: RoomControlTab,
         ws_gateway: WebSocketGateway,
         game_controller,
+        action_gate=None,
         parent: Optional[QObject] = None,
     ) -> None:
         super().__init__(parent)
         self.room_tab = room_tab
         self.ws_gateway = ws_gateway
         self.game = game_controller
+        self.action_gate = action_gate
+        self._room_action_leases: Dict[str, Any] = {}
         self.sig_join_click_error.connect(self._on_join_click_error)
+        self.sig_room_click_error.connect(self._on_room_click_error)
         # Delay giữa 2 lần click thoát phòng (click 2 lần) - lấy từ config đúng slot
         self._exit_double_click_ms: int = 130
         try:
@@ -177,6 +185,32 @@ class RoomEngine(QObject):
     # Helper: thoát phòng bằng 2 CLICK, nghỉ ~130ms (KHÔNG block UI)
     # ======================================================================
 
+    def _try_acquire_room_action(self, profile_id: str, action: str) -> bool:
+        if self.action_gate is None:
+            return True
+        pid = str(profile_id or "P1")
+        if pid in self._room_action_leases:
+            return True
+        lease, busy = self.action_gate.try_acquire(pid, f"room:{action}", owner="RoomEngine")
+        if lease is not None:
+            self._room_action_leases[pid] = lease
+            return True
+
+        msg = f"{pid} dang ban ({getattr(busy, 'action', 'action')}); bo qua tac vu phong de tranh xung dot."
+        log.warning("[ROOM-GATE] slot=%s %s", getattr(busy, "slot", "?"), msg)
+        if action == "create":
+            self.room_tab.dat_trang_thai_tao(pid, msg, dang_chay=False)
+        elif action == "find_guest" and hasattr(self.room_tab, "dat_trang_thai_find"):
+            self.room_tab.dat_trang_thai_find(pid, msg, dang_chay=False)
+        else:
+            self.room_tab.dat_trang_thai_join(pid, msg, dang_chay=False)
+        return False
+
+    def _release_room_action(self, profile_id: str) -> None:
+        lease = self._room_action_leases.pop(str(profile_id or "P1"), None)
+        if lease is not None and self.action_gate is not None:
+            self.action_gate.release(lease)
+
     def _double_click_exit(self, profile_id: str) -> None:
         def _safe_click_exit(pid: str, label: str) -> None:
             try:
@@ -259,6 +293,8 @@ class RoomEngine(QObject):
             log.exception("on_self_info_100 failed (pid=%s)", profile_id)
 
     def _ui_auto_create(self, profile_id: str, params: dict) -> None:
+        if not self._try_acquire_room_action(profile_id, "create"):
+            return
         tv = self.tac_vu[profile_id]
         tv.che_do = "create"
         tv.target_uid = None
@@ -274,6 +310,8 @@ class RoomEngine(QObject):
         self._click_bet_tao(profile_id)
 
     def _ui_auto_join(self, profile_id: str, params: dict) -> None:
+        if not self._try_acquire_room_action(profile_id, "join"):
+            return
         tv = self.tac_vu[profile_id]
         tv.che_do = "join"
         tv.target_uid = params.get("target_uid")
@@ -301,6 +339,8 @@ class RoomEngine(QObject):
                     continue
                 if profile_id not in self.tac_vu or not isinstance(params, dict):
                     continue
+                if not self._try_acquire_room_action(profile_id, "join"):
+                    continue
 
                 tv = self.tac_vu[profile_id]
                 tv.che_do = "join"
@@ -325,6 +365,8 @@ class RoomEngine(QObject):
             QTimer.singleShot(0, lambda pids=list(profiles): self._click_bet_join_batch(pids))
         except Exception:
             log.exception("RoomEngine _ui_auto_join_team_uid failed: batch=%s", batch)
+            for pid in profiles:
+                self._release_room_action(pid)
 
     def _click_bet_join_batch(self, profile_ids: List[str]) -> None:
         """Click Bet join đồng thời cho nhiều profile bằng barrier thread."""
@@ -341,6 +383,7 @@ class RoomEngine(QObject):
                 )
                 tv.che_do = None
                 tv.dang_cho_ket_qua = False
+                self._release_room_action(profile_id)
                 continue
 
             try:
@@ -353,6 +396,7 @@ class RoomEngine(QObject):
                 )
                 tv.che_do = None
                 tv.dang_cho_ket_qua = False
+                self._release_room_action(profile_id)
                 continue
 
             tv.dang_cho_ket_qua = True
@@ -369,10 +413,7 @@ class RoomEngine(QObject):
 
         if len(jobs) == 1:
             pid, bet = jobs[0]
-            try:
-                self.game.click_bet(pid, bet)
-            except Exception as e:
-                self.sig_join_click_error.emit(pid, str(e))
+            self._click_bet_async("join", pid, bet)
             return
 
         barrier = threading.Barrier(len(jobs) + 1)
@@ -395,91 +436,77 @@ class RoomEngine(QObject):
                 daemon=True,
             ).start()
 
-        try:
-            log.info("[ROOM-GOI-TEAM] releasing sync click barrier profiles=%s", [pid for pid, _ in jobs])
-            barrier.wait(timeout=2.0)
-        except Exception as e:
-            log.exception("[ROOM-GOI-TEAM] sync barrier release failed: %s", e)
-            for pid, _bet in jobs:
-                self.sig_join_click_error.emit(pid, str(e))
+        def _release_barrier() -> None:
+            try:
+                log.info("[ROOM-GOI-TEAM] releasing sync click barrier profiles=%s", [pid for pid, _ in jobs])
+                barrier.wait(timeout=2.0)
+            except Exception as e:
+                log.exception("[ROOM-GOI-TEAM] sync barrier release failed: %s", e)
+                for pid, _bet in jobs:
+                    self.sig_join_click_error.emit(pid, str(e))
+
+        threading.Thread(
+            target=_release_barrier,
+            name="room-join-sync-release",
+            daemon=True,
+        ).start()
 
     def _on_join_click_error(self, profile_id: str, error: str) -> None:
         tv = self.tac_vu.get(profile_id)
         if tv is not None:
             tv.che_do = None
             tv.dang_cho_ket_qua = False
+        self._release_room_action(profile_id)
         self.room_tab.dat_trang_thai_join(
             profile_id,
             f"Lỗi khi click Bet đồng bộ: {error}",
             dang_chay=False,
         )
 
-    def _ui_join_team_by_rid(self, host_pid: str, room_id: int, host_uid: str, bet: object) -> None:
-        """Goi P con lai vao thang room_id; van xac nhan bang UID host de tranh vao nham ban."""
-        try:
-            rid = int(room_id)
-        except Exception:
-            rid = 0
-        host_uid = str(host_uid or "").strip()
-        if rid <= 0 or not host_uid or host_uid == "-":
-            log.warning("[ROOM-JOIN-RID] invalid request host=%s rid=%s uid=%s", host_pid, room_id, host_uid)
-            return
+    def _click_bet_async(self, mode: str, profile_id: str, bet) -> None:
+        def _worker() -> None:
+            try:
+                self.game.click_bet(profile_id, bet)
+            except Exception as e:
+                log.exception("[ROOM] click_bet failed mode=%s pid=%s bet=%s: %s", mode, profile_id, bet, e)
+                self.sig_room_click_error.emit(str(mode), str(profile_id), str(e))
 
-        for follower in (p for p in ("P1", "P2", "P3") if p != host_pid):
-            tv = self.tac_vu[follower]
-            tv.che_do = "join_rid"
-            tv.target_uid = host_uid
-            tv.target_room_id = rid
-            tv.bet_muc_tieu = bet
-            tv.delay_ms = 0
-            tv.dang_cho_ket_qua = True
-            self.target_hien_tai[follower] = host_uid
+        threading.Thread(
+            target=_worker,
+            name=f"room-click-bet-{mode}-{profile_id}",
+            daemon=True,
+        ).start()
 
+    def _on_room_click_error(self, mode: str, profile_id: str, error: str) -> None:
+        tv = self.tac_vu.get(profile_id)
+        if tv is not None:
+            tv.che_do = None
+            tv.dang_cho_ket_qua = False
+        self._release_room_action(profile_id)
+
+        if mode == "create":
+            self.room_tab.dat_trang_thai_tao(
+                profile_id,
+                f"Lỗi khi click Bet: {error}",
+                dang_chay=False,
+            )
+        elif mode == "find_guest":
+            if hasattr(self.room_tab, "dat_trang_thai_find"):
+                self.room_tab.dat_trang_thai_find(
+                    profile_id,
+                    f"Lỗi khi click Bet: {error}",
+                    dang_chay=False,
+                )
+        else:
             self.room_tab.dat_trang_thai_join(
-                follower,
-                f"Đang vào thẳng Room {rid}, xác nhận UID {host_uid}...",
-                dang_chay=True,
+                profile_id,
+                f"Lỗi khi click Bet: {error}",
+                dang_chay=False,
             )
 
-            log.info("[ROOM-JOIN-RID] %s -> rid=%s host=%s uid=%s", follower, rid, host_pid, host_uid)
-            try:
-                self.ws_gateway.gui_lenh_vao_phong(follower, rid)
-            except Exception as e:
-                log.exception("[ROOM-JOIN-RID] send failed pid=%s rid=%s: %s", follower, rid, e)
-                self._fallback_join_uid(follower, "send_failed")
-                continue
-
-            QTimer.singleShot(4500, lambda pid=follower, rid_int=rid: self._join_rid_timeout(pid, rid_int))
-
-    def _join_rid_timeout(self, profile_id: str, room_id: int) -> None:
-        tv = self.tac_vu.get(profile_id)
-        if tv is None or tv.che_do != "join_rid" or tv.target_room_id != room_id:
-            return
-        if not tv.dang_cho_ket_qua:
-            return
-        log.warning("[ROOM-JOIN-RID] timeout pid=%s rid=%s -> fallback UID", profile_id, room_id)
-        self._fallback_join_uid(profile_id, "timeout")
-
-    def _fallback_join_uid(self, profile_id: str, reason: str, *, exit_first: bool = False) -> None:
-        """Fallback ve luong click Bet tim UID cu khi direct rid khong xac nhan duoc."""
-        tv = self.tac_vu[profile_id]
-        target_uid = tv.target_uid
-        tv.che_do = "join"
-        tv.target_room_id = None
-        tv.dang_cho_ket_qua = False
-
-        self.room_tab.dat_trang_thai_join(
-            profile_id,
-            f"Join rid chưa xác nhận được ({reason}). Fallback tìm UID {target_uid} bằng Bet...",
-            dang_chay=True,
-        )
-
-        delay_ms = max(int(tv.delay_ms or 0), 100)
-        if exit_first:
-            self.ws_gateway.gui_lenh_thoat_phong(profile_id)
-        QTimer.singleShot(delay_ms, lambda pid=profile_id: self._click_bet_join(pid))
-
     def _ui_auto_find_guest(self, profile_id: str, params: dict) -> None:
+        if not self._try_acquire_room_action(profile_id, "find_guest"):
+            return
         tv = self.tac_vu[profile_id]
         tv.che_do = "find_guest"
         tv.target_uid = None
@@ -508,6 +535,7 @@ class RoomEngine(QObject):
         tv = self.tac_vu[profile_id]
         tv.che_do = None
         tv.dang_cho_ket_qua = False
+        self._release_room_action(profile_id)
 
         self.room_tab.dat_trang_thai_tao(profile_id, "Đã dừng.", dang_chay=False)
         self.room_tab.dat_trang_thai_join(profile_id, "Đã dừng.", dang_chay=False)
@@ -564,6 +592,7 @@ class RoomEngine(QObject):
                 dang_chay=False,
             )
             tv.che_do = None
+            self._release_room_action(profile_id)
             return
 
         tv.dang_cho_ket_qua = True
@@ -573,12 +602,7 @@ class RoomEngine(QObject):
             dang_chay=True,
         )
 
-        try:
-            self.game.click_bet(profile_id, tv.bet_muc_tieu)
-        except Exception as e:
-            self.room_tab.dat_trang_thai_tao(profile_id, f"Lỗi khi click Bet {tv.bet_muc_tieu}: {e}", dang_chay=False)
-            tv.che_do = None
-            tv.dang_cho_ket_qua = False
+        self._click_bet_async("create", profile_id, tv.bet_muc_tieu)
 
     def _click_bet_join(self, profile_id: str) -> None:
         tv = self.tac_vu[profile_id]
@@ -592,6 +616,7 @@ class RoomEngine(QObject):
                 dang_chay=False,
             )
             tv.che_do = None
+            self._release_room_action(profile_id)
             return
 
         tv.dang_cho_ket_qua = True
@@ -601,12 +626,7 @@ class RoomEngine(QObject):
             dang_chay=True,
         )
 
-        try:
-            self.game.click_bet(profile_id, tv.bet_muc_tieu)
-        except Exception as e:
-            self.room_tab.dat_trang_thai_join(profile_id, f"Lỗi khi click Bet {tv.bet_muc_tieu}: {e}", dang_chay=False)
-            tv.che_do = None
-            tv.dang_cho_ket_qua = False
+        self._click_bet_async("join", profile_id, tv.bet_muc_tieu)
 
     def _click_bet_find_guest(self, profile_id: str) -> None:
         tv = self.tac_vu[profile_id]
@@ -621,6 +641,7 @@ class RoomEngine(QObject):
                     dang_chay=False,
                 )
             tv.che_do = None
+            self._release_room_action(profile_id)
             return
 
         tv.dang_cho_ket_qua = True
@@ -632,17 +653,7 @@ class RoomEngine(QObject):
                 dang_chay=True,
             )
 
-        try:
-            self.game.click_bet(profile_id, tv.bet_muc_tieu)
-        except Exception as e:
-            if hasattr(self.room_tab, "dat_trang_thai_find"):
-                self.room_tab.dat_trang_thai_find(
-                    profile_id,
-                    f"Lỗi khi click Bet {tv.bet_muc_tieu}: {e}",
-                    dang_chay=False,
-                )
-            tv.che_do = None
-            tv.dang_cho_ket_qua = False
+        self._click_bet_async("find_guest", profile_id, tv.bet_muc_tieu)
 
     # ======================================================================
     # WS -> Engine
@@ -767,6 +778,7 @@ class RoomEngine(QObject):
                     dang_chay=False,
                 )
                 tv.che_do = None
+                self._release_room_action(profile_id)
                 return
 
             self.room_tab.dat_trang_thai_tao(
@@ -788,6 +800,7 @@ class RoomEngine(QObject):
                     dang_chay=False,
                 )
                 tv.che_do = None
+                self._release_room_action(profile_id)
                 return
 
             self.room_tab.dat_trang_thai_join(
@@ -797,39 +810,6 @@ class RoomEngine(QObject):
             )
             self.ws_gateway.gui_lenh_thoat_phong(profile_id)
             QTimer.singleShot(max(tv.delay_ms, 300), lambda pid=profile_id: self._click_bet_join(pid))
-            return
-
-        if False and tv.che_do == "join_rid":
-            target_uid = tv.target_uid
-            if target_uid and any(p.uid == target_uid for p in (trang_thai.nguoi_choi or [])):
-                self._accept_room_task_snapshot(profile_id, trang_thai)
-                self.room_tab.dat_trang_thai_join(
-                    profile_id,
-                    f"ĐÃ VÀO ĐÚNG PHÒNG bằng rid (Room {trang_thai.room_id}, UID {target_uid}).",
-                    dang_chay=False,
-                )
-                log.info(
-                    "[ROOM-JOIN-RID] success pid=%s rid=%s uid=%s",
-                    profile_id,
-                    tv.target_room_id,
-                    target_uid,
-                )
-                tv.che_do = None
-                tv.target_room_id = None
-                return
-
-            self.room_tab.dat_trang_thai_join(
-                profile_id,
-                f"Join rid vào sai phòng, không thấy UID {target_uid}. Đang fallback UID...",
-                dang_chay=True,
-            )
-            log.warning(
-                "[ROOM-JOIN-RID] wrong room pid=%s expected_uid=%s room=%s -> fallback UID",
-                profile_id,
-                target_uid,
-                trang_thai.room_id,
-            )
-            self._fallback_join_uid(profile_id, "wrong_room", exit_first=True)
             return
 
         if tv.che_do == "find_guest":
@@ -852,6 +832,7 @@ class RoomEngine(QObject):
                         dang_chay=False,
                     )
                 tv.che_do = None
+                self._release_room_action(profile_id)
                 return
 
             if hasattr(self.room_tab, "dat_trang_thai_find"):
@@ -948,6 +929,17 @@ class RoomEngine(QObject):
             "roster_fresh": roster_fresh,
             "roster_age_s": roster_age_s,
         }
+
+    def get_profile_gold_state(self) -> Dict[str, Dict[str, Any]]:
+        """Return latest known self-profile gold keyed by P1/P2/P3."""
+        out: Dict[str, Dict[str, Any]] = {}
+        for profile in ("P1", "P2", "P3"):
+            uid = self._self_uid_by_profile.get(profile)
+            out[profile] = {
+                "uid": uid,
+                "gold": self._gold_by_uid.get(uid) if uid else None,
+            }
+        return out
 
     def on_room_roster(self, profile_id: str, uids: List[Any]) -> None:
         """Update lightweight room membership from a realtime roster."""

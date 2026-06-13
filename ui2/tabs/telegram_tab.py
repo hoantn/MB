@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
 
 import requests
 
+from ui2.runtime.task_runner import UiTaskResult, UiTaskRunner
+
 
 def _config_path() -> str:
     here = os.path.abspath(__file__)
@@ -26,6 +28,8 @@ class TelegramTab(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._cfg_path = _config_path()
+        self._tasks = UiTaskRunner(self)
+        self._tasks.rejected.connect(self._on_task_rejected)
         self._build_ui()
         self._load_config()
 
@@ -74,11 +78,11 @@ class TelegramTab(QWidget):
         btn_save = QPushButton("Lưu cấu hình")
         btn_save.clicked.connect(self._save_config)
 
-        btn_test = QPushButton("Test gửi")
-        btn_test.clicked.connect(self._test_send)
+        self.btn_test = QPushButton("Test gửi")
+        self.btn_test.clicked.connect(self._test_send)
 
         row_action.addWidget(btn_save)
-        row_action.addWidget(btn_test)
+        row_action.addWidget(self.btn_test)
 
         root.addLayout(row_action)
 
@@ -172,6 +176,9 @@ class TelegramTab(QWidget):
 
     # ================= TEST =================
 
+    def _on_task_rejected(self, res: UiTaskResult) -> None:
+        QMessageBox.warning(self, "Đang chạy", res.error)
+
     def _test_send(self):
         cfg = self._read_config()
         tg = ((cfg.get("game_ui") or {}).get("telegram_bot") or {})
@@ -185,14 +192,31 @@ class TelegramTab(QWidget):
 
         msg = "Test: Tài - 14"
 
-        for chat_id in chat_ids:
+        def _work() -> int:
+            sent = 0
             url = f"https://api.telegram.org/bot{token}/sendMessage"
-            try:
-                requests.post(url, data={
-                    "chat_id": chat_id,
-                    "text": msg
-                }, timeout=5)
-            except Exception as e:
-                print("TG lỗi:", e)
+            errors = []
+            for chat_id in chat_ids:
+                try:
+                    resp = requests.post(url, data={
+                        "chat_id": chat_id,
+                        "text": msg
+                    }, timeout=5)
+                    resp.raise_for_status()
+                    sent += 1
+                except Exception as e:
+                    errors.append(f"{chat_id}: {e}")
+            if errors:
+                raise RuntimeError("; ".join(errors))
+            return sent
 
-        QMessageBox.information(self, "OK", "Đã gửi test")
+        self.btn_test.setEnabled(False)
+        self._tasks.run(
+            key="telegram:test_send",
+            name="Test gửi Telegram",
+            fn=_work,
+            on_success=lambda sent: QMessageBox.information(self, "OK", f"Đã gửi test ({sent})"),
+            on_error=lambda err: QMessageBox.warning(self, "Lỗi", f"Gửi test thất bại: {err}"),
+            on_finished=lambda _res: self.btn_test.setEnabled(True),
+            timeout_ms=15_000,
+        )

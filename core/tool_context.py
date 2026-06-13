@@ -95,6 +95,7 @@ class ToolContext:
         from ui2.game_controller import GameController
         from ui2.bridge.ws_card_store import WSCardStore
         from ui2.bridge.ws_layout_store import WSLayoutStore
+        from ui2.runtime.tool_action_gate import ToolActionGate
 
         self.slot = slot
         self._config = load_config(slot)
@@ -112,6 +113,7 @@ class ToolContext:
         # card_store: None → tạo mới (slot 2+); hoặc inject global (slot 1)
         self.card_store = card_store if card_store is not None else WSCardStore()
         self.layout_store = WSLayoutStore()
+        self.action_gate = ToolActionGate(slot=slot)
 
         # Per-tool WS queues
         self.event_queue: "queue.Queue[Dict[str, Any]]" = queue.Queue()
@@ -128,6 +130,8 @@ class ToolContext:
         self.strategy_tab = None      # StrategyTab
         self.profiles_tab = None      # ProfilesTabV2
         self.config_tab = None        # ConfigTab
+        self.xao_vang_tab = None      # XaoVangTab
+        self.xao_vang_adapter = None  # XaoVangToolAdapter
 
         # Activity log sink (set sau bởi AutoFourToolTab)
         self.log_sink = None
@@ -142,6 +146,8 @@ class ToolContext:
         from engine.room_engine import RoomEngine
         from ui2.tabs.profiles_tab_v2 import ProfilesTabV2
         from ui2.tabs.config_tab import ConfigTab
+        from ui2.tabs.xao_vang_tab import XaoVangTab
+        from ui2.tabs.xao_vang_tool_adapter import XaoVangToolAdapter
 
         # Slot 1: extension polls main.py bridge (port 9527) → dùng global WS_COMMAND_QUEUE.
         # Slot 2+: per-tool bridge riêng → dùng per-tool command_queue.
@@ -159,6 +165,7 @@ class ToolContext:
             room_tab=self.room_tab,
             ws_gateway=self.gateway,
             game_controller=self.game_controller,
+            action_gate=self.action_gate,
         )
 
         # StrategyTab với per-tool card_store
@@ -169,6 +176,7 @@ class ToolContext:
             room_engine=self.room_engine,
             layout_store=self.layout_store,
             game_controller=self.game_controller,
+            action_gate=self.action_gate,
         )
 
         # ProfilesTabV2 — cấu hình chrome_path/proxy/URL per-slot
@@ -181,6 +189,18 @@ class ToolContext:
             parent=parent,
             slot=self.slot,
             embedded=True,
+        )
+
+        self.xao_vang_tab = XaoVangTab(
+            parent=parent,
+            slot=self.slot,
+        )
+        self.xao_vang_adapter = XaoVangToolAdapter(
+            slot=self.slot,
+            xao_vang_tab=self.xao_vang_tab,
+            game_controller=self.game_controller,
+            action_gate=self.action_gate,
+            parent=self.gateway,
         )
 
     def start(self) -> None:
@@ -230,6 +250,40 @@ class ToolContext:
         cmd = None
         if isinstance(payload, dict):
             cmd = payload.get("cmd") or payload.get("CMD")
+
+        # --- Tai/Xiu cmd=1008: trigger Xao Vang auto per-tool ---
+        # MainWindow only owns the legacy global Xao Vang tab. In Auto Play,
+        # each ToolContext has its own XaoVangTab, so the per-tool bridge must
+        # trigger auto here to keep slot isolation.
+        if kind == "taixiu_ws" and isinstance(payload, dict):
+            try:
+                if int(cmd or 0) == 1008:
+                    sid = payload.get("sid")
+                    sid_str = str(sid or "").strip()
+                    direction = str(evt.get("direction") or payload.get("direction") or "").strip().lower()
+                    has_round_snapshot = (
+                        direction == "recv"
+                        and sid_str
+                        and (
+                            payload.get("rmT") is not None
+                            or bool(payload.get("gi"))
+                        )
+                    )
+                    if has_round_snapshot and self.xao_vang_tab is not None:
+                        fired = self.xao_vang_tab.trigger_auto_for_sid(sid_str)
+                        if fired:
+                            log.info(
+                                "[ToolContext] Auto Xao Vang triggered slot=%d sid=%s profile=%s rmT=%s gS=%s",
+                                self.slot,
+                                sid_str,
+                                profile_id,
+                                payload.get("rmT"),
+                                payload.get("gS"),
+                            )
+                    return
+            except Exception:
+                log.exception("[ToolContext] Auto Xao Vang trigger failed slot=%d", self.slot)
+                return
 
         cs = evt.get("cs")
         if cs is None and isinstance(payload, dict):

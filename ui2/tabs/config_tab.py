@@ -40,6 +40,7 @@ from ui2.theme import (
     get_theme_default_colors,
     get_theme_effective_colors,
 )
+from ui2.runtime.task_runner import UiTaskResult, UiTaskRunner
 
 
 class ConfigTab(QWidget):
@@ -47,6 +48,8 @@ class ConfigTab(QWidget):
         super().__init__(parent)
         self._slot = max(1, int(slot or 1))
         self._embedded = bool(embedded)
+        self._tasks = UiTaskRunner(self)
+        self._tasks.rejected.connect(self._on_task_rejected)
 
         self._build_ui()
         self._load_from_config()
@@ -57,6 +60,9 @@ class ConfigTab(QWidget):
 
     def _show_error(self, text: str) -> None:
         QMessageBox.critical(self, "Lỗi", text)
+
+    def _on_task_rejected(self, res: UiTaskResult) -> None:
+        self._show_error(res.error)
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
@@ -342,25 +348,51 @@ class ConfigTab(QWidget):
         
     def _on_apply_game_clicked(self) -> None:
         game = (self.cmb_game.currentText() or "").strip().lower()
-        ok, msg = apply_game_to_config(game, self._slot)
-        if ok:
-            log.info("ConfigTab: %s", msg)
-            # Load lại để UI khác đọc config mới nếu cần
-            self._show_success(msg)
-            self._load_from_config()
-        else:
-            log.error("ConfigTab: %s", msg)
-            self._show_error(msg) 
+        self.btn_apply_game.setEnabled(False)
+
+        def _done(result) -> None:
+            ok, msg = result
+            if ok:
+                log.info("ConfigTab: %s", msg)
+                # Load lại để UI khác đọc config mới nếu cần
+                self._show_success(msg)
+                self._load_from_config()
+            else:
+                log.error("ConfigTab: %s", msg)
+                self._show_error(msg)
+
+        self._tasks.run(
+            key=f"{self._slot}:apply_game",
+            name=f"Tool {self._slot} áp dụng game",
+            fn=lambda: apply_game_to_config(game, self._slot),
+            on_success=_done,
+            on_error=self._show_error,
+            on_finished=lambda _res: self.btn_apply_game.setEnabled(True),
+            timeout_ms=10_000,
+        )
 
     def _on_copy_coords_clicked(self) -> None:
         game = (self.cmb_game.currentText() or "").strip().lower()
-        ok, msg = copy_config_coords_to_game(game, self._slot)
-        if ok:
-            log.info("ConfigTab: %s", msg)
-            self._show_success(msg)
-        else:
-            log.error("ConfigTab: %s", msg)
-            self._show_error(msg)
+        self.btn_copy_coords.setEnabled(False)
+
+        def _done(result) -> None:
+            ok, msg = result
+            if ok:
+                log.info("ConfigTab: %s", msg)
+                self._show_success(msg)
+            else:
+                log.error("ConfigTab: %s", msg)
+                self._show_error(msg)
+
+        self._tasks.run(
+            key=f"{self._slot}:copy_coords",
+            name=f"Tool {self._slot} copy tọa độ",
+            fn=lambda: copy_config_coords_to_game(game, self._slot),
+            on_success=_done,
+            on_error=self._show_error,
+            on_finished=lambda _res: self.btn_copy_coords.setEnabled(True),
+            timeout_ms=10_000,
+        )
 
     def _on_save_tool_window_geometry_clicked(self) -> None:
         """Persist the current MainWindow geometry for the active tool instance."""

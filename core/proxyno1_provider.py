@@ -230,7 +230,7 @@ def ensure_proxyno1_provider(proxy_dict: Dict[str, Any]) -> None:
 # ======================================================================
 # API chính: gọi đổi IP cho 1 profile
 # ======================================================================
-def proxyno1_get_proxy_info_for_profile(profile_id: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+def proxyno1_get_proxy_info_for_profile(profile_id: str, slot: int = 1) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """
     Lấy thông tin proxy (HTTP/SOCKS5) cho 1 profile thông qua key-status.
 
@@ -247,7 +247,7 @@ def proxyno1_get_proxy_info_for_profile(profile_id: str) -> Tuple[bool, str, Opt
       "socks5_port": int,       # 0 nếu không có
     }
     """
-    cfg = load_config()
+    cfg = load_config(slot)
     try:
         profile_dict, proxy = _get_profile_proxy_dict(cfg, profile_id)
     except KeyError as e:
@@ -358,7 +358,7 @@ def proxyno1_get_proxy_info_for_profile(profile_id: str) -> Tuple[bool, str, Opt
     proxy["proxyno1_last_status_at"] = datetime.datetime.now().isoformat(timespec="seconds")
     proxy["proxyno1_last_status_msg"] = str(data.get("message", "OK"))
     try:
-        save_config(cfg)
+        save_config(cfg, slot)
     except Exception as e:
         log.error("[ProxyNo1] Lỗi khi save_config sau get_proxy_info: %s", e)
 

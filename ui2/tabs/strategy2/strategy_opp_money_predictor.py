@@ -95,6 +95,11 @@ def optimize_opp_money_split(cards13: List[Card], money_split: Optional[Split553
         return money_split
     if len(cards13) == 13 and not _same_cards(list(cards13), original_cards):
         return money_split
+    if evaluate_5cards(chi1)[0] == 6:
+        # The shared Money scorer now protects full-house + pair + pair shapes.
+        # Do not let the old narrow OPP predictor break that anchor into
+        # full-house + two-pair + high-card.
+        return money_split
     if not (_is_one_pair_5(chi2) and evaluate_3cards(chi3)[0] == 1):
         return money_split
 

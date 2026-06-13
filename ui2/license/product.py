@@ -1,0 +1,10 @@
+from __future__ import annotations
+
+LICENSE_PRODUCT_ID = "mb-auto"
+LICENSE_PRODUCT_NAME = "MB Auto"
+LICENSE_SERVER_URL = "https://kiem.go88c.us"
+LICENSE_APP_VERSION = "0.1"
+
+LICENSE_STORE_DIR = "MB_MauBinh_AUTO"
+LICENSE_STORE_FILE = "lic.dat"
+LICENSE_SALT = b"MB_AUTO_LICENSE_V1_SALT"

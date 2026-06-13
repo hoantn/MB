@@ -267,6 +267,7 @@ class TaiXiuControlTab(QWidget):
         self.log_box = QPlainTextEdit()
         self.log_box.setReadOnly(True)
         self.log_box.setObjectName("txc_log")
+        self.log_box.document().setMaximumBlockCount(120)
         layout.addWidget(self.log_box, 1)
         return frame
 
@@ -583,8 +584,9 @@ class TaiXiuControlTab(QWidget):
 
     def _append_log(self, text: str) -> None:
         stamp = datetime.now().strftime("%H:%M:%S")
-        self._logs.appendleft(f"[{stamp}] {text}")
-        self.log_box.setPlainText("\n".join(self._logs))
+        line = f"[{stamp}] {text}"
+        self._logs.append(line)
+        self.log_box.appendPlainText(line)
 
     def dat_trang_thai(self, text: str) -> None:
         self.lbl_manual_status.setText(f"Status: {text}")

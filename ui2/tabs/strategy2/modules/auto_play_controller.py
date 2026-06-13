@@ -7,7 +7,7 @@ from ui2.tabs.strategy2.strategy_anti_sap import _codes_to_threechi, _eval_vs_op
 from ui2.tabs.strategy2.strategy_combo_sap_lang import find_sap_lang_combo, SapLangCombo
 from ui2.tabs.strategy2.strategy_intentional_foul import build_intentional_foul_suggestion
 from ui2.tabs.strategy2.strategy_special13 import detect_special_13
-from engine.money_scoring import score_money_vs_opp
+from engine.money_scoring import score_money_vs_opp, evaluate_5cards, evaluate_3cards
 
 
 PROFILES = ("P1", "P2", "P3")
@@ -648,6 +648,20 @@ def _is_swept_by_opp(suggestion: dict, opp: dict) -> bool:
     return bool(_eval_vs_opp(my_three, opp_three, allow_special_13=False).lose_all)
 
 
+def _opp_has_bonus_line(opp: dict) -> bool:
+    """Return True when OPP has a bonus line: straight flush, quads, or trips on top."""
+    opp_three = _codes_to_threechi(opp)
+    if opp_three is None:
+        return False
+    try:
+        chi1_type = int(evaluate_5cards(opp_three.chi1)[0])
+        chi2_type = int(evaluate_5cards(opp_three.chi2)[0])
+        chi3_type = int(evaluate_3cards(opp_three.chi3)[0])
+    except Exception:
+        return False
+    return bool(chi1_type in (7, 8) or chi2_type in (7, 8) or chi3_type == 3)
+
+
 def _has_any_special(tab) -> bool:
     for pid in PROFILES:
         codes = list(tab._codes_slot_order.get(pid) or [])
@@ -683,7 +697,14 @@ def _build_intentional_foul_plan(
     opp: dict,
     normal_plan: AutoPlayPlan,
 ) -> Optional[AutoPlayPlan]:
-    """Build the last-resort 3P foul plan only after normal optimization loses 0-3."""
+    """
+    Build the last-resort foul plan after normal optimization cannot escape.
+
+    Rules:
+      - If all 3 profiles are swept, foul all 3 regardless of OPP bonus lines.
+      - Otherwise, only foul the swept profiles when OPP has a bonus line
+        (straight flush, quads, or trips on top).
+    """
     if _has_any_special(tab):
         return None
     opp_codes = (
@@ -693,14 +714,29 @@ def _build_intentional_foul_plan(
     )
     if _has_special_codes(opp_codes):
         return None
-    if any(
-        not _is_swept_by_opp(normal_plan.suggestions.get(pid) or {}, opp)
-        for pid in PROFILES
-    ):
+
+    swept_pids = tuple(
+        pid for pid in PROFILES
+        if _is_swept_by_opp(normal_plan.suggestions.get(pid) or {}, opp)
+    )
+    if len(swept_pids) == len(PROFILES):
+        foul_pids = PROFILES
+    elif swept_pids and _opp_has_bonus_line(opp):
+        foul_pids = swept_pids
+    else:
         return None
 
     foul_suggestions: Dict[str, dict] = {}
+    selected_index: Dict[str, int] = {}
     for pid in PROFILES:
+        if pid not in foul_pids:
+            normal_sug = normal_plan.suggestions.get(pid)
+            if normal_sug is None:
+                return None
+            foul_suggestions[pid] = dict(normal_sug)
+            if pid in normal_plan.selected_index:
+                selected_index[pid] = int(normal_plan.selected_index[pid])
+            continue
         money = _get_money_split(tab, pid)
         if money is None:
             return None
@@ -717,8 +753,9 @@ def _build_intentional_foul_plan(
         kind="intentional_foul",
         opp_index=int(opp_index),
         score=normal_plan.score,
-        selected_index={},
+        selected_index=selected_index,
         suggestions=foul_suggestions,
+        report_binh_pids=tuple(pid for pid in foul_pids),
         dependency_groups=(PROFILES,),
     )
 

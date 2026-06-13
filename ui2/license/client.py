@@ -4,7 +4,7 @@ import requests
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-from .verify import verify_entitlements, check_expiry
+from .verify import verify_entitlements, check_expiry, check_product
 
 @dataclass
 class ActivateResult:
@@ -39,6 +39,9 @@ class LicenseApiClient:
         )
         if not ok:
             return ActivateResult(False, reason)
+        ok_product, reason_product = check_product(payload)
+        if not ok_product:
+            return ActivateResult(False, reason_product)
         ok2, reason2 = check_expiry(payload)
         if not ok2:
             return ActivateResult(False, reason2)
@@ -61,6 +64,9 @@ class LicenseApiClient:
         )
         if not ok:
             return ActivateResult(False, reason)
+        ok_product, reason_product = check_product(payload)
+        if not ok_product:
+            return ActivateResult(False, reason_product)
         ok2, reason2 = check_expiry(payload)
         if not ok2:
             return ActivateResult(False, reason2)

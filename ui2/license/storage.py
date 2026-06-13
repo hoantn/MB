@@ -10,14 +10,14 @@ from typing import Optional
 from nacl.secret import SecretBox
 from nacl.utils import random as nacl_random
 
-APP_SALT = b"MB_LICENSE_V1_SALT"
+from .product import LICENSE_SALT, LICENSE_STORE_DIR, LICENSE_STORE_FILE
 
 
 def _derive_key(fingerprint_hash: str) -> bytes:
     # 32-byte key via scrypt (reduced params to avoid OpenSSL memory limit on some Windows builds)
     return hashlib.scrypt(
         fingerprint_hash.encode("ascii"),
-        salt=APP_SALT,
+        salt=LICENSE_SALT,
         n=2**14,   # was 2**15
         r=8,
         p=1,
@@ -31,9 +31,9 @@ def _default_store_path() -> Path:
         root = Path(os.environ.get("APPDATA", str(Path.home())))
     else:
         root = Path.home() / ".config"
-    d = root / "MB_MauBinh"
+    d = root / LICENSE_STORE_DIR
     d.mkdir(parents=True, exist_ok=True)
-    return d / "lic.dat"
+    return d / LICENSE_STORE_FILE
 
 
 @dataclass
