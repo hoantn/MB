@@ -153,8 +153,6 @@ class StagedScheduler:
                     merged = []
                     if "max" in base_map:
                         merged.append(base_map["max"])
-                    if "money" in base_map:
-                        merged.append(base_map["money"])
                     tab._ngu_suggestions = merged
 
                     if tab._ngu_base_codes and len(tab._ngu_base_codes) == 13:
@@ -197,8 +195,6 @@ class StagedScheduler:
                     merged = []
                     if "max" in base_map:
                         merged.append(base_map["max"])
-                    if "money" in base_map:
-                        merged.append(base_map["money"])
 
                     tab._suggestions[key] = merged
                     p_changed_any = True

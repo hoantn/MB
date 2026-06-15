@@ -5,7 +5,7 @@ import hashlib
 import copy
 
 from engine.card import Card
-from engine.arranger import arrange_cards, arrange_13_cards, arrange_cached_money_split, ArrangeStrategy
+from engine.arranger import arrange_cards, arrange_13_cards, ArrangeStrategy
 
 from ui2.tabs.dashboard.dashboard_constants import classify_chis, _format_suggestion_label
 
@@ -201,26 +201,6 @@ def build_suggestions_for_codes(profile_id: str, codes: List[str], stage: str = 
         )
 
     # CACHE: mặc định tắt để tránh reuse list cũ khi bạn đang test/đổi arrange.
-    money_split = arrange_cached_money_split(cards)
-    if money_split is not None:
-        c1, c2, c3 = money_split
-        auto_money = {
-            "pid": pid,
-            "stage": stage_u,
-            "mode": "money",
-            "variant": 0,
-            "label": "[Auto] Money",
-            "chi1_codes": [c.to_code() for c in c1],
-            "chi2_codes": [c.to_code() for c in c2],
-            "chi3_codes": [c.to_code() for c in c3],
-            "chi_types": classify_chis(c1, c2, c3),
-        }
-        if pid == "NGU":
-            auto_money["_auto_opp_money"] = True
-        else:
-            auto_money["_auto_profile_money"] = True
-        out.insert(0, auto_money)
-
     _cache_set(pid, hand_h, stage_u, out)
     # Prepend SPECIAL (nếu có) -> trả đúng 1 row special có đủ chi1/chi2/chi3 để APPLY
     if special_sugg:

@@ -27,6 +27,7 @@ from ui2.tabs.dashboard.dashboard_constants import FULL_DECK
 from .strategy_view import StrategyView
 from .strategy_suggest_worker import build_suggestions_for_codes
 from .strategy_suggest import pick_default_suggestion
+from .auto_suggestion_picker import mark_auto_suggestion
 from .strategy_anti_sap import build_anti_sap_suggestions
 from .strategy_combo_sap_lang import find_sap_lang_combo, SapLangCombo
 from .strategy_special13 import detect_special_13  # FIX: use separated module
@@ -643,6 +644,13 @@ class StrategyTab(QWidget):
         # if render_suggs and self._is_special_row(render_suggs[0]) and idx <= 0 and len(render_suggs) > 1:
             # idx = 1
         self._selected_index[pid] = idx
+
+        mark_auto_suggestion(
+            self._suggestions.get(pid) or [],
+            render_suggs,
+            policy="self",
+            is_special_row=self._is_special_row,
+        )
 
         # Compute label_html for top items only (CPU guard)
         for s in render_suggs[:self.MAX_UI_P_ITEMS]:
@@ -1404,7 +1412,7 @@ class StrategyTab(QWidget):
             )
 
             if allow_opp_plan and not has_auto_opp and self._auto_is_waiting_for_ngu_suggestions():
-                self._auto_play_log("Đang chờ gợi ý Money của OPP để xếp combo 3P.")
+                self._auto_play_log("Đang chờ gợi ý Auto của OPP để xếp combo 3P.")
                 session = self._auto_play_session
                 QTimer.singleShot(250, lambda s=session: self._maybe_run_auto_play(s))
                 return
@@ -1445,7 +1453,7 @@ class StrategyTab(QWidget):
 
             if plan is None:
                 if allow_opp_plan and not has_auto_opp:
-                    self._auto_play_log("Bỏ qua: đang chờ gợi ý Money cho P sẵn sàng.")
+                    self._auto_play_log("Bỏ qua: đang chờ gợi ý Auto cho P sẵn sàng.")
                     return
                 self._auto_play_log("Bỏ qua: chưa có P nào đủ bài/gợi ý hợp lệ để Auto Play.")
                 return

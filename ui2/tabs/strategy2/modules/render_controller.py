@@ -4,6 +4,7 @@ from typing import List, Optional
 from collections import Counter
 
 from .templates import extract_template_key_from_suggestion, template_strength_from_key
+from ui2.tabs.strategy2.auto_suggestion_picker import mark_auto_suggestion
 from engine.card import Card
 from engine.arranger_parts.arrange import _normalize_kicker_distribution
 
@@ -659,6 +660,12 @@ class RenderController:
                 pass
 
         # Cập nhật lại cache gợi ý NGU sau khi lọc
+        mark_auto_suggestion(
+            tab._ngu_suggestions,
+            suggs,
+            policy="opp",
+            is_special_row=tab._is_special_row,
+        )
         tab._ngu_suggestions = suggs
 
         # 2) Nếu không còn gợi ý sau lọc -> clear bài OPP
@@ -946,6 +953,13 @@ class RenderController:
         # => Không ép idx=1 ở đây nữa.
 
         tab._selected_index[pid] = idx
+
+        mark_auto_suggestion(
+            tab._suggestions.get(pid) or [],
+            render_suggs,
+            policy="self",
+            is_special_row=tab._is_special_row,
+        )
 
         # Tính sap-làng + label cho các item hiển thị
         for s in render_suggs[:tab.MAX_UI_P_ITEMS]:

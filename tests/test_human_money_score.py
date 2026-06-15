@@ -1,5 +1,6 @@
 import unittest
 
+from core.constants import RANK_ORDER
 from engine.card import Card
 from engine.rules import evaluate_5cards
 from engine.scorer import evaluate_3cards
@@ -8,6 +9,7 @@ from engine.arranger_parts.arrange import (
     arrange_cache_clear,
     arrange_cached_money_split,
 )
+from ui2.tabs.strategy2.auto_suggestion_picker import mark_auto_suggestion, split_key
 from ui2.tabs.strategy2.strategy_suggest_worker import build_suggestions_for_codes
 
 
@@ -204,11 +206,14 @@ class HumanMoneyScoreTests(unittest.TestCase):
         self.assertEqual(evaluate_3cards(chi3)[0], 1)  # pair
 
         sugg = build_suggestions_for_codes("NGU", codes)
-        auto = next((s for s in sugg if s.get("mode") == "money"), None)
-        self.assertIsNotNone(auto)
-        self.assertEqual(auto.get("chi1_codes"), [c.to_code() for c in chi1])
-        self.assertEqual(auto.get("chi2_codes"), [c.to_code() for c in chi2])
-        self.assertEqual(auto.get("chi3_codes"), [c.to_code() for c in chi3])
+        self.assertTrue(sugg)
+        self.assertFalse(any(s.get("mode") == "money" for s in sugg))
+        final = list(sugg[:5])
+        selected = mark_auto_suggestion(sugg, final, policy="opp")
+        self.assertGreaterEqual(selected, 0)
+        auto = final[selected]
+        self.assertTrue(auto.get("_auto_opp_money"))
+        self.assertIn(split_key(auto), {split_key(s) for s in sugg})
 
     def test_flush_trips_high_card_beats_small_full_house_pair_high_card(self):
         codes = [
@@ -350,6 +355,56 @@ class HumanMoneyScoreTests(unittest.TestCase):
             "4T", "TR", "JB", "QC", "KT", "AR",
         ]
         self.assertEqual(_money_types(codes), (4, 2, 1))
+
+    def test_same_template_keeps_higher_bottom_straight_before_trash(self):
+        # Same Sảnh-Đôi-Đôi template has both 7-J and 8-Q straights. The
+        # representative must keep the stronger bottom straight instead of
+        # moving Q out only as a kicker/trash card.
+        codes = [
+            "3R", "3B", "KC", "4T", "6R", "6T", "TC",
+            "QB", "7R", "8C", "9B", "TB", "JC",
+        ]
+        arrange_cache_clear()
+        suggs = build_suggestions_for_codes("NGU_STRAIGHT_OVERFLOW", codes)
+        target = None
+        for s in suggs:
+            if "Sảnh" in s.get("label", "") and "Đôi" in s.get("label", ""):
+                target = s
+                break
+        self.assertIsNotNone(target)
+        chi1 = [Card.from_code(c) for c in target["chi1_codes"]]
+        hand_type, detail = evaluate_5cards(chi1)
+        self.assertEqual(hand_type, 4)
+        self.assertGreaterEqual(detail[0], RANK_ORDER.index("Q"))
+
+    def test_same_template_allows_lower_flush_when_it_improves_top_pair(self):
+        # Same Thung-Doi-Doi template has two Q-high flush variants. The
+        # representative should allow 5S inside the flush to free TS and improve
+        # chi3 from pair 5 to pair T. This is a real hand-rank gain, not trash.
+        codes = [
+            "5H", "5S", "TD", "2C", "7D", "8H", "9H",
+            "9C", "3S", "4S", "6S", "TS", "QS",
+        ]
+        arrange_cache_clear()
+        reps = arrange_13_cards(_cards(codes), max_candidates=None)
+        target = None
+        for chi1, chi2, chi3 in reps:
+            if (
+                evaluate_5cards(chi1)[0] == 5
+                and evaluate_5cards(chi2)[0] == 1
+                and evaluate_3cards(chi3)[0] == 1
+            ):
+                target = (chi1, chi2, chi3)
+                break
+        self.assertIsNotNone(target)
+        chi1, chi2, chi3 = target
+        self.assertIn("5S", [c.code for c in chi1])
+        self.assertNotIn("TS", [c.code for c in chi1])
+        pair_ranks = [
+            evaluate_5cards(chi2)[1][0],
+            evaluate_3cards(chi3)[1][0],
+        ]
+        self.assertIn(RANK_ORDER.index("T"), pair_ranks)
 
     def test_multi_pair_full_house_line_keeps_live_top_pair(self):
         # Many-pair/xam hands need post-money distribution: keep the full-house

@@ -140,13 +140,13 @@ def classify_auto_room_context(room_engine) -> AutoRoomContext:
 
 def _get_money_split(tab, pid: str) -> Optional[Tuple[int, dict]]:
     """
-    Trả về (index, suggestion) của split Money tốt nhất cho pid.
+    Trả về (index, suggestion) của split Auto trong list gợi ý cuối cho pid.
     Dùng cho P_min (3P) và P_less (2P): cho phép chơi thế bài tự nhiên tốt nhất.
 
     Ưu tiên lấy split có flag _auto_profile_money (do worker arranger đánh dấu).
     Fallback về split playable đầu tiên nếu không tìm thấy money split.
     """
-    rows = list(tab._suggestions.get(pid) or [])
+    rows = _auto_rows(tab, pid)
     for idx, s in enumerate(rows):
         if s.get("_auto_profile_money") and _is_playable(tab, s):
             return idx, dict(s)
@@ -165,7 +165,7 @@ def _pick_best_win(tab, pid: str, vs_sug: dict) -> Optional[Tuple[int, dict]]:
     """
     best: Optional[Tuple[int, dict]] = None
     best_key: Optional[Tuple[int, int]] = None
-    for idx, s in enumerate(tab._suggestions.get(pid) or []):
+    for idx, s in enumerate(_auto_rows(tab, pid)):
         if not _is_playable(tab, s):
             continue
         money, wins, _neg_losses, _draws = _score_suggestion_vs_opp(s, vs_sug)
@@ -188,7 +188,7 @@ def _pick_natural_lose(tab, pid: str, vs_sug: dict) -> Optional[Tuple[int, dict]
     """
     best: Optional[Tuple[int, dict]] = None
     best_key: Optional[Tuple[int, int, int]] = None
-    for idx, s in enumerate(tab._suggestions.get(pid) or []):
+    for idx, s in enumerate(_auto_rows(tab, pid)):
         if not _is_playable(tab, s):
             continue
         money, wins, _neg_losses, _draws = _score_suggestion_vs_opp(s, vs_sug)
@@ -215,7 +215,7 @@ def _pick_natural_lose_vs_both(
     """
     best: Optional[Tuple[int, dict]] = None
     best_key: Optional[Tuple[int, int, int]] = None
-    for idx, s in enumerate(tab._suggestions.get(pid) or []):
+    for idx, s in enumerate(_auto_rows(tab, pid)):
         if not _is_playable(tab, s):
             continue
         money1, wins1, _, _ = _score_suggestion_vs_opp(s, vs_sug1)
@@ -234,7 +234,7 @@ def _pick_not_swept_natural_lose(tab, pid: str, vs_sug: dict) -> Optional[Tuple[
     """Pick a natural losing split that is not swept 0-3."""
     best: Optional[Tuple[int, dict]] = None
     best_key: Optional[Tuple[int, int, int]] = None
-    for idx, s in enumerate(tab._suggestions.get(pid) or []):
+    for idx, s in enumerate(_auto_rows(tab, pid)):
         if not _is_playable(tab, s):
             continue
         money, wins, _neg_losses, draws = _score_suggestion_vs_opp(s, vs_sug)
@@ -251,7 +251,7 @@ def _pick_swept_natural(tab, pid: str, vs_sug: dict) -> Optional[Tuple[int, dict
     """Pick the strongest natural split that loses all three chi to vs_sug."""
     best: Optional[Tuple[int, dict]] = None
     best_key: Optional[Tuple[int, int]] = None
-    for idx, s in enumerate(tab._suggestions.get(pid) or []):
+    for idx, s in enumerate(_auto_rows(tab, pid)):
         if not _is_playable(tab, s):
             continue
         money, wins, _neg_losses, _draws = _score_suggestion_vs_opp(s, vs_sug)
@@ -463,7 +463,7 @@ def build_internal_balance_plan(tab, context: AutoRoomContext) -> Optional[AutoP
         return None
 
     # Kiểm tra suggestions đủ
-    empty_pids = [pid for pid in controlled if not (tab._suggestions.get(pid) or [])]
+    empty_pids = [pid for pid in controlled if not _auto_rows(tab, pid)]
     if empty_pids:
         _logger.info("[INTERNAL-BALANCE] skip: suggestions rong cho %s", empty_pids)
         return None
@@ -517,7 +517,7 @@ def build_internal_sap_ham_plan(tab, context: AutoRoomContext) -> Optional[AutoP
         )
         return None
 
-    empty_pids = [pid for pid in controlled if not (tab._suggestions.get(pid) or [])]
+    empty_pids = [pid for pid in controlled if not _auto_rows(tab, pid)]
     if empty_pids:
         _logger.info("[INTERNAL-SAP-HAM] skip: suggestions rong cho %s", empty_pids)
         return None
@@ -555,6 +555,13 @@ def _is_playable(tab, s: Optional[dict]) -> bool:
     )
 
 
+def _auto_rows(tab, pid: str) -> List[dict]:
+    rendered = list((getattr(tab, "_suggestions_render", {}) or {}).get(pid) or [])
+    if rendered:
+        return rendered
+    return list((getattr(tab, "_suggestions", {}) or {}).get(pid) or [])
+
+
 def _score_suggestion_vs_opp(
     s: dict,
     opp: dict,
@@ -575,7 +582,7 @@ def _score_suggestion_vs_opp(
 
 
 def _best_normal_for_pid(tab, pid: str, opp: dict) -> Optional[Tuple[int, dict, Tuple[int, int, int, int]]]:
-    base_suggs = list(tab._suggestions.get(pid) or [])
+    base_suggs = _auto_rows(tab, pid)
     if not base_suggs:
         return None
 
@@ -595,7 +602,7 @@ def _best_normal_for_pid(tab, pid: str, opp: dict) -> Optional[Tuple[int, dict, 
 
 def _best_special_for_pid(tab, pid: str, opp: dict) -> Optional[Tuple[int, dict, Tuple[int, int, int, int]]]:
     """Return the reportable special row if its worker-built 5-5-3 split exists."""
-    base_suggs = list(tab._suggestions.get(pid) or [])
+    base_suggs = _auto_rows(tab, pid)
     for idx, sug in enumerate(base_suggs):
         try:
             is_special = tab._is_special_row(sug)
@@ -671,7 +678,7 @@ def _has_any_special(tab) -> bool:
                     return True
             except Exception:
                 pass
-        for suggestion in list(tab._suggestions.get(pid) or []):
+        for suggestion in _auto_rows(tab, pid):
             try:
                 if tab._is_special_row(suggestion):
                     return True
@@ -795,8 +802,8 @@ def build_best_plan_for_opp(
 
     combo = find_sap_lang_combo(
         suggestions_by_pid={
-            pid: list(tab._build_render_suggestions(list(tab._suggestions.get(pid) or []), opp) or [])
-            + list(tab._suggestions.get(pid) or [])
+            pid: list(tab._build_render_suggestions(_auto_rows(tab, pid), opp) or [])
+            + _auto_rows(tab, pid)
             for pid in PROFILES
         },
         ws_codes_by_pid={pid: list(tab._codes_slot_order.get(pid) or []) for pid in PROFILES},
@@ -879,8 +886,8 @@ def build_money_fallback_plan(tab, profile_ids=None) -> Optional[AutoPlayPlan]:
     """
     Build an OPP-free safety plan for every ready profile.
 
-    Prefer a reportable special hand. Otherwise use the exact Money split
-    captured during that profile's normal arranger scan.
+    Prefer a reportable special hand. Otherwise use the Auto split selected
+    from that profile's final suggestion list.
     """
     selected_index: Dict[str, int] = {}
     suggestions: Dict[str, dict] = {}
@@ -899,7 +906,7 @@ def build_money_fallback_plan(tab, profile_ids=None) -> Optional[AutoPlayPlan]:
             except Exception:
                 pass
 
-        rows = list(tab._suggestions.get(pid) or [])
+        rows = _auto_rows(tab, pid)
         picked = None
         report_binh = False
         for idx, sug in enumerate(rows):
@@ -956,9 +963,9 @@ def build_auto_play_plan(
     *,
     allow_intentional_foul: bool = False,
 ) -> Optional[AutoPlayPlan]:
-    """Use the protected OPP Auto Money suggestion, then return the best response."""
+    """Use the protected OPP Auto suggestion, then return the best response."""
     # Keep max_opp in the public signature for compatibility with the existing
-    # StrategyTab caller. Auto Play now intentionally benchmarks one Money row.
+    # StrategyTab caller. Auto Play now intentionally benchmarks one final-list OPP row.
     del max_opp
     opp_candidate: Optional[Tuple[int, dict]] = None
     for idx, opp in enumerate(list(tab._ngu_suggestions or [])):
@@ -984,7 +991,7 @@ def build_auto_play_plan(
 
     full_ready = full_has_no_prior_apply and all(
         len(list(tab._codes_slot_order.get(pid) or [])) == 13
-        and bool(tab._suggestions.get(pid) or [])
+        and bool(_auto_rows(tab, pid))
         for pid in PROFILES
     )
     idx, opp = opp_candidate

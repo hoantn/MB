@@ -89,7 +89,7 @@ def pick_default_suggestion(suggestions: List[dict]) -> int:
     if not suggestions:
         return 0
     for i, s in enumerate(suggestions):
-        if str(s.get("mode", "")).lower() == "money":
+        if s.get("_auto_profile_money") or s.get("_auto_opp_money"):
             return i
     return 0
 

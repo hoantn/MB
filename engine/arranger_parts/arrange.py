@@ -588,8 +588,31 @@ def arrange_13_cards(
         part_chi3 = pad(p3, 1) + pad(s3, 3)
         part_chi2 = pad(p2, 2) + pad(s2, 5)
         part_chi1 = pad(p1, 2) + pad(s1, 5)
+        real_hand_gain = pad(p3, 1) + pad(p2, 2)
+        trash_distribution = pad(s3, 3) + pad(s2, 5) + part_chi1
 
-        base_style = part_chi3 + part_chi2 + part_chi1
+        def protected_bottom_run_strength() -> List[int]:
+            """
+            When the bottom hand is a straight/flush/straight-flush, keep its
+            real strength ahead of trash distribution. Otherwise the style
+            sorter can pick a lower straight/flush only to move a high card into
+            another chi as a kicker.
+            """
+            e1 = _eval5(idx1)
+            hand_type, detail = e1
+            if hand_type not in (4, 5, 8):
+                return []
+            return [hand_type] + pad(list(detail), 5)
+
+        bottom_run = protected_bottom_run_strength()
+        if bottom_run:
+            # Same-template flush/straight overflow should protect the bottom
+            # run from pure trash/kicker swaps, but not from real gains such as
+            # improving a top/middle pair. Example: use a lower flush card to
+            # free T and upgrade chi3 from pair 5 to pair T.
+            base_style = real_hand_gain + bottom_run + trash_distribution
+        else:
+            base_style = part_chi3 + part_chi2 + part_chi1
         if not overflow_context:
             return [1] + base_style
 

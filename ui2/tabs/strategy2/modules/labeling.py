@@ -112,6 +112,11 @@ class Labeling:
             f'<span style="color:{c3}; font-weight:900;">{ic3}{n3}</span>'
         )
 
+    def auto_prefix_html(self, s: dict) -> str:
+        if s.get("_auto_profile_money") or s.get("_auto_opp_money"):
+            return '<span style="color:#fbbf24; font-weight:900;">[Auto]</span> '
+        return ""
+
     # =================== Label helpers (standardized) ===================
     def fmt_delta(self, d: int) -> str:
         """Generic delta: supports any int, but P uses -1/0/+1."""
@@ -237,8 +242,9 @@ class Labeling:
         seg1 = f'<span style="color:{c1}; font-weight:900;">{ic1}{n1}</span>'
         seg2 = f'<span style="color:{c2}; font-weight:900;">{ic2}{n2}</span>'
         seg3 = f'<span style="color:{c3}; font-weight:900;">{ic3}{n3}</span>'
+        auto_prefix = self.auto_prefix_html(s)
         if not opp:
-            return f"{seg1} {seg2} {seg3}"
+            return f"{auto_prefix}{seg1} {seg2} {seg3}"
 
         d1 = self.compare_chi(chi1, list(opp.get("chi1_codes") or []), 1)
         d2 = self.compare_chi(chi2, list(opp.get("chi2_codes") or []), 2)
@@ -278,7 +284,7 @@ class Labeling:
         else:
             suffix = f" {self.fmt_total(eff_total)}"
 
-        return f"{seg1} {seg2} {seg3}{suffix}"
+        return f"{auto_prefix}{seg1} {seg2} {seg3}{suffix}"
 
     def _has_playable_split(self, s: Optional[dict]) -> bool:
         if not s:
@@ -329,11 +335,7 @@ class Labeling:
         seg1 = f'<span style="color:{c1}; font-weight:900;">{ic1}{n1}</span>'
         seg2 = f'<span style="color:{c2}; font-weight:900;">{ic2}{n2}</span>'
         seg3 = f'<span style="color:{c3}; font-weight:900;">{ic3}{n3}</span>'
-        auto_prefix = (
-            '<span style="color:#fbbf24; font-weight:900;">[Auto]</span> '
-            if ngu_s.get("_auto_opp_money")
-            else ""
-        )
+        auto_prefix = self.auto_prefix_html(ngu_s)
 
         d1 = d2 = d3 = 0
         any_seen = False
