@@ -472,8 +472,8 @@
       "mini_as_window": true
     },
     "apply": {
-      "delay_between_drag_ms": 25,
-      "drag_duration_ms": 60,
+      "delay_between_drag_ms": 10,
+      "drag_duration_ms": 10,
       "double_pass": true,
       "double_pass_gap_ms": 4000,
       "layout606_timeout_retry_count": 1,
@@ -521,16 +521,16 @@
     "browser_window_positions": {
       "tool1": {
         "P2": {
-          "x": -1500,
-          "y": 17
+          "x": -668,
+          "y": -207
         },
         "P3": {
-          "x": -1079,
-          "y": 17
+          "x": -883,
+          "y": 45
         },
         "P1": {
-          "x": -1922,
-          "y": 17
+          "x": -1089,
+          "y": -206
         }
       }
     },
@@ -546,9 +546,9 @@
       "manage_chrome_by_tool": true
     },
     "auto_play_capital": {
-      "P1": 100000,
-      "P2": 9739,
-      "P3": 207722
+      "P1": 200000,
+      "P2": 200000,
+      "P3": 200000
     }
   },
   "profiles": {
@@ -564,29 +564,6 @@
         "tmproxy_api_key": "fcb86c608fc5ddaacefb3c2f815742ee",
         "tmproxy_type": "https",
         "proxyno1_api_key": "wQXFse4PmbA82MHi0C6MnB1780375586",
-        "provider": "proxyno1",
-        "proxyno1_last_status_at": "2026-06-12T12:23:24",
-        "proxyno1_last_status_msg": "Thành công"
-      },
-      "window": {
-        "width": 1280,
-        "height": 780,
-        "scale_percent": 34
-      },
-      "target_url": "https://play.top88.vc/?a=LT8"
-    },
-    "P2": {
-      "name": "Profile 2",
-      "chrome_path": "D:/Users/PC GAMING/Downloads/goc",
-      "user_data_dir": "",
-      "proxy": {
-        "host": "http://hydc1.proxyno1.com",
-        "port": 54954,
-        "username": "jfgrxy",
-        "password": "TmlQphOL",
-        "tmproxy_api_key": "0dbaaf04399cac6331792cf50b32a901",
-        "tmproxy_type": "https",
-        "proxyno1_api_key": "z1VRf8msFfQrDBY4KT3RUl1780375585",
         "provider": "proxyno1"
       },
       "window": {
@@ -594,7 +571,28 @@
         "height": 780,
         "scale_percent": 34
       },
-      "target_url": "https://web.yo88.st/?a=yo88win"
+      "target_url": "https://play.top88.si/?a=LT8"
+    },
+    "P2": {
+      "name": "Profile 2",
+      "chrome_path": "D:/Users/PC GAMING/Downloads/goc",
+      "user_data_dir": "",
+      "proxy": {
+        "host": "",
+        "port": 0,
+        "username": "",
+        "password": "",
+        "tmproxy_api_key": "0dbaaf04399cac6331792cf50b32a901",
+        "tmproxy_type": "https",
+        "proxyno1_api_key": "z1VRf8msFfQrDBY4KT3RUl1780375585",
+        "provider": "none"
+      },
+      "window": {
+        "width": 1280,
+        "height": 780,
+        "scale_percent": 34
+      },
+      "target_url": "https://play.vic.singles/?a=mswl_422687af00955c6f6207d6fd054ab9f8"
     },
     "P3": {
       "name": "Profile 3",
@@ -615,7 +613,7 @@
         "height": 780,
         "scale_percent": 34
       },
-      "target_url": "https://play.ricwin.tw/?a=RIC001"
+      "target_url": "https://play.ricwin.ac/?a=RIC001"
     }
   },
   "capture": {

@@ -122,7 +122,7 @@
     },
     "apply": {
       "delay_between_drag_ms": 10,
-      "drag_duration_ms": 120,
+      "drag_duration_ms": 10,
       "double_pass": true,
       "double_pass_gap_ms": 4000,
       "layout606_timeout_retry_count": 1,

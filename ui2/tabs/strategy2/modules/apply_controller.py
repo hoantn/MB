@@ -2,15 +2,17 @@ from __future__ import annotations
 
 from collections import Counter
 import threading
+import time
 
 from PySide6.QtCore import QTimer, QThread
 from PySide6.QtWidgets import QMessageBox
 
 from core.apply_trace import apply_trace
 from core.logger import log
+from ui2.bridge.ws_layout_store import ws_layout_store
 from ui2.tabs.dashboard.dashboard_scan_worker import ScanWorker
 from ui2.tabs.strategy2.modules.layout_verifier import scan_layout_fresh
-from ui2.tabs.strategy2.modules.apply_manual import apply_manual_dashboard_style
+from ui2.tabs.strategy2.modules.manual_apply_flow import apply_manual_copy_style
 
 
 class ApplyController:
@@ -85,7 +87,7 @@ class ApplyController:
                     if not self._is_current_snapshot(tab, ctx):
                         log.warning("[Strategy2] Skip stale manual combo snapshot pid=%s", pid)
                         return
-                    apply_manual_dashboard_style(
+                    apply_manual_copy_style(
                         tab=tab,
                         profile_id=pid,
                         ws_codes=list(ctx.get("ws_codes") or []),
@@ -159,7 +161,7 @@ class ApplyController:
             if not self._prepare_manual_apply(tab, [pid]):
                 return
 
-            apply_manual_dashboard_style(
+            apply_manual_copy_style(
                 tab=tab,
                 profile_id=pid,
                 ws_codes=list(ws_codes),
@@ -201,8 +203,108 @@ class ApplyController:
     # -----------------------
 
     def refresh_slot_order_by_scan(self, tab, profile_id: str) -> None:
-        """WS-only mode: cmd=606 owns post-apply layout sync."""
-        apply_trace("refresh_scan_skip_ws_only", str(profile_id))
+        """Refresh current layout for manual apply.
+
+        MB-Copy used image scan here. This repo is WS-only, so the equivalent
+        real-layout source is cmd=606 in ws_layout_store. Keep cmd=600-owned
+        _codes_slot_order untouched.
+        """
+        pid = str(profile_id)
+        apply_trace("refresh_606_enter", pid)
+        try:
+            running = tab._scan_threads.get(pid)
+            if running is not None and getattr(running, "is_alive", lambda: False)():
+                apply_trace("refresh_606_skip_running", pid)
+                return None
+        except Exception:
+            pass
+
+        def _sync_from_606() -> None:
+            try:
+                store = getattr(tab, "_layout_store", ws_layout_store)
+                after_sequence = 0
+                try:
+                    after_sequence = int(store.latest_sequence(pid))
+                except Exception:
+                    after_sequence = 0
+                started_at = time.time()
+                expected_generation = None
+                try:
+                    expected_generation = int(store.hand_generation(pid))
+                except Exception:
+                    expected_generation = None
+
+                snapshot = None
+                try:
+                    snapshot = store.wait_for_newer(
+                        pid,
+                        after_sequence=after_sequence,
+                        after_event_at=started_at - 0.05,
+                        timeout_s=1.0,
+                        expected_hand_generation=expected_generation,
+                    )
+                except Exception:
+                    snapshot = None
+
+                if snapshot is None:
+                    try:
+                        latest = store.latest_snapshot(pid)
+                        if latest is not None:
+                            received_at = float(getattr(latest, "received_at", 0.0) or 0.0)
+                            if received_at >= started_at - 0.25:
+                                snapshot = latest
+                    except Exception:
+                        snapshot = None
+
+                if snapshot is None:
+                    apply_trace("refresh_606_no_result", pid)
+                    return
+
+                codes = list(getattr(snapshot, "cards", None) or [])
+                ws_codes = list((getattr(tab, "_codes_slot_order", {}) or {}).get(pid) or [])
+                if len(codes) != 13:
+                    apply_trace("refresh_606_bad_result", pid, result_len=len(codes))
+                    return
+                if len(ws_codes) == 13 and Counter(map(str, codes)) != Counter(map(str, ws_codes)):
+                    apply_trace("refresh_606_hand_mismatch", pid)
+                    return
+
+                def _apply_result() -> None:
+                    try:
+                        tab._layout_codes[pid] = list(codes)
+                        if hasattr(tab, "_layout_uncertain"):
+                            tab._layout_uncertain.pop(pid, None)
+                        if getattr(tab, "active_profile", None) == pid:
+                            tab.view.set_cards_p_normalized(list(codes))
+                        apply_trace(
+                            "refresh_606_result",
+                            pid,
+                            result_len=len(codes),
+                            seq=getattr(snapshot, "sequence", None),
+                        )
+                    except Exception:
+                        log.exception("[Strategy2] refresh 606 result handler error pid=%s", pid)
+
+                try:
+                    tab.ui_call.emit(_apply_result)
+                except Exception:
+                    _apply_result()
+            except Exception as exc:
+                apply_trace("refresh_606_exception", pid, error=str(exc))
+                log.exception("[Strategy2] refresh 606 failed pid=%s: %s", pid, exc)
+            finally:
+                try:
+                    tab._scan_threads.pop(pid, None)
+                except Exception:
+                    pass
+                apply_trace("refresh_606_cleanup", pid)
+
+        if not hasattr(tab, "_scan_threads"):
+            tab._scan_threads = {}
+        thread = threading.Thread(target=_sync_from_606, name=f"MB-Strategy2-Refresh606-{pid}", daemon=True)
+        tab._scan_threads[pid] = thread
+        apply_trace("refresh_606_thread_start", pid)
+        thread.start()
         return None
 
     def refresh_slot_order_by_scan_fresh(self, tab, profile_id: str) -> None:

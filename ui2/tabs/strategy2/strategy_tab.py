@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
+from collections import Counter
 import hashlib
 import threading
 import queue
@@ -28,6 +29,7 @@ from .strategy_view import StrategyView
 from .strategy_suggest_worker import build_suggestions_for_codes
 from .strategy_suggest import pick_default_suggestion
 from .auto_suggestion_picker import mark_auto_suggestion
+from .auto_choice_rules import save_rule
 from .strategy_anti_sap import build_anti_sap_suggestions
 from .strategy_combo_sap_lang import find_sap_lang_combo, SapLangCombo
 from .strategy_special13 import detect_special_13  # FIX: use separated module
@@ -183,6 +185,10 @@ class StrategyTab(QWidget):
         self.view.profile_changed.connect(self._on_profile_switch)
         self.view.p_label_clicked.connect(self._on_p_label_clicked)
         self.view.ngu_label_clicked.connect(self._on_ngu_label_clicked)
+        if hasattr(self.view, "p_auto_rule_requested"):
+            self.view.p_auto_rule_requested.connect(self._on_p_auto_rule_requested)
+        if hasattr(self.view, "ngu_auto_rule_requested"):
+            self.view.ngu_auto_rule_requested.connect(self._on_ngu_auto_rule_requested)
         self.view.btn_hup.clicked.connect(lambda: self._on_apply(self.active_profile))
         self.view.apply_all_clicked.connect(self._on_apply_all)
         self.view.break_sap_lang_clicked.connect(self._on_break_sap_lang)
@@ -200,6 +206,9 @@ class StrategyTab(QWidget):
         self._hand_generation: Dict[str, int] = {pid: 0 for pid in self.profiles}
 
         self._layout_codes: Dict[str, List[str]] = {}
+        self._manual_layout_codes: Dict[str, List[str]] = {}
+        self._manual_layout_locked_after_apply: Dict[str, bool] = {}
+        self._manual_apply_epoch: Dict[str, int] = {}
 
         self._suggestions: Dict[str, List[dict]] = {pid: [] for pid in self.profiles}
         self._suggestions_render: Dict[str, List[dict]] = {pid: [] for pid in self.profiles}
@@ -212,8 +221,8 @@ class StrategyTab(QWidget):
         self._sap_lang_combo: Optional[SapLangCombo] = None
         self._auto_play_enabled: bool = False
         self._auto_play_remaining: int = 0
-        self._auto_play_delay_min_ms: int = 8000
-        self._auto_play_delay_max_ms: int = 18000
+        self._auto_play_delay_min_ms: int = 2000
+        self._auto_play_delay_max_ms: int = 5000
         self._auto_play_hand_key: Optional[str] = None
         self._auto_play_pending_key: Optional[str] = None
         self._auto_play_applied_profile_keys = set()
@@ -269,12 +278,17 @@ class StrategyTab(QWidget):
         self._ws_timer.start()
 
         self._apply_threads: Dict[str, threading.Thread] = {}
+        self._manual_apply_threads: Dict[str, threading.Thread] = {}
         self._scan_threads: Dict[str, QThread] = {}
         # WS freeze window: chặn same-hand update trong lúc kéo
         self._ws_freeze: Dict[str, bool] = {}
+        self._manual_ws_freeze: Dict[str, bool] = {}
+        self._manual_apply_busy: Dict[str, bool] = {pid: False for pid in (self.profiles + ["NGU"])}
 
         # Pending same-hand snapshot (khi ws_freeze hoặc busy)
         self._pending_ws_samehand: Dict[str, List[str]] = {}
+        self._manual_pending_ws_reset: Dict[str, List[str]] = {}
+        self._manual_pending_ws_samehand: Dict[str, List[str]] = {}
 
         self._labeling = Labeling()
         self._labeling.set_cache_limits(chi_type_cache_limit=5000, cmp_cache_limit=8000)
@@ -650,6 +664,7 @@ class StrategyTab(QWidget):
             render_suggs,
             policy="self",
             is_special_row=self._is_special_row,
+            hand_codes=list(self._codes_slot_order.get(pid) or []),
         )
 
         # Compute label_html for top items only (CPU guard)
@@ -742,6 +757,29 @@ class StrategyTab(QWidget):
             pass
 
 
+    def _manual_layout_is_locked(self, pid: str) -> bool:
+        try:
+            return bool((getattr(self, "_manual_layout_locked_after_apply", {}) or {}).get(str(pid), False))
+        except Exception:
+            return False
+
+    def _invalidate_manual_apply_layout(self, pid: str) -> None:
+        pid = str(pid)
+        try:
+            locked = getattr(self, "_manual_layout_locked_after_apply", None)
+            if isinstance(locked, dict):
+                locked.pop(pid, None)
+        except Exception:
+            pass
+        try:
+            epochs = getattr(self, "_manual_apply_epoch", None)
+            if not isinstance(epochs, dict):
+                self._manual_apply_epoch = {}
+                epochs = self._manual_apply_epoch
+            epochs[pid] = int(epochs.get(pid, 0) or 0) + 1
+        except Exception:
+            pass
+
     def _apply_pending_ws_reset_if_any(self, pid: str) -> None:
         """Nếu WS đến đúng lúc đang apply (busy), hoãn reset và apply sau khi apply xong."""
         pend = getattr(self, "_pending_ws_reset", None)
@@ -750,12 +788,31 @@ class StrategyTab(QWidget):
         codes = pend.pop(pid, None)
 
         if codes and isinstance(codes, list) and len(codes) == 13:
+            self._invalidate_manual_apply_layout(pid)
+            for attr in ("_pending_ws_samehand", "_manual_pending_ws_samehand"):
+                try:
+                    pending_samehand = getattr(self, attr, None)
+                    if isinstance(pending_samehand, dict):
+                        pending_samehand.pop(pid, None)
+                except Exception:
+                    pass
             # áp dụng lại như một WS update "force"
             self._force_reset_pid_state(pid)
             self._hand_generation[pid] = int(self._hand_generation.get(pid, 0) or 0) + 1
             self._last_hand_hash[pid] = self._hand_hash(codes)
             self._codes_slot_order[pid] = list(codes)
             self._layout_codes[pid] = list(codes)
+            try:
+                if not hasattr(self, "_manual_layout_codes"):
+                    self._manual_layout_codes = {}
+                self._manual_layout_codes[pid] = list(codes)
+            except Exception:
+                pass
+            try:
+                if hasattr(self, "_layout_uncertain"):
+                    self._layout_uncertain.pop(pid, None)
+            except Exception:
+                pass
             if pid == self.active_profile:
                 self.view.set_cards_p_normalized(list(codes))
                 self.view.set_p_status("Đang tính gợi ý…")
@@ -776,6 +833,18 @@ class StrategyTab(QWidget):
         # Do not mutate _codes_slot_order; it is the cmd=600 hand base used by
         # suggestions, NGU derivation and Auto strategy.
         self._layout_codes[pid] = list(codes)
+        if not self._manual_layout_is_locked(pid):
+            try:
+                if not hasattr(self, "_manual_layout_codes"):
+                    self._manual_layout_codes = {}
+                self._manual_layout_codes[pid] = list(codes)
+            except Exception:
+                pass
+        try:
+            if hasattr(self, "_layout_uncertain"):
+                self._layout_uncertain.pop(pid, None)
+        except Exception:
+            pass
 
         if pid == self.active_profile:
             try:
@@ -786,6 +855,58 @@ class StrategyTab(QWidget):
             except Exception:
                 pass
         log.debug("[WS SAME HAND] layout synced pid=%s first3=%s", pid, list(codes)[:3])
+
+    def _apply_manual_pending_ws_reset_if_any(self, pid: str) -> None:
+        try:
+            codes = (getattr(self, "_manual_pending_ws_reset", {}) or {}).pop(pid, None)
+        except Exception:
+            codes = None
+
+        if not (codes and isinstance(codes, list) and len(codes) == 13):
+            return
+
+        self._invalidate_manual_apply_layout(pid)
+        try:
+            samehand = getattr(self, "_manual_pending_ws_samehand", None)
+            if isinstance(samehand, dict):
+                samehand.pop(pid, None)
+        except Exception:
+            pass
+
+        try:
+            if not hasattr(self, "_manual_layout_codes"):
+                self._manual_layout_codes = {}
+            self._manual_layout_codes[pid] = list(codes)
+        except Exception:
+            pass
+
+    def _apply_manual_pending_ws_samehand_if_any(self, pid: str) -> None:
+        try:
+            codes = (getattr(self, "_manual_pending_ws_samehand", {}) or {}).pop(pid, None)
+        except Exception:
+            codes = None
+
+        if not (codes and isinstance(codes, list) and len(codes) == 13):
+            return
+
+        if self._manual_layout_is_locked(pid):
+            log.debug("[WS SAME HAND] manual layout kept after apply pid=%s first3=%s", pid, list(codes)[:3])
+            return
+
+        try:
+            if not hasattr(self, "_manual_layout_codes"):
+                self._manual_layout_codes = {}
+            self._manual_layout_codes[pid] = list(codes)
+        except Exception:
+            pass
+
+        if pid == self.active_profile:
+            try:
+                if not (self._suggestions_render.get(pid) or self._suggestions.get(pid)):
+                    self.view.set_cards_p_normalized(list(codes))
+            except Exception:
+                pass
+        log.debug("[WS SAME HAND] manual layout synced pid=%s first3=%s", pid, list(codes)[:3])
 
     def _poll_ws(self) -> None:
         updates, waiting = self._ws_ingest.poll(
@@ -804,14 +925,17 @@ class StrategyTab(QWidget):
         # Defensive: busy map exists only after first _apply_btn_set_busy call
         busy_map = getattr(self, "_apply_busy", None) or {}
         freeze_map = getattr(self, "_ws_freeze", None) or {}
+        manual_busy_map = getattr(self, "_manual_apply_busy", None) or {}
+        manual_freeze_map = getattr(self, "_manual_ws_freeze", None) or {}
 
         for up in updates:
             pid = up.pid
             log.warning(
-                "[WS->Strategy] pid=%s is_new_hand=%s busy=%s hand_hash=%s last_hash=%s first3=%s",
+                "[WS->Strategy] pid=%s is_new_hand=%s busy=%s manual_busy=%s hand_hash=%s last_hash=%s first3=%s",
                 up.pid,
                 up.is_new_hand,
                 busy_map.get(up.pid, False),
+                manual_busy_map.get(up.pid, False),
                 up.hand_hash[:6],
                 (self._last_hand_hash.get(up.pid)[:6] if self._last_hand_hash.get(up.pid) else None),
                 up.codes_slot_order[:3],
@@ -827,17 +951,41 @@ class StrategyTab(QWidget):
             self._ws_snapshot[pid] = list(up.raw_cards)
 
             # HƯỚNG A: Nếu đang apply => hoãn reset (pending), không đụng state ngay
-            if busy_map.get(pid, False) or freeze_map.get(pid, False):
+            auto_blocked = bool(busy_map.get(pid, False) or freeze_map.get(pid, False))
+            manual_blocked = bool(manual_busy_map.get(pid, False) or manual_freeze_map.get(pid, False))
+            if auto_blocked or manual_blocked:
                 if up.is_new_hand:
                     if not hasattr(self, "_pending_ws_reset"):
                         self._pending_ws_reset = {}
                     self._pending_ws_reset[pid] = list(codes)
+                    try:
+                        samehand = getattr(self, "_pending_ws_samehand", None)
+                        if isinstance(samehand, dict):
+                            samehand.pop(pid, None)
+                    except Exception:
+                        pass
                     log.warning("[WS PENDING RESET] pid=%s (busy/freeze) first3=%s", pid, codes[:3])
+                    if manual_blocked:
+                        if not hasattr(self, "_manual_pending_ws_reset"):
+                            self._manual_pending_ws_reset = {}
+                        self._manual_pending_ws_reset[pid] = list(codes)
+                        try:
+                            manual_samehand = getattr(self, "_manual_pending_ws_samehand", None)
+                            if isinstance(manual_samehand, dict):
+                                manual_samehand.pop(pid, None)
+                        except Exception:
+                            pass
                 else:
-                    if not hasattr(self, "_pending_ws_samehand"):
-                        self._pending_ws_samehand = {}
-                    self._pending_ws_samehand[pid] = list(codes)
-                    log.warning("[WS PENDING SAMEHAND] pid=%s (busy/freeze) first3=%s", pid, codes[:3])
+                    if auto_blocked:
+                        if not hasattr(self, "_pending_ws_samehand"):
+                            self._pending_ws_samehand = {}
+                        self._pending_ws_samehand[pid] = list(codes)
+                        log.warning("[WS PENDING SAMEHAND] pid=%s (auto busy/freeze) first3=%s", pid, codes[:3])
+                    if manual_blocked:
+                        if not hasattr(self, "_manual_pending_ws_samehand"):
+                            self._manual_pending_ws_samehand = {}
+                        self._manual_pending_ws_samehand[pid] = list(codes)
+                        log.warning("[WS PENDING SAMEHAND] pid=%s (manual busy/freeze) first3=%s", pid, codes[:3])
                 continue
 
             # HƯỚNG A: WS 13 lá => reset tuyệt đối + set cards + trigger compute
@@ -849,12 +997,24 @@ class StrategyTab(QWidget):
 
             if up.is_new_hand:
                 log.warning("[WS FORCE RESET] pid=%s first3=%s", pid, codes[:3])
+                self._invalidate_manual_apply_layout(pid)
                 self._force_reset_pid_state(pid)
                 self._hand_generation[pid] = int(self._hand_generation.get(pid, 0) or 0) + 1
                 self._last_hand_hash[pid] = up.hand_hash
 
                 self._codes_slot_order[pid] = list(codes)
                 self._layout_codes[pid] = list(codes)
+                try:
+                    if not hasattr(self, "_manual_layout_codes"):
+                        self._manual_layout_codes = {}
+                    self._manual_layout_codes[pid] = list(codes)
+                except Exception:
+                    pass
+                try:
+                    if hasattr(self, "_layout_uncertain"):
+                        self._layout_uncertain.pop(pid, None)
+                except Exception:
+                    pass
 
                 if pid == self.active_profile:
                     self.view.set_cards_p_normalized(list(codes))
@@ -869,6 +1029,18 @@ class StrategyTab(QWidget):
                 # Keep _codes_slot_order as the cmd=600 hand base so 606 cannot
                 # perturb suggestions, NGU derivation or Auto strategy.
                 self._layout_codes[pid] = list(codes)
+                if not self._manual_layout_is_locked(pid):
+                    try:
+                        if not hasattr(self, "_manual_layout_codes"):
+                            self._manual_layout_codes = {}
+                        self._manual_layout_codes[pid] = list(codes)
+                    except Exception:
+                        pass
+                try:
+                    if hasattr(self, "_layout_uncertain"):
+                        self._layout_uncertain.pop(pid, None)
+                except Exception:
+                    pass
                 if pid == self.active_profile:
                     try:
                         if self._suggestions_render.get(pid) or self._suggestions.get(pid):
@@ -1012,7 +1184,8 @@ class StrategyTab(QWidget):
     def _on_apply(self, pid: str):
         try:
             busy = (getattr(self, "_apply_busy", {}) or {}).get(pid, False)
-            log.warning("[APPLY CLICK] pid=%s busy=%s", pid, busy)
+            manual_busy = (getattr(self, "_manual_apply_busy", {}) or {}).get(pid, False)
+            log.warning("[APPLY CLICK] pid=%s busy=%s manual_busy=%s", pid, busy, manual_busy)
         except Exception:
             pass
         return self._apply_controller.on_apply(self, pid)
@@ -1040,12 +1213,14 @@ class StrategyTab(QWidget):
         if not requested:
             return False
 
-        running_requested = [
-            str(pid)
-            for pid, worker in (getattr(self, "_apply_threads", {}) or {}).items()
-            if str(pid) in requested
-            if worker is not None and getattr(worker, "is_alive", lambda: False)()
-        ]
+        running_requested = []
+        for thread_map_name in ("_apply_threads", "_manual_apply_threads"):
+            for pid, worker in (getattr(self, thread_map_name, {}) or {}).items():
+                if str(pid) not in requested:
+                    continue
+                if worker is not None and getattr(worker, "is_alive", lambda: False)():
+                    running_requested.append(str(pid))
+        running_requested = sorted(set(running_requested))
         if running_requested:
             self._auto_play_log(
                 f"Bỏ thao tác tay vì đang xếp: {','.join(sorted(running_requested))}."
@@ -1125,7 +1300,7 @@ class StrategyTab(QWidget):
         except Exception:
             log.exception("[AUTO-PLAY] missing 3P alert check failed")
 
-    def set_auto_play(self, enabled: bool, rounds: int = 0, delay_min_ms: int = 8000, delay_max_ms: int = 18000) -> None:
+    def set_auto_play(self, enabled: bool, rounds: int = 0, delay_min_ms: int = 2000, delay_max_ms: int = 5000) -> None:
         self._auto_play_session += 1
         self._auto_play_enabled = bool(enabled)
         self._auto_play_remaining = -1 if enabled else 0
@@ -1358,6 +1533,69 @@ class StrategyTab(QWidget):
         if self._auto_play_enabled:
             session = self._auto_play_session
             QTimer.singleShot(1000, lambda s=session: self._maybe_run_auto_play(s))
+
+    def _auto_replan_after_live_rule(self, *, context: str, pid: Optional[str] = None) -> None:
+        """Re-arm Auto Play after the user saves an AI rule for the current hand.
+
+        This is intentionally conservative: it never interrupts an active drag.
+        Pending timers are cancelled by bumping the Auto session, and only
+        non-busy profiles are released for a same-hand re-plan.
+        """
+        if not self._auto_play_enabled:
+            return
+
+        affected = list(self.profiles if str(context).lower() == "opp" else [str(pid or self.active_profile)])
+        busy_map = getattr(self, "_apply_busy", {}) or {}
+        rearmed: List[str] = []
+        skipped_busy: List[str] = []
+        skipped_failed: List[str] = []
+
+        for profile_id in affected:
+            if profile_id not in self.profiles:
+                continue
+            if len(list((self._codes_slot_order or {}).get(profile_id) or [])) != 13:
+                continue
+            profile_key = self._auto_profile_apply_key(profile_id)
+            state = (self._auto_play_reservations or {}).get(profile_key)
+
+            if bool(busy_map.get(profile_id, False)):
+                skipped_busy.append(profile_id)
+                continue
+            if state == "failed":
+                skipped_failed.append(profile_id)
+                continue
+
+            self._auto_play_reservations.pop(profile_key, None)
+            self._auto_play_applied_profile_keys.discard(profile_key)
+            try:
+                self._confirmed_apply_tokens.pop(profile_id, None)
+            except Exception:
+                pass
+            try:
+                self._auto_apply_unsafe_retry_counts.pop(profile_key, None)
+            except Exception:
+                pass
+            rearmed.append(profile_id)
+
+        if not rearmed:
+            if skipped_busy:
+                self._auto_play_log(
+                    f"Rule AI đã lưu, nhưng đang xếp {','.join(skipped_busy)}; áp dụng từ lượt kế tiếp."
+                )
+            elif skipped_failed:
+                self._auto_play_log(
+                    f"Rule AI đã lưu, nhưng {','.join(skipped_failed)} đang bị khóa lỗi ván này."
+                )
+            return
+
+        self._auto_play_session += 1
+        self._auto_play_hand_key = None
+        self._auto_play_pending_key = None
+        self._auto_play_log(
+            f"Rule AI: chọn lại gợi ý Auto cho {','.join(rearmed)} và lập kế hoạch lại."
+        )
+        session = self._auto_play_session
+        QTimer.singleShot(0, lambda s=session: self._maybe_run_auto_play(s))
 
     def _auto_is_waiting_for_ngu_suggestions(self) -> bool:
         """Keep the full 3P path alive while the derived OPP job is still pending."""
@@ -1893,6 +2131,7 @@ class StrategyTab(QWidget):
 
             active = str(getattr(self, "active_profile", "") or "")
             busy = bool((getattr(self, "_apply_busy", {}) or {}).get(active, False))
+            busy = busy or bool((getattr(self, "_manual_apply_busy", {}) or {}).get(active, False))
             if busy:
                 self.view.btn_hup.setEnabled(False)
                 return
@@ -1962,6 +2201,45 @@ class StrategyTab(QWidget):
         except Exception:
             pass
 
+    def _manual_apply_btn_set_busy(self, profile_id: str) -> None:
+        """UI hook for the isolated manual apply flow."""
+        log.warning("[MANUAL APPLY BUSY] pid=%s", profile_id)
+        try:
+            if not hasattr(self, "_manual_apply_busy"):
+                self._manual_apply_busy = {pid: False for pid in (self.profiles + ["NGU"])}
+            self._manual_apply_busy[str(profile_id)] = True
+            self._sync_apply_button_enabled()
+            if hasattr(self.view, "set_apply_button_busy"):
+                self.view.set_apply_button_busy(str(profile_id))
+        except Exception:
+            log.exception("[Strategy2] _manual_apply_btn_set_busy failed pid=%s", profile_id)
+
+    def _manual_apply_btn_set_default(self, profile_id: str) -> None:
+        """Restore UI state and apply delayed WS updates for manual apply."""
+        log.warning("[MANUAL APPLY DEFAULT] pid=%s", profile_id)
+        try:
+            if not hasattr(self, "_manual_apply_busy"):
+                self._manual_apply_busy = {pid: False for pid in (self.profiles + ["NGU"])}
+            self._manual_apply_busy[str(profile_id)] = False
+            self._sync_apply_button_enabled()
+            if hasattr(self.view, "set_apply_button_default"):
+                self.view.set_apply_button_default(str(profile_id))
+        except Exception:
+            log.exception("[Strategy2] _manual_apply_btn_set_default failed pid=%s", profile_id)
+
+        try:
+            self._apply_pending_ws_reset_if_any(str(profile_id))
+        except Exception:
+            pass
+        try:
+            self._apply_manual_pending_ws_reset_if_any(str(profile_id))
+        except Exception:
+            pass
+        try:
+            self._apply_manual_pending_ws_samehand_if_any(str(profile_id))
+        except Exception:
+            pass
+
     def _on_profile_switch(self, pid: str) -> None:
         if pid not in self.profiles:
             return
@@ -1996,6 +2274,24 @@ class StrategyTab(QWidget):
             self._rebuild_ngu_labels_html()
             self.view.set_ngu_labels(self._ngu_suggestions, self._ngu_selected_index)
 
+    def _on_p_auto_rule_requested(self, idx: int) -> None:
+        pid = self.active_profile
+        suggestions = list((self._suggestions_render or {}).get(pid) or [])
+        codes = list((self._codes_slot_order or {}).get(pid) or [])
+        ridx = int(idx)
+        if ridx < 0 or ridx >= len(suggestions) or len(codes) != 13:
+            log.warning("[AUTO-CHOICE] cannot save P rule pid=%s idx=%s cards=%s", pid, ridx, len(codes))
+            return
+        suggestion = suggestions[ridx]
+        if self._is_special_row(suggestion):
+            log.warning("[AUTO-CHOICE] skip special P rule pid=%s idx=%s", pid, ridx)
+            return
+        if save_rule(codes, suggestion):
+            self._selected_index[pid] = ridx
+            log.info("[AUTO-CHOICE] saved P rule pid=%s idx=%s", pid, ridx)
+            self._render_p_active()
+            self._auto_replan_after_live_rule(context="self", pid=pid)
+
     def _on_ngu_label_clicked(self, idx: int) -> None:
         ridx = int(idx)
 
@@ -2017,6 +2313,25 @@ class StrategyTab(QWidget):
         if self._ngu_suggestions:
             self._rebuild_ngu_labels_html()
             self.view.set_ngu_labels(self._ngu_suggestions, self._ngu_selected_index)
+
+    def _on_ngu_auto_rule_requested(self, idx: int) -> None:
+        suggestions = list(self._ngu_suggestions or [])
+        codes = list(self._ngu_base_codes or [])
+        ridx = int(idx)
+        if ridx < 0 or ridx >= len(suggestions) or len(codes) != 13:
+            log.warning("[AUTO-CHOICE] cannot save OPP rule idx=%s cards=%s", ridx, len(codes))
+            return
+        suggestion = suggestions[ridx]
+        if self._is_special_row(suggestion):
+            log.warning("[AUTO-CHOICE] skip special OPP rule idx=%s", ridx)
+            return
+        if save_rule(codes, suggestion):
+            self._ngu_selected_index = ridx
+            self._ngu_clicked_once = True
+            log.info("[AUTO-CHOICE] saved OPP rule idx=%s", ridx)
+            self._render_ngu()
+            self._render_p_active()
+            self._auto_replan_after_live_rule(context="opp")
     # =================== Manual retry P suggestions ===================
     def _on_p_retry_clicked(self) -> None:
         """Callback khi user click nút reset gợi ý P ACTIVE."""
@@ -2063,6 +2378,17 @@ class StrategyTab(QWidget):
         # Gán lại 13 lá cho slot-order + layout
         self._codes_slot_order[pid] = list(codes)
         self._layout_codes[pid] = list(codes)
+        try:
+            if not hasattr(self, "_manual_layout_codes"):
+                self._manual_layout_codes = {}
+            self._manual_layout_codes[pid] = list(codes)
+        except Exception:
+            pass
+        try:
+            if hasattr(self, "_layout_uncertain"):
+                self._layout_uncertain.pop(pid, None)
+        except Exception:
+            pass
 
         # Nếu đây là profile đang ACTIVE -> đồng bộ UI ngay
         if pid == self.active_profile:
@@ -2085,6 +2411,85 @@ class StrategyTab(QWidget):
     # ===== used by apply_suggestion_dashboard_style =====
     def refresh_slot_order_by_scan(self, profile_id: str) -> None:
         return self._apply_controller.refresh_slot_order_by_scan(self, profile_id)
+
+    def refresh_manual_slot_order(self, profile_id: str, apply_epoch: Optional[int] = None) -> None:
+        """Refresh manual-only layout cache from a fresh scan."""
+        pid = str(profile_id)
+        try:
+            if not hasattr(self, "_manual_scan_threads"):
+                self._manual_scan_threads = {}
+            running = self._manual_scan_threads.get(pid)
+            if running is not None and getattr(running, "is_alive", lambda: False)():
+                return
+        except Exception:
+            pass
+
+        def _epoch_is_current() -> bool:
+            if apply_epoch is None:
+                return True
+            try:
+                current = int((getattr(self, "_manual_apply_epoch", {}) or {}).get(pid, 0) or 0)
+                return current == int(apply_epoch)
+            except Exception:
+                return False
+
+        def _refresh() -> None:
+            codes = None
+            try:
+                if not _epoch_is_current():
+                    return
+
+                ws_codes = list((getattr(self, "_codes_slot_order", {}) or {}).get(pid) or [])
+
+                try:
+                    from .modules.layout_verifier import scan_layout_fresh
+
+                    result = scan_layout_fresh(pid, getattr(self, "capture_manager", None), lock_timeout_s=1.0)
+                    scanned = list(getattr(result, "codes", None) or []) if result is not None else []
+                    if len(scanned) == 13 and (
+                        len(ws_codes) != 13 or Counter(map(str, scanned)) == Counter(map(str, ws_codes))
+                    ):
+                        codes = list(scanned)
+                except Exception:
+                    codes = None
+
+                if not (isinstance(codes, list) and len(codes) == 13):
+                    return
+
+                if not _epoch_is_current():
+                    return
+
+                def _apply_result() -> None:
+                    try:
+                        if not _epoch_is_current():
+                            return
+                        if not hasattr(self, "_manual_layout_codes"):
+                            self._manual_layout_codes = {}
+                        self._manual_layout_codes[pid] = list(codes)
+                        if pid == self.active_profile:
+                            try:
+                                if not (self._suggestions_render.get(pid) or self._suggestions.get(pid)):
+                                    self.view.set_cards_p_normalized(list(codes))
+                            except Exception:
+                                pass
+                    except Exception:
+                        log.exception("[Strategy2] refresh_manual_slot_order apply failed pid=%s", pid)
+
+                try:
+                    self.ui_call.emit(_apply_result)
+                except Exception:
+                    _apply_result()
+            except Exception:
+                log.exception("[Strategy2] refresh_manual_slot_order failed pid=%s", pid)
+            finally:
+                try:
+                    self._manual_scan_threads.pop(pid, None)
+                except Exception:
+                    pass
+
+        thread = threading.Thread(target=_refresh, name=f"MB-Strategy2-ManualRefresh-{pid}", daemon=True)
+        self._manual_scan_threads[pid] = thread
+        thread.start()
      
     def _has_playable_split(self, sug: dict) -> bool:
         if not sug:

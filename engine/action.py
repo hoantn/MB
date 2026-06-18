@@ -100,7 +100,12 @@ def compute_target_codes(chi1: List[Card], chi2: List[Card], chi3: List[Card]) -
 
     return [card_to_code(c) for c in ordered_cards]
 
-def compute_moves(current_codes: List[str], target_codes: List[str], exact: bool = False) -> List[Tuple[int, int]]:
+def compute_moves(
+    current_codes: List[str],
+    target_codes: List[str],
+    exact: bool = False,
+    copy_style: bool = False,
+) -> List[Tuple[int, int]]:
     """
     Tính danh sách (src_idx, dst_idx) để biến current → target theo nguyên tắc:
 
@@ -166,8 +171,66 @@ def compute_moves(current_codes: List[str], target_codes: List[str], exact: bool
 
         return moves
 
+    def _compute_moves_copy_style(cur_codes: List[str], tgt_codes: List[str]) -> List[Tuple[int, int]]:
+        n_cur = len(cur_codes)
+        n_tgt = len(tgt_codes)
+        if n_cur != 13 or n_tgt != 13:
+            log.warning(
+                "compute_moves: kich thuoc current=%d, target=%d khong phai 13 -> dung thuat toan exact",
+                n_cur,
+                n_tgt,
+            )
+            return _compute_moves_exact(cur_codes, tgt_codes)
+        if set(cur_codes) != set(tgt_codes):
+            log.warning(
+                "compute_moves: tap la current va target khac nhau -> dung thuat toan exact",
+            )
+            return _compute_moves_exact(cur_codes, tgt_codes)
+
+        desired_chi: Dict[str, int] = {}
+        for idx, code in enumerate(tgt_codes):
+            desired_chi[code] = _index_to_chi(idx)
+
+        cur = list(cur_codes)
+        moves: List[Tuple[int, int]] = []
+        for i in range(13):
+            code_i = cur[i]
+            chi_cur = _index_to_chi(i)
+            chi_des = desired_chi.get(code_i, -1)
+            if chi_des == -1 or chi_cur == chi_des:
+                continue
+
+            j_candidate = None
+            for j in range(13):
+                if _index_to_chi(j) != chi_des:
+                    continue
+                code_j = cur[j]
+                chi_des_j = desired_chi.get(code_j, -1)
+                if chi_des_j != chi_des:
+                    j_candidate = j
+                    break
+
+            if j_candidate is None:
+                log.warning(
+                    "compute_moves: khong tim duoc doi tac swap cho la %s (i=%d, chi_cur=%d, chi_des=%d) -> fallback exact",
+                    code_i,
+                    i,
+                    chi_cur,
+                    chi_des,
+                )
+                remaining = _compute_moves_exact(cur, tgt_codes)
+                moves.extend(remaining)
+                return moves
+
+            moves.append((i, j_candidate))
+            cur[i], cur[j_candidate] = cur[j_candidate], cur[i]
+
+        return moves
+
     if exact:
         return _compute_moves_exact(current_codes, target_codes)
+    if copy_style:
+        return _compute_moves_copy_style(current_codes, target_codes)
 
     n_cur = len(current_codes)
     n_tgt = len(target_codes)
@@ -332,6 +395,9 @@ def apply_arrangement(
     delay_s: float = 0.0,
     use_exact: bool = False,
     use_fast_drag: bool = False,
+    use_copy_moves: bool = False,
+    drag_duration_s_override: float | None = None,
+    validate_runtime: bool = True,
 ):
     """
     Tự động kéo bài trên trình duyệt theo 3 chi đã sắp.
@@ -358,18 +424,19 @@ def apply_arrangement(
     cfg = load_config(_slot)
     game_region = get_game_region(profile_id, slot=_slot)
     slots = get_slots(profile_id, slot=_slot)
-    required_runtime_scopes = ("region",) + tuple(f"slot_{idx}" for idx in range(1, 14))
-    for runtime_scope in required_runtime_scopes:
-        runtime_ok, runtime_msg = validate_runtime_coordinates(browser_manager, profile_id, cfg, scope=runtime_scope)
-        if not runtime_ok:
-            apply_trace("arrange_runtime_mismatch", profile_id, scope=runtime_scope, detail=runtime_msg)
-            log.warning(
-                "apply_arrangement[%s]: runtime coordinates mismatch scope=%s, stop to avoid wrong drag: %s",
-                profile_id,
-                runtime_scope,
-                runtime_msg,
-            )
-            return None
+    if validate_runtime:
+        required_runtime_scopes = ("region",) + tuple(f"slot_{idx}" for idx in range(1, 14))
+        for runtime_scope in required_runtime_scopes:
+            runtime_ok, runtime_msg = validate_runtime_coordinates(browser_manager, profile_id, cfg, scope=runtime_scope)
+            if not runtime_ok:
+                apply_trace("arrange_runtime_mismatch", profile_id, scope=runtime_scope, detail=runtime_msg)
+                log.warning(
+                    "apply_arrangement[%s]: runtime coordinates mismatch scope=%s, stop to avoid wrong drag: %s",
+                    profile_id,
+                    runtime_scope,
+                    runtime_msg,
+                )
+                return None
 
     # ---- UI apply: thời gian chờ sau mỗi lần kéo (drag_duration_ms) ----
     ui_cfg = cfg.get("ui") or {}
@@ -382,6 +449,8 @@ def apply_arrangement(
 
     # Đổi sang giây, không ép min 0.1 nữa – hoàn toàn theo config
     drag_duration_s = max(0.0, float(drag_ms) / 1000.0)
+    if drag_duration_s_override is not None:
+        drag_duration_s = max(0.0, float(drag_duration_s_override))
 
     if not game_region:
         apply_trace("arrange_no_region", profile_id)
@@ -403,7 +472,7 @@ def apply_arrangement(
         )
         return
 
-    moves = compute_moves(current_codes, target_codes, exact=use_exact)
+    moves = compute_moves(current_codes, target_codes, exact=use_exact, copy_style=use_copy_moves)
     if not moves:
         apply_trace("arrange_no_moves", profile_id)
         log.info("apply_arrangement: không có move nào (có thể đã đúng thứ tự).")
@@ -497,10 +566,12 @@ def apply_arrangement(
             for attempt in range(1, max_attempts + 1):
                 try:
                     if use_fast_drag:
-                        # Auto: steps=3, wait Chrome ACK, animation qua duration_s, chỉ sleep delay_s sau drag
-                        devtools.mouse_drag(sx, sy, dx, dy, steps=3, duration_s=drag_duration_s, wait_ack=True)
-                        if delay_s > 0:
-                            time.sleep(delay_s)
+                        # Auto keeps DevTools ACK for reliability, but uses the
+                        # same drag shape as manual so the Config timing feels
+                        # consistent across both flows.
+                        devtools.mouse_drag(sx, sy, dx, dy, wait_ack=True)
+                        if total_sleep > 0:
+                            time.sleep(total_sleep)
                     else:
                         # Manual: fire-and-forget như MB-Copy (không chờ Chrome ACK)
                         devtools.mouse_drag(sx, sy, dx, dy)
