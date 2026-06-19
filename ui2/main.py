@@ -61,6 +61,7 @@ from ui2.tabs.xao_vang_tab import XaoVangTab
 from ui2.tabs.auto_play_tab import AutoPlayTab
 from ui2.tabs.auto_four_tool_tab import AutoFourToolTab
 from ui2.tabs.auto_settings_tab import AutoSettingsTab
+from ui2.tabs.ai_management_tab import AIManagementTab
 from core.config import load_config, save_config
 from core.gold_threshold_notifier import GoldThresholdNotifier
 from ui2.tabs.players_tab import PlayersTab
@@ -69,6 +70,8 @@ from ui2.tabs.poker_tab import PokerTab
 # Internal WS simulator popup. Keep disabled in normal runs; enable only while testing.
 ENABLE_WS_TEST_TAB = False
 ENABLE_CAPTURE_TAB = True
+SHOW_CAPTURE_TAB = False
+SHOW_PLAYERS_TAB = False
 ENABLE_TAIXIU = True
 
 # Hard flags for keeping the tool light.
@@ -228,6 +231,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self.xao_vang_tab = None
         self.auto_play_tab = None
         self.auto_settings_tab = None
+        self.ai_management_tab = None
         self.gold_threshold_notifier = None
         self.ws_test_tab = None
         
@@ -606,7 +610,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # self.profile_tab = ProfileTab(self.browser_manager, self)
         # self.phom_store = PhomVisibilityStore()
         # self.phom_tab = PhomMainView(store=self.phom_store)
-        self.strategy_tab = StrategyTabV2(self.browser_manager, self)
+        self.strategy_tab = StrategyTabV2(self.browser_manager, self, ws_enabled=False)
         self.profiles_tab_v2 = ProfilesTabV2(self.browser_manager, self)
         if ENABLE_CAPTURE_TAB and self.capture_manager is not None:
             self.capture_tab = CaptureTab(self.browser_manager, self.capture_manager, self)
@@ -621,6 +625,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
             send_test=self.gold_threshold_notifier.send_test,
             parent=self,
         )
+        self.ai_management_tab = AIManagementTab(self)
         self.auto_settings_tab.config_saved.connect(self.gold_threshold_notifier.update_config)
         self.strategy_tab.set_auto_settings_notifier(self.gold_threshold_notifier)
         self.config_tab = ConfigTab(self)
@@ -663,6 +668,7 @@ class MainWindow(QMainWindow, WebSocketGateway):
             self.auto_four_tool_tab = QWidget(self)
         tabs.addTab(self.auto_four_tool_tab, "Auto Play")
         tabs.addTab(self.auto_settings_tab, "Cài đặt Auto")
+        tabs.addTab(self.ai_management_tab, "Quản Lý AI")
         tabs.currentChanged.connect(self._on_main_tab_changed)
         # tabs.addTab(self.poker_tab, "Poker")
         # tabs.addTab(self.phom_tab, "Phỏm")
@@ -682,9 +688,10 @@ class MainWindow(QMainWindow, WebSocketGateway):
         self.profiles_tab_v2.hide()
         # tabs.addTab(self.dashboard_tab, "Dashboard")
         tabs.addTab(self.config_tab, "Cấu hình")
-        if ENABLE_CAPTURE_TAB and self.capture_tab is not None:
+        if SHOW_CAPTURE_TAB and ENABLE_CAPTURE_TAB and self.capture_tab is not None:
             tabs.addTab(self.capture_tab, "Fix tọa độ")
-        tabs.addTab(self.players_tab, "Người chơi")
+        if SHOW_PLAYERS_TAB:
+            tabs.addTab(self.players_tab, "Người chơi")
         # tabs.addTab(self.ws_sim_tab, "Test Bài")
         
         strategy_main_index = tabs.indexOf(self.strategy_room_splitter)
@@ -833,9 +840,17 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
     def _on_main_tab_changed(self, index: int) -> None:
         # Tab "Auto Play" giờ là AutoFourToolTab nhúng trực tiếp — không cần floating dialog nữa
-        pass
+        try:
+            if (
+                self.tab_widget is not None
+                and self.ai_management_tab is not None
+                and self.tab_widget.widget(index) is self.ai_management_tab
+            ):
+                self.ai_management_tab.refresh()
+        except Exception:
+            log.exception("[Main] refresh AI management tab failed")
 
-    def _on_auto_play_changed(self, enabled: bool, rounds: int, delay_min_ms: int = 5000, delay_max_ms: int = 10000) -> None:
+    def _on_auto_play_changed(self, enabled: bool, rounds: int, delay_min_ms: int = 2000, delay_max_ms: int = 5000) -> None:
         try:
             if self.strategy_tab is not None:
                 self.strategy_tab.set_auto_play(enabled, rounds, delay_min_ms, delay_max_ms)
@@ -1421,14 +1436,9 @@ class MainWindow(QMainWindow, WebSocketGateway):
                 log.exception("WS extension ready handling failed: profile=%s", profile_id)
             return
 
-        # cmd=606 la snapshot thu tu slot do client gui dinh ky.
-        # - ws_card_store: track layout sau kéo (giống MB-Copy) để WSIngest cập nhật _layout_codes
-        # - ws_layout_store: xác nhận thao tác kéo cho auto flow, không ghi đè bài gốc cmd=600
+        # cmd=606 la snapshot layout hien tai tren game. Chi layout_store duoc
+        # nhan 606; ws_card_store la bai goc cmd=600 va khong duoc bi ghi de.
         if kind == "layout_snapshot" and cmd == 606 and isinstance(cs, list):
-            try:
-                ws_card_store.update_cards(profile_id, cs)
-            except Exception:
-                log.exception("layout cmd606 ws_card_store update failed: profile=%s cs=%s", profile_id, cs)
             try:
                 from ui2.bridge.ws_layout_store import ws_layout_store
 

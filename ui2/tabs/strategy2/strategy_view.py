@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QButtonGroup,
+    QMenu,
 )
 
 from ui2.tabs.dashboard.dashboard_constants import _load_opp_pixmap
@@ -35,6 +36,8 @@ class StrategyView(QWidget):
     profile_changed = Signal(str)          # emits "P1"/"P2"/"P3"
     ngu_label_clicked = Signal(int)        # index in NGU list
     p_label_clicked = Signal(int)          # index in P list
+    ngu_auto_rule_requested = Signal(int)
+    p_auto_rule_requested = Signal(int)
     apply_all_clicked = Signal()           # click ALL apply
     break_sap_lang_clicked = Signal()      # click global sap-lang combo apply
     p_retry_clicked = Signal()            # click reset gợi ý cho P ACTIVE
@@ -125,8 +128,10 @@ class StrategyView(QWidget):
         self.list_ngu = QListWidget()
         self.list_ngu.setMinimumHeight(160)
         self.list_ngu.setStyleSheet(self._list_style())
+        self.list_ngu.setContextMenuPolicy(Qt.CustomContextMenu)
         self.list_ngu.itemClicked.connect(lambda _it: self._emit_list_ngu())
         self.list_ngu.currentRowChanged.connect(lambda _r: self._sync_item_selection_style(self.list_ngu))
+        self.list_ngu.customContextMenuRequested.connect(self._show_ngu_context_menu)
         ngu_sel.addWidget(self.list_ngu, 1)
         bottom.addWidget(self.box_ngu, 1)
 
@@ -161,8 +166,10 @@ class StrategyView(QWidget):
         self.list_p = QListWidget()
         self.list_p.setMinimumHeight(160)
         self.list_p.setStyleSheet(self._list_style())
+        self.list_p.setContextMenuPolicy(Qt.CustomContextMenu)
         self.list_p.itemClicked.connect(lambda _it: self._emit_list_p())
         self.list_p.currentRowChanged.connect(lambda _r: self._sync_item_selection_style(self.list_p))
+        self.list_p.customContextMenuRequested.connect(self._show_p_context_menu)
         row.addWidget(self.list_p, 1)
 
         act = QVBoxLayout()
@@ -291,6 +298,13 @@ class StrategyView(QWidget):
         return {"layout": row, "labels": labs, "special": special_label}
 
     def _set_pix(self, lab: QLabel, code: str) -> None:
+        code = str(code or "")
+        size_key = (int(lab.width() or 0), int(lab.height() or 0))
+        if getattr(lab, "_mb_card_code", None) == code and getattr(lab, "_mb_card_size", None) == size_key:
+            return
+        lab._mb_card_code = code      # type: ignore[attr-defined]
+        lab._mb_card_size = size_key  # type: ignore[attr-defined]
+
         if not code:
             lab.setPixmap(QPixmap())
             lab.setText("")
@@ -335,12 +349,48 @@ class StrategyView(QWidget):
             return
         self.p_label_clicked.emit(int(idx))
 
+    def _show_ngu_context_menu(self, pos) -> None:
+        item = self.list_ngu.itemAt(pos)
+        if item is None:
+            return
+        idx = self.list_ngu.row(item)
+        if idx < 0:
+            return
+        menu = QMenu(self)
+        act_auto = menu.addAction("Chọn làm gợi ý Auto")
+        chosen = menu.exec(self.list_ngu.mapToGlobal(pos))
+        if chosen == act_auto:
+            self.ngu_auto_rule_requested.emit(int(idx))
+
+    def _show_p_context_menu(self, pos) -> None:
+        item = self.list_p.itemAt(pos)
+        if item is None:
+            return
+        idx = self.list_p.row(item)
+        if idx < 0:
+            return
+        menu = QMenu(self)
+        act_auto = menu.addAction("Chọn làm gợi ý Auto")
+        chosen = menu.exec(self.list_p.mapToGlobal(pos))
+        if chosen == act_auto:
+            self.p_auto_rule_requested.emit(int(idx))
+
     
     def _set_rich_item_widget_html(self, w: QWidget, html: str) -> None:
         try:
-            lab = w.findChild(QLabel, "richLabel")
+            html = str(html or "")
+            if getattr(w, "_mb_html", None) == html:
+                return
+            lab = getattr(w, "_mb_label", None)
+            if lab is None:
+                lab = w.findChild(QLabel, "richLabel")
             if lab is not None:
+                if getattr(lab, "_mb_html", None) == html:
+                    w._mb_html = html  # type: ignore[attr-defined]
+                    return
                 lab.setText(html or "")
+                lab._mb_html = html  # type: ignore[attr-defined]
+                w._mb_html = html    # type: ignore[attr-defined]
         except Exception:
             pass
 
@@ -380,11 +430,25 @@ class StrategyView(QWidget):
         lab.setTextFormat(Qt.RichText)
         lab.setWordWrap(True)
         lab.setText(html or "")
+        lab._mb_html = str(html or "")  # type: ignore[attr-defined]
         lab.setStyleSheet("font-weight:600;")
         lay.addWidget(lab)
 
         w._mb_label = lab  # type: ignore[attr-defined]
+        w._mb_html = str(html or "")  # type: ignore[attr-defined]
         return w
+
+    def _set_widget_style_if_changed(self, widget: QWidget, style: str) -> None:
+        if getattr(widget, "_mb_style", None) == style:
+            return
+        widget.setStyleSheet(style)
+        widget._mb_style = style  # type: ignore[attr-defined]
+
+    def _set_label_style_if_changed(self, label: QLabel, style: str) -> None:
+        if getattr(label, "_mb_style", None) == style:
+            return
+        label.setStyleSheet(style)
+        label._mb_style = style  # type: ignore[attr-defined]
 
     def _sync_item_selection_style(self, lw: QListWidget) -> None:
         sel = lw.currentRow()
@@ -396,20 +460,25 @@ class StrategyView(QWidget):
 
             lab = getattr(w, "_mb_label", None)
             color = self._ACCENT_7[i % len(self._ACCENT_7)]
+            selected = i == sel
 
-            if i == sel:
+            if selected:
                 # selection rõ ràng: vạch trái + nền nhẹ (KHÔNG border trong -> không bị 2 viền)
-                w.setStyleSheet(
+                self._set_widget_style_if_changed(
+                    w,
                     f"background-color: palette(alternate-base);"
                     f"border-left: 4px solid {color};"
                     f"border-radius: 8px;"
                 )
                 if isinstance(lab, QLabel):
-                    lab.setStyleSheet("font-weight:900;")
+                    self._set_label_style_if_changed(lab, "font-weight:900;")
             else:
-                w.setStyleSheet("background: transparent; border-left: 4px solid transparent; border-radius: 8px;")
+                self._set_widget_style_if_changed(
+                    w,
+                    "background: transparent; border-left: 4px solid transparent; border-radius: 8px;",
+                )
                 if isinstance(lab, QLabel):
-                    lab.setStyleSheet("font-weight:600;")
+                    self._set_label_style_if_changed(lab, "font-weight:600;")
 
 
     # ---------------- public API ----------------
@@ -428,7 +497,9 @@ class StrategyView(QWidget):
             self.set_p_retry_visible(False)
 
     def set_p_status(self, text: str) -> None:
-        self.lbl_p_status.setText(text or "")
+        text = text or ""
+        if self.lbl_p_status.text() != text:
+            self.lbl_p_status.setText(text)
         
     def set_p_retry_visible(self, visible: bool) -> None:
         """Hiện/ẩn nút reset gợi ý cho P ACTIVE.
@@ -437,10 +508,14 @@ class StrategyView(QWidget):
         - visible = False: ẩn trong các trường hợp khác.
         """
         if hasattr(self, "btn_p_retry") and self.btn_p_retry is not None:
-            self.btn_p_retry.setVisible(bool(visible))
+            visible = bool(visible)
+            if self.btn_p_retry.isVisible() != visible:
+                self.btn_p_retry.setVisible(visible)
 
     def set_ngu_status(self, text: str) -> None:
-        self.lbl_ngu_status.setText(text or "")
+        text = text or ""
+        if self.lbl_ngu_status.text() != text:
+            self.lbl_ngu_status.setText(text)
 
     # kept for compatibility – no longer shown
     def set_engine_ngu(self, text: str) -> None:
@@ -449,66 +524,101 @@ class StrategyView(QWidget):
     def set_engine_p(self, text: str) -> None:
         return
 
-    def set_ngu_labels(self, items: List[dict], default_index: int = 0) -> None:
-        self.list_ngu.blockSignals(True)
+    @staticmethod
+    def _label_item_html(item: dict) -> str:
+        return str((item or {}).get("label_html") or (item or {}).get("label") or "")
+
+    @staticmethod
+    def _label_items_signature(items: List[dict], default_index: int) -> tuple:
+        items = list(items or [])
         try:
-            # Reuse existing rows when possible to avoid QListWidget.clear()+setItemWidget spikes.
-            if self.list_ngu.count() == len(items) and len(items) > 0:
-                for i, it in enumerate(items):
-                    html = str(it.get("label_html") or it.get("label") or "")
-                    item = self.list_ngu.item(i)
-                    if item is None:
-                        continue
-                    w = self.list_ngu.itemWidget(item)
-                    if w is None:
-                        continue
-                    self._set_rich_item_widget_html(w, html)
-            else:
-                self.list_ngu.clear()
-                for it in items:
-                    html = str(it.get("label_html") or it.get("label") or "")
-                    item = QListWidgetItem()
-                    h = 44 if bool(it.get("is_special")) else 32
+            idx = int(default_index)
+        except Exception:
+            idx = -1
+        if idx < 0 or idx >= len(items):
+            idx = -1
+        return (
+            tuple(
+                (
+                    StrategyView._label_item_html(it),
+                    bool((it or {}).get("is_special")),
+                )
+                for it in items
+            ),
+            idx,
+        )
+
+    def _set_list_labels(
+        self,
+        lw: QListWidget,
+        items: List[dict],
+        default_index: int,
+        signature_attr: str,
+    ) -> None:
+        items = list(items or [])
+        sig = self._label_items_signature(items, default_index)
+        target_index = sig[1]
+
+        if (
+            getattr(self, signature_attr, None) == sig
+            and lw.count() == len(items)
+            and (target_index < 0 or lw.currentRow() == target_index)
+        ):
+            return
+
+        signals_were_blocked = lw.signalsBlocked()
+        updates_were_enabled = lw.updatesEnabled()
+        lw.setUpdatesEnabled(False)
+        lw.blockSignals(True)
+        try:
+            while lw.count() > len(items):
+                idx = lw.count() - 1
+                item = lw.item(idx)
+                if item is not None:
+                    w = lw.itemWidget(item)
+                    if w is not None:
+                        lw.removeItemWidget(item)
+                        w.deleteLater()
+                lw.takeItem(idx)
+
+            while lw.count() < len(items):
+                item = QListWidgetItem()
+                lw.addItem(item)
+                lw.setItemWidget(item, self._make_rich_item_widget(""))
+
+            for i, it in enumerate(items):
+                html = self._label_item_html(it)
+                item = lw.item(i)
+                if item is None:
+                    continue
+                h = 44 if bool(it.get("is_special")) else 32
+                if item.sizeHint().height() != h:
                     item.setSizeHint(QSize(0, h))
-                    self.list_ngu.addItem(item)
-                    self.list_ngu.setItemWidget(item, self._make_rich_item_widget(html))
-            if items and 0 <= default_index < len(items):
-                self.list_ngu.setCurrentRow(default_index)
+                w = lw.itemWidget(item)
+                if w is None:
+                    w = self._make_rich_item_widget("")
+                    lw.setItemWidget(item, w)
+                self._set_rich_item_widget_html(w, html)
+            if target_index >= 0 and lw.currentRow() != target_index:
+                lw.setCurrentRow(target_index)
+            setattr(self, signature_attr, sig)
+            self._sync_item_selection_style(lw)
         finally:
-            self.list_ngu.blockSignals(False)
-        self._sync_item_selection_style(self.list_ngu)
+            lw.blockSignals(signals_were_blocked)
+            lw.setUpdatesEnabled(updates_were_enabled)
+            if updates_were_enabled:
+                lw.viewport().update()
+
+    def set_ngu_labels(self, items: List[dict], default_index: int = 0) -> None:
+        self._set_list_labels(self.list_ngu, items, default_index, "_ngu_labels_signature")
 
 
     def set_p_labels(self, items: List[dict], default_index: int = 0) -> None:
-        self.list_p.blockSignals(True)
-        try:
-            # Reuse existing rows when possible to avoid QListWidget.clear()+setItemWidget spikes.
-            if self.list_p.count() == len(items) and len(items) > 0:
-                for i, it in enumerate(items):
-                    html = str(it.get("label_html") or it.get("label") or "")
-                    item = self.list_p.item(i)
-                    if item is None:
-                        continue
-                    w = self.list_p.itemWidget(item)
-                    if w is None:
-                        continue
-                    self._set_rich_item_widget_html(w, html)
-            else:
-                self.list_p.clear()
-                for it in items:
-                    html = str(it.get("label_html") or it.get("label") or "")
-                    item = QListWidgetItem()
-                    h = 44 if bool(it.get("is_special")) else 32
-                    item.setSizeHint(QSize(0, h))
-                    self.list_p.addItem(item)
-                    self.list_p.setItemWidget(item, self._make_rich_item_widget(html))
-            if items and 0 <= default_index < len(items):
-                self.list_p.setCurrentRow(default_index)
-        finally:
-            self.list_p.blockSignals(False)
-        self._sync_item_selection_style(self.list_p)
+        self._set_list_labels(self.list_p, items, default_index, "_p_labels_signature")
 
-        self.btn_hup.setEnabled(bool(items))
+        enabled = bool(items)
+        if self.btn_hup.isEnabled() != enabled:
+            self.btn_hup.setEnabled(enabled)
 
     def set_cards_p_normalized(self, codes_13: List[str]) -> None:
         self._set_cards_block(self._p_row_chi1, self._p_row_chi2, self._p_row_chi3, codes_13)
@@ -518,6 +628,12 @@ class StrategyView(QWidget):
 
     def _set_cards_block(self, row_chi1, row_chi2, row_chi3, codes_13: List[str]) -> None:
         c = list(codes_13 or [])
+        labels = list(row_chi1["labels"]) + list(row_chi2["labels"]) + list(row_chi3["labels"])
+        size_key = tuple((int(lab.width() or 0), int(lab.height() or 0)) for lab in labels)
+        sig = (tuple(map(str, c)), size_key)
+        if row_chi1.get("_mb_cards_sig") == sig:
+            return
+
         chi1 = self._sort_codes_for_display(c[0:5])
         chi2 = self._sort_codes_for_display(c[5:10])
         chi3 = self._sort_codes_for_display(c[10:13])
@@ -528,6 +644,7 @@ class StrategyView(QWidget):
             self._set_pix(lab, chi2[i] if i < len(chi2) else "")
         for i, lab in enumerate(row_chi1["labels"]):
             self._set_pix(lab, chi1[i] if i < len(chi1) else "")
+        row_chi1["_mb_cards_sig"] = sig
     # =================== Special label for Chi 3 (responsive) ===================
     def _compute_special_font_size(self) -> int:
         # responsive: dựa trên width của view
@@ -540,9 +657,13 @@ class StrategyView(QWidget):
         if not lab:
             return
         font_size = self._compute_special_font_size()
+        sig = (str(color or ""), int(font_size))
+        if getattr(lab, "_mb_special_style_sig", None) == sig:
+            return
         # lưu lại để dùng lại khi resize
         lab._mb_font_size = font_size  # type: ignore[attr-defined]
         lab._mb_color = color          # type: ignore[attr-defined]
+        lab._mb_special_style_sig = sig  # type: ignore[attr-defined]
         lab.setStyleSheet(
             f"font-weight:900; color:{color}; font-size:{font_size}px;"
         )
@@ -558,7 +679,9 @@ class StrategyView(QWidget):
     def set_p_special_text(self, text: str, color: Optional[str] = None) -> None:
         if not self.lbl_p_special:
             return
-        self.lbl_p_special.setText(text or "")
+        text = text or ""
+        if self.lbl_p_special.text() != text:
+            self.lbl_p_special.setText(text)
         if not text:
             return
         if color is not None:
@@ -568,7 +691,9 @@ class StrategyView(QWidget):
     def set_ngu_special_text(self, text: str, color: Optional[str] = None) -> None:
         if not self.lbl_ngu_special:
             return
-        self.lbl_ngu_special.setText(text or "")
+        text = text or ""
+        if self.lbl_ngu_special.text() != text:
+            self.lbl_ngu_special.setText(text)
         if not text:
             return
         if color is not None:

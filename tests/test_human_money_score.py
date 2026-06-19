@@ -207,12 +207,13 @@ class HumanMoneyScoreTests(unittest.TestCase):
 
         sugg = build_suggestions_for_codes("NGU", codes)
         self.assertTrue(sugg)
-        self.assertFalse(any(s.get("mode") == "money" for s in sugg))
+        self.assertTrue(any(s.get("mode") == "money" for s in sugg))
         final = list(sugg[:5])
         selected = mark_auto_suggestion(sugg, final, policy="opp")
         self.assertGreaterEqual(selected, 0)
         auto = final[selected]
         self.assertTrue(auto.get("_auto_opp_money"))
+        self.assertEqual(auto.get("_auto_choice_source"), "engine_money")
         self.assertIn(split_key(auto), {split_key(s) for s in sugg})
 
     def test_flush_trips_high_card_beats_small_full_house_pair_high_card(self):

@@ -636,6 +636,10 @@ class RoomControlTab(QWidget):
             "P3": {"create": False, "join": False, "find": False},
         }
         self._last_profile_status_text: Dict[str, str] = {"P1": "", "P2": "", "P3": ""}
+        self._profile_activity_labels: Dict[str, QLabel] = {}
+        self._profile_activity_level: Dict[str, str] = {"P1": "idle", "P2": "idle", "P3": "idle"}
+        self._tool_activity_label: Optional[QLabel] = None
+        self._tool_activity_level: str = "idle"
 
         self._build_ui()
 
@@ -682,7 +686,14 @@ class RoomControlTab(QWidget):
         # ----- Splitter ngang giữa nav và detail -----
         splitter = QSplitter(Qt.Horizontal)
         splitter.setObjectName("room_main_splitter")
-        splitter.addWidget(self.profile_nav)
+        left_col = QWidget()
+        left_lay = QVBoxLayout(left_col)
+        left_lay.setContentsMargins(0, 0, 0, 0)
+        left_lay.setSpacing(8)
+        left_lay.addWidget(self.profile_nav, 0)
+        left_lay.addWidget(self._build_profile_activity_panel(), 1)
+
+        splitter.addWidget(left_col)
         splitter.addWidget(self.detail_stack)
         # hệ số co giãn: bên phải chiếm phần còn lại
         splitter.setStretchFactor(0, 0)
@@ -732,11 +743,97 @@ class RoomControlTab(QWidget):
             self.profile_nav.addItem(item)
             self.profile_nav.setItemWidget(item, self._create_nav_widget(pid))
 
+        nav_height = (self.profile_nav.count() * 58) + (max(0, self.profile_nav.count() - 1) * 6) + 28
+        self.profile_nav.setFixedHeight(nav_height)
+        self.profile_nav.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
         self.profile_nav.currentRowChanged.connect(self._on_nav_changed)
 
         # Default select P1
         self.profile_nav.setCurrentRow(0)
         self._on_nav_changed(0)
+
+    def _build_profile_activity_panel(self) -> QWidget:
+        panel = QGroupBox("Hoạt động")
+        panel.setStyleSheet(
+            """
+            QGroupBox {
+                background:#181c20;
+                border:1px solid #343b45;
+                border-radius:5px;
+                margin-top:8px;
+                color:#edf1f5;
+                font-weight:800;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left:8px;
+                padding:0 4px;
+            }
+            """
+        )
+        lay = QVBoxLayout(panel)
+        lay.setContentsMargins(8, 12, 8, 8)
+        lay.setSpacing(6)
+        self._tool_activity_label = QLabel("Auto: Chờ hoạt động")
+        self._tool_activity_label.setWordWrap(True)
+        self._tool_activity_label.setMinimumHeight(30)
+        self._tool_activity_label.setStyleSheet(self._activity_label_style("idle"))
+        lay.addWidget(self._tool_activity_label)
+        for pid in ("P1", "P2", "P3"):
+            row = QLabel(f"{pid}: Chờ hoạt động")
+            row.setWordWrap(True)
+            row.setMinimumHeight(28)
+            row.setStyleSheet(self._activity_label_style("idle"))
+            lay.addWidget(row)
+            self._profile_activity_labels[pid] = row
+        lay.addStretch(1)
+        return panel
+
+    def _activity_label_style(self, level: str) -> str:
+        color = {
+            "run": "#7db7ff",
+            "ok": "#76d49b",
+            "warn": "#e3b45f",
+            "err": "#ff7f86",
+            "idle": "#aeb7c2",
+        }.get(str(level or "idle"), "#aeb7c2")
+        bg = {
+            "run": "#132235",
+            "ok": "#13241d",
+            "warn": "#271f11",
+            "err": "#2a171a",
+            "idle": "#12161b",
+        }.get(str(level or "idle"), "#12161b")
+        return (
+            f"background:{bg}; color:{color}; border:1px solid #303741;"
+            " border-radius:4px; padding:5px 7px; font-size:11px; font-weight:700;"
+        )
+
+    def set_profile_activity(self, pid: str, text: str, level: str = "run") -> None:
+        pid = str(pid or "").strip().upper()
+        if pid not in ("P1", "P2", "P3"):
+            return
+        label = self._profile_activity_labels.get(pid)
+        if label is None:
+            return
+        msg = str(text or "").strip() or "Chờ hoạt động"
+        label.setText(f"{pid}: {msg}")
+        level = str(level or "run")
+        if self._profile_activity_level.get(pid) != level:
+            self._profile_activity_level[pid] = level
+            label.setStyleSheet(self._activity_label_style(level))
+
+    def set_tool_activity(self, text: str, level: str = "run") -> None:
+        label = self._tool_activity_label
+        if label is None:
+            return
+        msg = str(text or "").strip() or "Chờ hoạt động"
+        label.setText(f"Auto: {msg}")
+        level = str(level or "run")
+        if self._tool_activity_level != level:
+            self._tool_activity_level = level
+            label.setStyleSheet(self._activity_label_style(level))
 
     def _create_nav_widget(self, pid: str) -> QWidget:
         card = QWidget()

@@ -42,6 +42,7 @@ from .modules.special_row import (
 )
 from .modules.render_controller import RenderController
 from .modules.staged_scheduler import StagedScheduler
+from .modules.post_engine_renderer import PostEngineRenderer
 from .modules.apply_controller import ApplyController
 from .modules.auto_play_controller import (
     build_auto_play_plan,
@@ -130,6 +131,7 @@ class StrategyTab(QWidget):
         action_gate=None,
         auto_play_log_sink=None,
         auto_settings_notifier=None,
+        ws_enabled: bool = True,
     ):
         super().__init__(parent)
 
@@ -147,6 +149,7 @@ class StrategyTab(QWidget):
         self._layout_store = layout_store if layout_store is not None else ws_layout_store
         self._game_controller = game_controller
         self._action_gate = action_gate
+        self._ws_enabled = bool(ws_enabled)
 
         self.capture_manager = (
             getattr(parent, "capture_manager", None)
@@ -213,6 +216,11 @@ class StrategyTab(QWidget):
         self._suggestions: Dict[str, List[dict]] = {pid: [] for pid in self.profiles}
         self._suggestions_render: Dict[str, List[dict]] = {pid: [] for pid in self.profiles}
         self._selected_index: Dict[str, int] = {pid: 0 for pid in self.profiles}
+        self._p_render_core_sig: Dict[str, Optional[tuple]] = {pid: None for pid in self.profiles}
+        self._ngu_render_last_input_sig: Optional[tuple] = None
+        self._ngu_render_last_output_sig: Optional[tuple] = None
+        self._ngu_render_cached_output: List[dict] = []
+        self._ngu_render_cached_selected_index: int = 0
 
         self._ngu_base_codes: List[str] = []
         self._ngu_suggestions: List[dict] = []
@@ -261,6 +269,12 @@ class StrategyTab(QWidget):
         self._batch_debounce.setInterval(140)
         self._batch_debounce.timeout.connect(self._enqueue_batch_jobs)
 
+        self._ngu_refresh_pending: bool = False
+        self._ngu_refresh_debounce = QTimer(self)
+        self._ngu_refresh_debounce.setSingleShot(True)
+        self._ngu_refresh_debounce.setInterval(600)
+        self._ngu_refresh_debounce.timeout.connect(self._run_deferred_ngu_refresh_from_3p)
+
         self._scheduled_hash: Dict[str, Optional[str]] = {pid: None for pid in (self.profiles + ["NGU"])}
         # ========================================================================
 
@@ -272,10 +286,14 @@ class StrategyTab(QWidget):
         # NEW: ws ingest module
         self._ws_ingest = WSIngest(self.profiles, reverse_like_dashboard=True)
 
-        self._ws_timer = QTimer(self)
-        self._ws_timer.setInterval(200)
-        self._ws_timer.timeout.connect(self._poll_ws)
-        self._ws_timer.start()
+        self._ws_timer = None
+        if self._ws_enabled:
+            self._ws_timer = QTimer(self)
+            self._ws_timer.setInterval(200)
+            self._ws_timer.timeout.connect(self._poll_ws)
+            self._ws_timer.start()
+        else:
+            log.info("[Strategy2] WS polling disabled for this StrategyTab instance")
 
         self._apply_threads: Dict[str, threading.Thread] = {}
         self._manual_apply_threads: Dict[str, threading.Thread] = {}
@@ -294,6 +312,7 @@ class StrategyTab(QWidget):
         self._labeling.set_cache_limits(chi_type_cache_limit=5000, cmp_cache_limit=8000)
 
         self._renderer = RenderController(MAX_UI_P_ITEMS, MAX_UI_NGU_ITEMS)
+        self._post_engine_renderer = PostEngineRenderer()
         self._apply_controller = ApplyController()
         self._on_profile_switch(self.active_profile)
 
@@ -630,6 +649,7 @@ class StrategyTab(QWidget):
         - Prepares: self._suggestions_render[pid] (with label_html computed)
         - Also ensures self._selected_index[pid] is a valid default when new hand starts.
         """
+        self._invalidate_p_render_cache(pid)
         base_suggs = self._suggestions.get(pid) or []
         if not base_suggs:
             self._suggestions_render[pid] = []
@@ -690,9 +710,240 @@ class StrategyTab(QWidget):
 
         self._suggestions_render[pid] = list(render_suggs[:self.MAX_UI_P_ITEMS])
 
+    def _invalidate_p_render_cache(self, pid: Optional[str] = None) -> None:
+        cache = getattr(self, "_p_render_core_sig", None)
+        if not isinstance(cache, dict):
+            return
+        if pid is None:
+            for profile_id in self.profiles:
+                cache[profile_id] = None
+            return
+        if pid in cache:
+            cache[pid] = None
+
+    def _invalidate_ngu_render_cache(self) -> None:
+        self._ngu_render_last_input_sig = None
+        self._ngu_render_last_output_sig = None
+        self._ngu_render_cached_output = []
+        self._ngu_render_cached_selected_index = 0
+
+    def _copy_ngu_suggestion_for_cache(self, sug: Optional[dict]) -> dict:
+        if not isinstance(sug, dict):
+            return {}
+        out = dict(sug)
+        for key in ("chi1_codes", "chi2_codes", "chi3_codes"):
+            if key in out:
+                out[key] = list(out.get(key) or [])
+        return out
+
+    def _ngu_suggestion_cache_key(self, sug: Optional[dict]) -> tuple:
+        if not isinstance(sug, dict):
+            return ()
+        try:
+            split = sug.get("_split_key") or self._make_split_key(sug)
+        except Exception:
+            split = ""
+        try:
+            is_special = bool(self._is_special_row(sug))
+        except Exception:
+            is_special = bool(sug.get("_is_special_row") or sug.get("is_special"))
+        try:
+            special_chi_points = int(sug.get("special_chi_points") or 0)
+        except Exception:
+            special_chi_points = 0
+        return (
+            str(sug.get("mode", "")).lower(),
+            str(sug.get("variant", "")),
+            str(split or ""),
+            str(sug.get("template_key") or ""),
+            str(sug.get("special_name") or ""),
+            special_chi_points,
+            bool(is_special),
+            tuple(str(c) for c in (sug.get("chi1_codes") or [])),
+            tuple(str(c) for c in (sug.get("chi2_codes") or [])),
+            tuple(str(c) for c in (sug.get("chi3_codes") or [])),
+        )
+
+    def _ngu_suggestions_cache_key(self, suggestions: List[dict]) -> tuple:
+        return tuple(self._ngu_suggestion_cache_key(s) for s in list(suggestions or []))
+
+    def _build_ngu_render_cache_signature(self) -> tuple:
+        try:
+            idx = int(self._ngu_selected_index or 0)
+        except Exception:
+            idx = 0
+        base_codes = list(getattr(self, "_ngu_base_codes", []) or [])
+        return (
+            "ngu-render-v1",
+            self._hand_hash(base_codes),
+            tuple(str(c) for c in base_codes),
+            idx,
+            bool(getattr(self, "_ngu_clicked_once", False)),
+            int(getattr(self, "MAX_UI_NGU_ITEMS", MAX_UI_NGU_ITEMS)),
+            self._ngu_suggestions_cache_key(getattr(self, "_ngu_suggestions", []) or []),
+        )
+
+    def _remember_ngu_render_cache(self, input_sig: Optional[tuple]) -> None:
+        try:
+            self._ngu_render_last_input_sig = input_sig
+            self._ngu_render_last_output_sig = self._build_ngu_render_cache_signature()
+            self._ngu_render_cached_output = [
+                self._copy_ngu_suggestion_for_cache(s)
+                for s in list(getattr(self, "_ngu_suggestions", []) or [])
+            ]
+            self._ngu_render_cached_selected_index = int(getattr(self, "_ngu_selected_index", 0) or 0)
+        except Exception:
+            self._invalidate_ngu_render_cache()
+
+    def _commit_ngu_preview_from_current_selection(self) -> None:
+        suggs = list(getattr(self, "_ngu_suggestions", []) or [])
+        if not suggs:
+            self.view.set_cards_ngu_normalized([])
+            return
+
+        try:
+            idx = int(getattr(self, "_ngu_selected_index", 0) or 0)
+        except Exception:
+            idx = 0
+            self._ngu_selected_index = 0
+
+        if idx < 0 or idx >= len(suggs):
+            idx = 0
+            self._ngu_selected_index = 0
+
+        if (
+            suggs
+            and idx == 0
+            and self._is_special_row(suggs[0])
+            and len(suggs) > 1
+        ):
+            idx = 1
+            self._ngu_selected_index = 1
+
+        codes = self._build_preview_codes(suggs[idx])
+        if codes:
+            self.view.set_cards_ngu_normalized(codes)
+
+    def _try_restore_ngu_render_cache_for_post_engine(self) -> bool:
+        try:
+            current_sig = self._build_ngu_render_cache_signature()
+            cached_output = list(getattr(self, "_ngu_render_cached_output", []) or [])
+            if not cached_output and (getattr(self, "_ngu_render_last_output_sig", None) is not None):
+                return False
+
+            hit_input = current_sig == getattr(self, "_ngu_render_last_input_sig", None)
+            hit_output = current_sig == getattr(self, "_ngu_render_last_output_sig", None)
+            if not (hit_input or hit_output):
+                return False
+
+            base_suggestions = list(getattr(self, "_ngu_suggestions", []) or [])
+            restored = [self._copy_ngu_suggestion_for_cache(s) for s in cached_output]
+            try:
+                mark_auto_suggestion(
+                    base_suggestions,
+                    restored,
+                    policy="opp",
+                    is_special_row=self._is_special_row,
+                    hand_codes=list(getattr(self, "_ngu_base_codes", []) or []),
+                )
+            except Exception:
+                pass
+
+            self._ngu_suggestions = restored
+            try:
+                self._ngu_selected_index = int(getattr(self, "_ngu_render_cached_selected_index", 0) or 0)
+            except Exception:
+                self._ngu_selected_index = 0
+            self._commit_ngu_preview_from_current_selection()
+            self._remember_ngu_render_cache(current_sig if hit_input else getattr(self, "_ngu_render_last_input_sig", None))
+            return True
+        except Exception:
+            self._invalidate_ngu_render_cache()
+            return False
+
+    def _suggestion_cache_key(self, sug: Optional[dict]) -> tuple:
+        if not isinstance(sug, dict):
+            return ()
+        try:
+            split = self._make_split_key(sug)
+        except Exception:
+            split = ""
+        try:
+            is_special = bool(self._is_special_row(sug))
+        except Exception:
+            is_special = bool(sug.get("_is_special_row") or sug.get("is_special"))
+        return (
+            str(sug.get("mode", "")).lower(),
+            str(split or ""),
+            str(sug.get("template_key") or ""),
+            str(sug.get("special_name") or ""),
+            bool(is_special),
+            bool(sug.get("_auto_profile_money")),
+            bool(sug.get("_auto_opp_money")),
+            bool(sug.get("_auto_user_rule")),
+            bool(sug.get("_auto_engine_money")),
+            str(sug.get("_auto_choice_source") or ""),
+        )
+
+    def _suggestions_cache_key(self, suggestions: List[dict]) -> tuple:
+        return tuple(self._suggestion_cache_key(s) for s in list(suggestions or []))
+
+    def _selected_suggestion_cache_key(self, pid: str) -> tuple:
+        candidates = list((self._suggestions_render or {}).get(pid) or (self._suggestions or {}).get(pid) or [])
+        try:
+            idx = int((self._selected_index or {}).get(pid, 0) or 0)
+        except Exception:
+            idx = 0
+        selected = candidates[idx] if 0 <= idx < len(candidates) else None
+        return (pid, idx, self._suggestion_cache_key(selected))
+
+    def _selected_opp_cache_key(self) -> tuple:
+        selected = self._pick_current_ngu_suggestion()
+        try:
+            idx = int(self._ngu_selected_index or 0)
+        except Exception:
+            idx = 0
+        return (idx, self._suggestion_cache_key(selected))
+
+    def _build_p_render_cache_signature(self, pid: str) -> tuple:
+        return (
+            "p-render-v1",
+            str(pid),
+            self._hand_hash(list((self._codes_slot_order or {}).get(pid) or [])),
+            self._suggestions_cache_key((self._suggestions or {}).get(pid) or []),
+            self._suggestions_cache_key((self._suggestions_render or {}).get(pid) or []),
+            self._selected_opp_cache_key(),
+            bool(getattr(self, "_ngu_clicked_once", False)),
+            bool(getattr(self, "_anti_sap_enabled", False)),
+            int(getattr(self, "MAX_UI_P_ITEMS", MAX_UI_P_ITEMS)),
+            tuple(self._selected_suggestion_cache_key(p) for p in self.profiles),
+        )
+
+    def _mark_p_render_cache_valid(self, pid: str) -> None:
+        if pid not in self.profiles:
+            return
+        try:
+            self._p_render_core_sig[pid] = self._build_p_render_cache_signature(pid)
+        except Exception:
+            self._invalidate_p_render_cache(pid)
+
+    def _p_render_cache_is_valid(self, pid: str) -> bool:
+        cache = getattr(self, "_p_render_core_sig", None)
+        if not isinstance(cache, dict) or pid not in self.profiles:
+            return False
+        sig = cache.get(pid)
+        if sig is None:
+            return False
+        try:
+            return sig == self._build_p_render_cache_signature(pid)
+        except Exception:
+            return False
+
     # =================== WS / dedup (now delegated to WSIngest) ===================
     def _force_reset_pid_state(self, pid: str) -> None:
         """HƯỚNG A: WS snapshot 13 lá mới => invalidate toàn bộ state cũ của pid."""
+        self._invalidate_p_render_cache()
+        self._invalidate_ngu_render_cache()
         # 1) suggestions + render + selection
         self._suggestions[pid] = []
         self._suggestions_render[pid] = []
@@ -819,7 +1070,7 @@ class StrategyTab(QWidget):
             # trigger staged scheduler
             self._batch_debounce.stop()
             self._batch_debounce.start()
-            self._schedule_missing_3p_alert()
+            self._schedule_ngu_refresh_from_3p()
     def _apply_pending_ws_samehand_if_any(self, pid: str) -> None:
         try:
             codes = (getattr(self, "_pending_ws_samehand", {}) or {}).pop(pid, None)
@@ -909,6 +1160,9 @@ class StrategyTab(QWidget):
         log.debug("[WS SAME HAND] manual layout synced pid=%s first3=%s", pid, list(codes)[:3])
 
     def _poll_ws(self) -> None:
+        if not bool(getattr(self, "_ws_enabled", True)):
+            return
+
         updates, waiting = self._ws_ingest.poll(
             ws_get_last_cards=self._card_store.get_last_cards,
             ws_snapshot=self._ws_snapshot,
@@ -1053,8 +1307,7 @@ class StrategyTab(QWidget):
 
 
         if any_new_hand:
-            self._refresh_ngu_from_3p(force=True)
-            self._schedule_missing_3p_alert()
+            self._schedule_ngu_refresh_from_3p()
 
     # =================== NEW: staged sequential scheduler ===================
     @property
@@ -1116,29 +1369,222 @@ class StrategyTab(QWidget):
         return self._renderer.build_preview_codes(suggestion)
 
     def _render_ngu(self) -> None:
+        try:
+            input_sig = self._build_ngu_render_cache_signature()
+        except Exception:
+            input_sig = None
+        self._invalidate_p_render_cache()
         self._renderer.render_ngu(self)
+        self._remember_ngu_render_cache(input_sig)
         self._update_special_labels()   # mỗi lần render OPP, cập nhật label
         self._refresh_sap_lang_combo()
 
+    def _render_ngu_post_engine(self) -> None:
+        if self._try_restore_ngu_render_cache_for_post_engine():
+            self._update_special_labels()
+            self._refresh_sap_lang_combo()
+            return
+        self._render_ngu()
+
     def _render_p_active(self) -> None:
         self._renderer.render_p_active(self)
+        self._mark_p_render_cache_valid(self.active_profile)
         self._update_special_labels()   # mỗi lần render P active, cập nhật label
         self._refresh_sap_lang_combo()
         self._sync_apply_button_enabled()
 
+    def _show_active_profile_from_render_cache(self, pid: str) -> bool:
+        if pid not in self.profiles or not self._p_render_cache_is_valid(pid):
+            return False
+
+        items = list((self._suggestions_render or {}).get(pid) or [])
+        try:
+            idx = int((self._selected_index or {}).get(pid, 0) or 0)
+        except Exception:
+            idx = 0
+
+        try:
+            self.view.set_active_profile(pid)
+            if hasattr(self.view, "set_p_retry_visible"):
+                self.view.set_p_retry_visible(False)
+
+            if not items:
+                codes = list((self._codes_slot_order or {}).get(pid) or [])
+                self.view.set_cards_p_normalized(codes)
+                self.view.set_p_labels([], 0)
+                self.view.btn_hup.setEnabled(False)
+                if hasattr(self.view, "set_p_retry_visible"):
+                    self.view.set_p_retry_visible(True)
+                self._update_special_labels()
+                self._refresh_sap_lang_combo()
+                self._sync_apply_button_enabled()
+                return True
+
+            if idx < 0 or idx >= len(items):
+                return False
+
+            self.view.set_p_labels(items, idx)
+            selected = items[idx]
+            preview_codes = self._build_preview_codes(selected)
+            if preview_codes:
+                self.view.set_cards_p_normalized(preview_codes)
+
+            if selected and self._is_special_row(selected):
+                has_split = (
+                    bool(selected.get("chi1_codes"))
+                    and bool(selected.get("chi2_codes"))
+                    and bool(selected.get("chi3_codes"))
+                )
+                self.view.btn_hup.setEnabled(bool(has_split))
+            else:
+                self.view.btn_hup.setEnabled(True)
+
+            self._update_special_labels()
+            self._refresh_sap_lang_combo()
+            self._sync_apply_button_enabled()
+            return True
+        except Exception:
+            log.exception("[Strategy2] fast profile switch failed pid=%s", pid)
+            self._invalidate_p_render_cache(pid)
+            return False
+
 
     # =================== NGU derive ===================
+    def _current_room_context_safe(self):
+        try:
+            return classify_auto_room_context(self._get_room_engine())
+        except Exception:
+            log.exception("[Strategy2] classify room context failed")
+            return None
+
+    @staticmethod
+    def _room_context_allows_ngu(context) -> bool:
+        return str(getattr(context, "kind", "") or "") in ("external_opp", "internal_3p")
+
+    def _has_all_3p_cards(self) -> bool:
+        try:
+            return all(
+                len(list((getattr(self, "_codes_slot_order", {}) or {}).get(pid) or [])) == 13
+                for pid in self.profiles
+            )
+        except Exception:
+            return False
+
+    def _should_allow_ngu_work(self, context=None) -> bool:
+        if not self._has_all_3p_cards():
+            return False
+        if context is None:
+            context = self._current_room_context_safe()
+        return self._room_context_allows_ngu(context)
+
+    def _should_enqueue_ngu_jobs(self) -> bool:
+        return bool((not self._is_ngu_refresh_pending()) and self._should_allow_ngu_work())
+
+    def _clear_ngu_for_ineligible_room(self, status: Optional[str] = None) -> None:
+        self._ngu_refresh_pending = False
+        timer = getattr(self, "_ngu_refresh_debounce", None)
+        if timer is not None:
+            try:
+                timer.stop()
+            except Exception:
+                pass
+
+        self._invalidate_p_render_cache()
+        self._invalidate_ngu_render_cache()
+        self._ngu_base_codes = []
+        self._ngu_key = None
+        self._ngu_suggestions = []
+        self._ngu_selected_index = 0
+        try:
+            self._scheduled_hash["NGU"] = None
+        except Exception:
+            pass
+        try:
+            self.view.set_cards_ngu_normalized([])
+            self.view.set_ngu_labels([], 0)
+            if status:
+                self.view.set_ngu_status(str(status))
+            self.view.set_ngu_special_text("", None)
+        except Exception:
+            pass
+
+    def _is_ngu_refresh_pending(self) -> bool:
+        if bool(getattr(self, "_ngu_refresh_pending", False)):
+            return True
+        timer = getattr(self, "_ngu_refresh_debounce", None)
+        if timer is None:
+            return False
+        try:
+            return bool(timer.isActive())
+        except Exception:
+            return False
+
+    def _clear_ngu_for_pending_refresh(self) -> None:
+        self._invalidate_p_render_cache()
+        self._invalidate_ngu_render_cache()
+        self._ngu_base_codes = []
+        self._ngu_key = None
+        self._ngu_suggestions = []
+        self._ngu_selected_index = 0
+        try:
+            self._scheduled_hash["NGU"] = None
+        except Exception:
+            pass
+        try:
+            self.view.set_cards_ngu_normalized([])
+            self.view.set_ngu_labels([], 0)
+            self.view.set_ngu_status("Dang gom 3P de suy NGU...")
+            self.view.set_ngu_special_text("", None)
+        except Exception:
+            pass
+
+    def _schedule_ngu_refresh_from_3p(self) -> None:
+        if not self._should_allow_ngu_work():
+            self._clear_ngu_for_ineligible_room("Cho du 3P cung phong de suy NGU...")
+            return
+
+        self._ngu_refresh_pending = True
+        self._clear_ngu_for_pending_refresh()
+        timer = getattr(self, "_ngu_refresh_debounce", None)
+        if timer is None:
+            return
+        try:
+            timer.stop()
+            timer.start()
+        except Exception:
+            log.exception("[Strategy2] schedule NGU refresh debounce failed")
+            self._run_deferred_ngu_refresh_from_3p()
+
+    def _run_deferred_ngu_refresh_from_3p(self) -> None:
+        self._ngu_refresh_pending = False
+        if not self._should_allow_ngu_work():
+            self._clear_ngu_for_ineligible_room("Cho du 3P cung phong de suy NGU...")
+            self._schedule_missing_3p_alert()
+            return
+        try:
+            self._refresh_ngu_from_3p(force=True)
+        finally:
+            self._schedule_missing_3p_alert()
+
     def _derive_ngu_from_3p(self) -> Optional[List[str]]:
+        if not self._should_allow_ngu_work():
+            return None
         res = self._ngu_deriver.derive(self._codes_slot_order, FULL_DECK)
         if not res:
             return None
         return list(res.codes13)
 
     def _refresh_ngu_from_3p(self, force: bool) -> None:
+        if not self._should_allow_ngu_work():
+            self._clear_ngu_for_ineligible_room("Cho du 3P cung phong de suy NGU...")
+            return
+
         res = self._ngu_deriver.derive(self._codes_slot_order, FULL_DECK)
 
         # Không đủ 3P -> clear hoàn toàn OPP
         if res is None:
+            self._invalidate_p_render_cache()
+            self._invalidate_ngu_render_cache()
             self._ngu_base_codes = []
             self._ngu_suggestions = []
             self._ngu_selected_index = 0
@@ -1157,6 +1603,8 @@ class StrategyTab(QWidget):
             return
 
         # NGU sang ván mới (hoặc bị force) -> reset state OPP tuyệt đối
+        self._invalidate_p_render_cache()
+        self._invalidate_ngu_render_cache()
         self._ngu_key = res.key
         self._ngu_base_codes = list(res.codes13)
 
@@ -1374,7 +1822,13 @@ class StrategyTab(QWidget):
                 parts.append(pkey)
         if ready_count <= 0:
             return None
-        return f"NGU:{self._ngu_key or '-'}|" + "|".join(parts)
+
+        context = self._current_room_context_safe()
+        if self._room_context_allows_ngu(context):
+            context_part = f"NGU:{self._ngu_key or '-'}"
+        else:
+            context_part = f"ROOM:{str(getattr(context, 'kind', 'unknown') or 'unknown')}"
+        return f"{context_part}|" + "|".join(parts)
 
     def _auto_profile_apply_key(self, pid: str) -> str:
         codes = list(self._codes_slot_order.get(pid) or [])
@@ -1599,6 +2053,8 @@ class StrategyTab(QWidget):
 
     def _auto_is_waiting_for_ngu_suggestions(self) -> bool:
         """Keep the full 3P path alive while the derived OPP job is still pending."""
+        if self._is_ngu_refresh_pending():
+            return True
         if not self._ngu_key or len(list(self._ngu_base_codes or [])) != 13:
             return False
         scheduler = getattr(self, "_scheduler", None)
@@ -1616,6 +2072,16 @@ class StrategyTab(QWidget):
             return
         if not self._auto_play_enabled:
             return
+
+        if self._is_ngu_refresh_pending():
+            try:
+                pending_context = classify_auto_room_context(self._get_room_engine())
+            except Exception:
+                pending_context = None
+            if getattr(pending_context, "kind", None) == "external_opp":
+                session = self._auto_play_session
+                QTimer.singleShot(250, lambda s=session: self._maybe_run_auto_play(s))
+                return
 
         hand_key = self._current_auto_play_hand_key()
         if not hand_key or hand_key == self._auto_play_hand_key:
@@ -1649,13 +2115,23 @@ class StrategyTab(QWidget):
                 + (f" reason={room_context.reason}" if room_context.reason else "")
             )
 
-            if allow_opp_plan and not has_auto_opp and self._auto_is_waiting_for_ngu_suggestions():
+            if allow_opp_plan and not has_auto_opp:
+                if not self._auto_is_waiting_for_ngu_suggestions():
+                    self._schedule_ngu_refresh_from_3p()
                 self._auto_play_log("Đang chờ gợi ý Auto của OPP để xếp combo 3P.")
                 session = self._auto_play_session
                 QTimer.singleShot(250, lambda s=session: self._maybe_run_auto_play(s))
                 return
 
             # ── Chọn plan theo bối cảnh bàn ──────────────────────────────
+            if (
+                room_context.kind == "internal_3p"
+                and not self._is_ngu_refresh_pending()
+                and not (self._ngu_suggestions or [])
+                and self._should_allow_ngu_work(room_context)
+            ):
+                self._schedule_ngu_refresh_from_3p()
+
             internal_cycle_limit = int(getattr(self, "_auto_play_internal_cycle_limit", 4) or 4)
             sap_ham_due = bool(
                 is_internal
@@ -2244,8 +2720,8 @@ class StrategyTab(QWidget):
         if pid not in self.profiles:
             return
         self.active_profile = pid
-        self._render_p_active()
-        self._render_ngu()
+        if not self._show_active_profile_from_render_cache(pid):
+            self._render_p_active()
 
     def _on_p_label_clicked(self, idx: int) -> None:
         pid = self.active_profile  # MUST be first
@@ -2326,6 +2802,7 @@ class StrategyTab(QWidget):
             log.warning("[AUTO-CHOICE] skip special OPP rule idx=%s", ridx)
             return
         if save_rule(codes, suggestion):
+            self._invalidate_ngu_render_cache()
             self._ngu_selected_index = ridx
             self._ngu_clicked_once = True
             log.info("[AUTO-CHOICE] saved OPP rule idx=%s", ridx)

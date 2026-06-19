@@ -86,6 +86,48 @@ class _Tab:
         return 0 if suggs else -1
 
 
+class _PostEngineRenderer:
+    def __init__(self):
+        self.calls = []
+
+    def pre_render_profile(self, tab, key):
+        self.calls.append(("pre_render", key))
+        tab._pre_render_profile(key)
+
+    def render_after_queue(self, _tab, *, ngu_updated, p_changed_any, active_updated):
+        self.calls.append(("after_queue", ngu_updated, p_changed_any, active_updated))
+
+
+class _PostEngineRendererWithDefers:
+    def __init__(self):
+        self.calls = []
+
+    def pre_render_profile(self, tab, key):
+        self.calls.append(("pre_render", key))
+        tab._pre_render_profile(key)
+
+    def render_after_queue(
+        self,
+        _tab,
+        *,
+        ngu_updated,
+        p_changed_any,
+        active_updated,
+        defer_ngu_work=False,
+        defer_p_work=False,
+    ):
+        self.calls.append(
+            (
+                "after_queue",
+                ngu_updated,
+                p_changed_any,
+                active_updated,
+                defer_ngu_work,
+                defer_p_work,
+            )
+        )
+
+
 def _cards(prefix):
     ranks = "23456789TJQKA"
     suits = "CBRT"
@@ -124,6 +166,64 @@ class StagedSchedulerRecoveryTests(unittest.TestCase):
         scheduler.poll_suggest_results(tab)
 
         self.assertIsNone(tab._scheduled_hash["P1"])
+
+    def test_poll_delegates_post_engine_work_when_renderer_is_available(self):
+        tab = _Tab()
+        tab._post_engine_renderer = _PostEngineRenderer()
+        scheduler = StagedScheduler()
+        tab._codes_slot_order["P1"] = _cards("p1")
+        h1 = tab._hand_hash(tab._codes_slot_order["P1"])
+        tab._scheduled_hash["P1"] = h1
+        scheduler.job_running = True
+        tab._q.put(
+            (
+                "P1",
+                None,
+                [{"mode": "money", "chi1_codes": [], "chi2_codes": [], "chi3_codes": []}],
+                None,
+                "EXTRA",
+                "ALL",
+                h1,
+            )
+        )
+
+        scheduler.poll_suggest_results(tab)
+
+        self.assertEqual(
+            tab._post_engine_renderer.calls,
+            [
+                ("pre_render", "P1"),
+                ("after_queue", False, True, True),
+            ],
+        )
+
+    def test_poll_defers_p_and_ngu_work_while_another_job_is_pending(self):
+        tab = _Tab()
+        tab._post_engine_renderer = _PostEngineRendererWithDefers()
+        scheduler = StagedScheduler()
+        tab._codes_slot_order["P1"] = _cards("p1")
+        h1 = tab._hand_hash(tab._codes_slot_order["P1"])
+        tab._scheduled_hash["P1"] = h1
+        scheduler.job_running = True
+        scheduler.run_next_job = lambda _tab: setattr(scheduler, "job_running", True)
+        tab._q.put(
+            (
+                "P1",
+                None,
+                [{"mode": "money", "chi1_codes": [], "chi2_codes": [], "chi3_codes": []}],
+                None,
+                "EXTRA",
+                "ALL",
+                h1,
+            )
+        )
+
+        scheduler.poll_suggest_results(tab)
+
+        self.assertEqual(
+            tab._post_engine_renderer.calls[-1],
+            ("after_queue", False, True, True, True, True),
+        )
 
 
 if __name__ == "__main__":

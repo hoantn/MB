@@ -11,6 +11,14 @@ from engine.money_scoring import evaluate_3cards
 TemplateKey = Optional[Tuple[object, object, object]]
 
 
+def _codes_signature(s: dict) -> Tuple[Tuple[object, ...], Tuple[object, ...], Tuple[object, ...]]:
+    return (
+        tuple(s.get("chi1_codes") or []),
+        tuple(s.get("chi2_codes") or []),
+        tuple(s.get("chi3_codes") or []),
+    )
+
+
 def extract_template_key_from_suggestion(s: dict) -> TemplateKey:
     """
     Trả về template key cho 3 chi, dựa trên loại bài của từng chi.
@@ -23,6 +31,15 @@ def extract_template_key_from_suggestion(s: dict) -> TemplateKey:
     Logic được tách ra từ RenderController._filter_dominated_suggestions
     để dùng chung, không đổi hành vi.
     """
+    cache_sig = None
+    try:
+        cache_sig = _codes_signature(s)
+        if s.get("_template_key_cache_sig") == cache_sig:
+            return s.get("_template_key_cache_value")
+    except Exception:
+        cache_sig = None
+
+    result: TemplateKey = None
     try:
         c1_codes = list(s.get("chi1_codes") or [])
         c2_codes = list(s.get("chi2_codes") or [])
@@ -30,7 +47,8 @@ def extract_template_key_from_suggestion(s: dict) -> TemplateKey:
 
         # Phải đủ 5-5-3 lá
         if len(c1_codes) != 5 or len(c2_codes) != 5 or len(c3_codes) != 3:
-            return None
+            result = None
+            return result
 
         c1_cards = [Card.from_code(c) for c in c1_codes]
         c2_cards = [Card.from_code(c) for c in c2_codes]
@@ -50,9 +68,18 @@ def extract_template_key_from_suggestion(s: dict) -> TemplateKey:
         t1 = _norm(ev1)
         t2 = _norm(ev2)
         t3 = _norm(ev3)
-        return (t1, t2, t3)
+        result = (t1, t2, t3)
+        return result
     except Exception:
-        return None
+        result = None
+        return result
+    finally:
+        try:
+            if cache_sig is not None:
+                s["_template_key_cache_sig"] = cache_sig
+                s["_template_key_cache_value"] = result
+        except Exception:
+            pass
 
 
 def template_strength_from_key(tpl: TemplateKey) -> Tuple[int, int, int]:

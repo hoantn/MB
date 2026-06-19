@@ -108,6 +108,7 @@ class ConfigTab(QWidget):
 
         self.btn_apply_game = QPushButton("Chuyển game")
         self.btn_copy_coords = QPushButton("Copy tọa độ gốc")
+        self.btn_copy_coords.hide()
 
         # gợi ý: phân biệt vai trò bằng property để ăn QSS nếu có
         self.btn_apply_game.setProperty("role", "primary")
@@ -116,7 +117,6 @@ class ConfigTab(QWidget):
         lay_game.addWidget(QLabel("Chọn game:"))
         lay_game.addWidget(self.cmb_game, 1)
         lay_game.addWidget(self.btn_apply_game)
-        lay_game.addWidget(self.btn_copy_coords)
 
         # ---- Group: Quản lý phòng game ----
         grp_room = QGroupBox("Quản lý phòng game")

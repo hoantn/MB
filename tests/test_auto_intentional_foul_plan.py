@@ -3,6 +3,7 @@ import unittest
 from ui2.tabs.strategy2.modules.auto_play_controller import (
     AutoPlayPlan,
     _build_intentional_foul_plan,
+    _best_response_for_pid,
     _opp_has_bonus_line,
 )
 
@@ -67,6 +68,9 @@ class _Tab:
     def _is_special_row(self, _sug):
         return False
 
+    def _build_render_suggestions(self, base_suggs, _opp):
+        return list(base_suggs or [])
+
 
 def _normal_plan(suggestions):
     return AutoPlayPlan(
@@ -122,6 +126,24 @@ class AutoIntentionalFoulPlanTests(unittest.TestCase):
         self.assertIsNotNone(plan)
         self.assertEqual(set(plan.report_binh_pids), set(PROFILES))
         self.assertTrue(all(plan.suggestions[pid].get("_auto_intentional_foul") for pid in PROFILES))
+
+    def test_profile_user_rule_does_not_bypass_opp_best_response(self):
+        user_rule = dict(WEAK_SWEPT)
+        user_rule["_auto_profile_money"] = True
+        user_rule["_auto_user_rule"] = True
+        stronger = dict(ESCAPES)
+        stronger["_auto_profile_money"] = False
+
+        tab = _Tab({"P1": user_rule, "P2": WEAK_SWEPT, "P3": WEAK_SWEPT})
+        tab._suggestions["P1"] = [stronger, user_rule]
+
+        picked = _best_response_for_pid(tab, "P1", OPP_NO_BONUS)
+
+        self.assertIsNotNone(picked)
+        idx, suggestion, _score, report_binh = picked
+        self.assertEqual(idx, 0)
+        self.assertFalse(report_binh)
+        self.assertFalse(bool(suggestion.get("_auto_user_rule")))
 
 
 if __name__ == "__main__":

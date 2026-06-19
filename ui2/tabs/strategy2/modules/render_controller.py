@@ -665,6 +665,7 @@ class RenderController:
             suggs,
             policy="opp",
             is_special_row=tab._is_special_row,
+            hand_codes=list(getattr(tab, "_ngu_base_codes", []) or []),
         )
         tab._ngu_suggestions = suggs
 
@@ -959,6 +960,7 @@ class RenderController:
             render_suggs,
             policy="self",
             is_special_row=tab._is_special_row,
+            hand_codes=list(tab._codes_slot_order.get(pid) or []),
         )
 
         # Tính sap-làng + label cho các item hiển thị

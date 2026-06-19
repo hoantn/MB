@@ -6,6 +6,7 @@ import copy
 
 from engine.card import Card
 from engine.arranger import arrange_cards, arrange_13_cards, ArrangeStrategy
+from engine.arranger_parts import arrange_cached_money_split
 
 from ui2.tabs.dashboard.dashboard_constants import classify_chis, _format_suggestion_label
 
@@ -72,6 +73,54 @@ def _safe_classify_and_label(name: str, c1, c2, c3):
     except Exception:
         label = name
     return chi_types, label
+
+
+def _split_key_from_codes(chi1_codes: List[str], chi2_codes: List[str], chi3_codes: List[str]) -> str:
+    try:
+        if len(chi1_codes) != 5 or len(chi2_codes) != 5 or len(chi3_codes) != 3:
+            return ""
+        c1 = ",".join(sorted(str(c).strip().upper() for c in chi1_codes))
+        c2 = ",".join(sorted(str(c).strip().upper() for c in chi2_codes))
+        c3 = ",".join(sorted(str(c).strip().upper() for c in chi3_codes))
+        return "|".join([c3, c2, c1])
+    except Exception:
+        return ""
+
+
+def _build_money_suggestion(pid: str, stage: str, cards: List[Card]) -> Optional[dict]:
+    try:
+        money_split = arrange_cached_money_split(cards)
+    except Exception:
+        money_split = None
+    if not money_split:
+        return None
+
+    try:
+        c1, c2, c3 = money_split
+        chi1_codes = [c.to_code() for c in c1]
+        chi2_codes = [c.to_code() for c in c2]
+        chi3_codes = [c.to_code() for c in c3]
+        chi_types, _ = _safe_classify_and_label("auto", c1, c2, c3)
+    except Exception:
+        return None
+
+    split_key = _split_key_from_codes(chi1_codes, chi2_codes, chi3_codes)
+    if not split_key:
+        return None
+
+    return {
+        "pid": pid,
+        "stage": stage,
+        "mode": "money",
+        "variant": 0,
+        "label": "[auto]",
+        "chi1_codes": chi1_codes,
+        "chi2_codes": chi2_codes,
+        "chi3_codes": chi3_codes,
+        "chi_types": chi_types,
+        "_split_key": split_key,
+        "_auto_engine_money": True,
+    }
 
 
 def build_suggestions_for_codes(profile_id: str, codes: List[str], stage: str = "FULL") -> List[dict]:
@@ -201,6 +250,21 @@ def build_suggestions_for_codes(profile_id: str, codes: List[str], stage: str = 
         )
 
     # CACHE: mặc định tắt để tránh reuse list cũ khi bạn đang test/đổi arrange.
+    money_sugg = _build_money_suggestion(pid, stage_u, cards)
+    if money_sugg:
+        money_key = str(money_sugg.get("_split_key") or "")
+        deduped: List[dict] = []
+        for item in out:
+            item_key = _split_key_from_codes(
+                list(item.get("chi1_codes") or []),
+                list(item.get("chi2_codes") or []),
+                list(item.get("chi3_codes") or []),
+            )
+            if money_key and item_key == money_key:
+                continue
+            deduped.append(item)
+        out = [money_sugg] + deduped
+
     _cache_set(pid, hand_h, stage_u, out)
     # Prepend SPECIAL (nếu có) -> trả đúng 1 row special có đủ chi1/chi2/chi3 để APPLY
     if special_sugg:

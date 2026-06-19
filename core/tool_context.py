@@ -302,11 +302,9 @@ class ToolContext:
             return
 
         # --- cmd=606: layout sau kéo ---
+        # 606 chi la layout hien tai. Khong ghi vao card_store vi card_store la
+        # bai goc cmd=600 dung cho hand hash / van moi.
         if cs is not None and cmd == 606:
-            try:
-                self.card_store.update_cards(profile_id, cs)
-            except Exception:
-                log.exception("[ToolContext] cmd606 layout update failed slot=%d", self.slot)
             try:
                 sent_at_ms = evt.get("sent_at_ms")
                 event_at = float(sent_at_ms) / 1000.0 if sent_at_ms is not None else None

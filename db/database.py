@@ -79,4 +79,44 @@ def init_db() -> None:
     if "seen_gold" not in cols:
         cur.execute("ALTER TABLE room_players_seen ADD COLUMN seen_gold INTEGER")
         log.info("DB migration: added column room_players_seen.seen_gold")
+
+    cur.execute("DROP TABLE IF EXISTS auto_choice_overrides")
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS auto_choice_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            hand_key TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            selected_split_key TEXT NOT NULL,
+            selected_template TEXT,
+            chi1_codes TEXT NOT NULL,
+            chi2_codes TEXT NOT NULL,
+            chi3_codes TEXT NOT NULL,
+            label TEXT,
+            source TEXT NOT NULL,
+            hit_count INTEGER NOT NULL DEFAULT 0,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            last_used_at TEXT,
+            hand_features_json TEXT,
+            selected_features_json TEXT,
+            UNIQUE(hand_key, scope)
+        );
+        """
+    )
+    cur.execute("PRAGMA table_info(auto_choice_rules)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "hand_features_json" not in cols:
+        cur.execute("ALTER TABLE auto_choice_rules ADD COLUMN hand_features_json TEXT")
+    if "selected_features_json" not in cols:
+        cur.execute("ALTER TABLE auto_choice_rules ADD COLUMN selected_features_json TEXT")
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS auto_choice_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        """
+    )
     conn.commit()

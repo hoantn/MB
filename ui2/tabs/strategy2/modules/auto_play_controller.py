@@ -629,6 +629,10 @@ def _best_special_for_pid(tab, pid: str, opp: dict) -> Optional[Tuple[int, dict,
 
 
 def _best_response_for_pid(tab, pid: str, opp: dict) -> Optional[Tuple[int, dict, Tuple[int, int, int, int], bool]]:
+    # When an external OPP is present, the profile must be selected by the
+    # table strategy: best response, sap-lang, and intentional-foul safety.
+    # User-saved rules remain the default [auto] row for solo/internal use, but
+    # must not short-circuit the OPP counter-strategy path.
     normal = _best_normal_for_pid(tab, pid, opp)
     special = _best_special_for_pid(tab, pid, opp)
     if special is not None and (normal is None or special[2] > normal[2]):

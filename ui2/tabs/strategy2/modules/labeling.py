@@ -35,7 +35,7 @@ class Labeling:
         self._chi_type_cache_limit: int = 5000
 
         # compare cache (giữ nguyên đúng như StrategyTab hiện tại)
-        self._cmp_cache: Dict[Tuple[str, str], Tuple[int, int, int]] = {}
+        self._cmp_cache: Dict[Tuple[int, Tuple[str, ...], Tuple[str, ...]], int] = {}
         self._cmp_cache_limit: int = 8000
 
     # ===== cache config (để StrategyTab set đúng giá trị đang dùng) =====
@@ -114,7 +114,7 @@ class Labeling:
 
     def auto_prefix_html(self, s: dict) -> str:
         if s.get("_auto_profile_money") or s.get("_auto_opp_money"):
-            return '<span style="color:#fbbf24; font-weight:900;">[Auto]</span> '
+            return '<span style="color:#fbbf24; font-weight:900;">[auto]</span> '
         return ""
 
     # =================== Label helpers (standardized) ===================
@@ -161,6 +161,19 @@ class Labeling:
         N phụ thuộc loại bài của BÊN THẮNG và vị trí chi.
         """
         try:
+            cache_key = (
+                int(chi_index),
+                tuple(str(c) for c in (my_codes or [])),
+                tuple(str(c) for c in (opp_codes or [])),
+            )
+            cached = self._cmp_cache.get(cache_key)
+            if cached is not None:
+                return int(cached)
+        except Exception:
+            cache_key = None
+
+        result = 0
+        try:
             my_cards = [Card.from_code(c) for c in (my_codes or [])]
             opp_cards = [Card.from_code(c) for c in (opp_codes or [])]
 
@@ -200,30 +213,46 @@ class Labeling:
 
             if chi_index in (1, 2):
                 if len(my_cards) != 5 or len(opp_cards) != 5:
-                    return 0
+                    result = 0
+                    return result
                 a = evaluate_5cards(my_cards)
                 b = evaluate_5cards(opp_cards)
                 cmpv = self.cmp_tuple(a, b)
                 if cmpv == 0:
-                    return 0
+                    result = 0
+                    return result
                 winner_eval = a if cmpv > 0 else b
                 bonus = _bonus_for(winner_eval, chi_index)
-                return int(cmpv) * int(bonus)
+                result = int(cmpv) * int(bonus)
+                return result
 
             # chi 3
             if len(my_cards) != 3 or len(opp_cards) != 3:
-                return 0
+                result = 0
+                return result
             a = evaluate_3cards(my_cards)
             b = evaluate_3cards(opp_cards)
             cmpv = self.cmp_tuple(a, b)
             if cmpv == 0:
-                return 0
+                result = 0
+                return result
             winner_eval = a if cmpv > 0 else b
             bonus = _bonus_for(winner_eval, chi_index)
-            return int(cmpv) * int(bonus)
+            result = int(cmpv) * int(bonus)
+            return result
 
         except Exception:
-            return 0
+            result = 0
+            return result
+        finally:
+            try:
+                limit = int(getattr(self, "_cmp_cache_limit", 0) or 0)
+                if cache_key is not None and limit > 0:
+                    if len(self._cmp_cache) >= limit:
+                        self._cmp_cache.clear()
+                    self._cmp_cache[cache_key] = int(result)
+            except Exception:
+                pass
 
     # =================== HTML build vs ===================
     def build_label_html_vs(self, s: dict, opp: Optional[dict]) -> str:

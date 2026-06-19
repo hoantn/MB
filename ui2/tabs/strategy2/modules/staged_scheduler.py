@@ -23,13 +23,44 @@ class StagedScheduler:
 
     # ---- moved from StrategyTab._enqueue_batch_jobs ----
     def enqueue_batch_jobs(self, tab) -> None:
-        derived = tab._derive_ngu_from_3p()
-        if derived is not None:
-            tab._ngu_base_codes = list(derived)
-            tab._ngu_key = hashlib.md5("|".join(derived).encode()).hexdigest()
-        else:
+        pending_ngu_refresh = False
+        pending_fn = getattr(tab, "_is_ngu_refresh_pending", None)
+        if callable(pending_fn):
+            try:
+                pending_ngu_refresh = bool(pending_fn())
+            except Exception:
+                pending_ngu_refresh = False
+
+        allow_ngu_jobs = True
+        allow_fn = getattr(tab, "_should_enqueue_ngu_jobs", None)
+        if callable(allow_fn):
+            try:
+                allow_ngu_jobs = bool(allow_fn())
+            except Exception:
+                allow_ngu_jobs = False
+
+        if pending_ngu_refresh:
             tab._ngu_base_codes = []
             tab._ngu_key = None
+        elif not allow_ngu_jobs:
+            clear_fn = getattr(tab, "_clear_ngu_for_ineligible_room", None)
+            if callable(clear_fn):
+                try:
+                    clear_fn()
+                except Exception:
+                    tab._ngu_base_codes = []
+                    tab._ngu_key = None
+            else:
+                tab._ngu_base_codes = []
+                tab._ngu_key = None
+        else:
+            derived = tab._derive_ngu_from_3p()
+            if derived is not None:
+                tab._ngu_base_codes = list(derived)
+                tab._ngu_key = hashlib.md5("|".join(derived).encode()).hexdigest()
+            else:
+                tab._ngu_base_codes = []
+                tab._ngu_key = None
 
         ps = tab._pipeline.build_snapshot(
             codes_slot_order=tab._codes_slot_order,
@@ -106,6 +137,101 @@ class StagedScheduler:
             daemon=True
         ).start()
 
+    def _pre_render_profile(self, tab, key: str) -> None:
+        post_renderer = getattr(tab, "_post_engine_renderer", None)
+        if post_renderer is not None:
+            post_renderer.pre_render_profile(tab, key)
+            return
+        tab._pre_render_profile(key)
+
+    def _render_after_queue(
+        self,
+        tab,
+        *,
+        ngu_updated: bool,
+        p_changed_any: bool,
+        active_updated: bool,
+        defer_ngu_work: bool = False,
+        defer_p_work: bool = False,
+    ) -> None:
+        post_renderer = getattr(tab, "_post_engine_renderer", None)
+        if post_renderer is not None:
+            try:
+                post_renderer.render_after_queue(
+                    tab,
+                    ngu_updated=ngu_updated,
+                    p_changed_any=p_changed_any,
+                    active_updated=active_updated,
+                    defer_ngu_work=defer_ngu_work,
+                    defer_p_work=defer_p_work,
+                )
+            except TypeError as exc:
+                if "defer_ngu_work" not in str(exc) and "defer_p_work" not in str(exc):
+                    raise
+                post_renderer.render_after_queue(
+                    tab,
+                    ngu_updated=ngu_updated,
+                    p_changed_any=p_changed_any,
+                    active_updated=active_updated,
+                )
+            return
+
+        # Legacy fallback for lightweight tests/mocks that do not build a full StrategyTab.
+        if ngu_updated or p_changed_any:
+            if not defer_ngu_work:
+                if ngu_updated or not (tab._ngu_suggestions or []):
+                    tab._render_ngu()
+
+                try:
+                    tab._rebuild_ngu_labels_html()
+                    tab.view.set_ngu_labels(
+                        tab._ngu_suggestions[:tab.MAX_UI_NGU_ITEMS],
+                        tab._ngu_selected_index,
+                    )
+                except Exception:
+                    pass
+
+            if defer_p_work:
+                try:
+                    tab._post_engine_p_deferred = True
+                    tab._post_engine_auto_deferred = True
+                except Exception:
+                    pass
+                return
+
+            tab._render_p_active()
+            try:
+                tab._post_engine_p_deferred = False
+            except Exception:
+                pass
+            try:
+                tab._maybe_run_auto_play()
+            except Exception:
+                logger = getattr(tab, "log", None)
+                if logger is not None:
+                    logger.exception("[AUTO-PLAY] trigger after suggestions failed")
+            finally:
+                try:
+                    tab._post_engine_auto_deferred = False
+                except Exception:
+                    pass
+
+        elif active_updated:
+            if defer_p_work:
+                try:
+                    tab._post_engine_p_deferred = True
+                except Exception:
+                    pass
+                return
+            try:
+                tab._render_p_active()
+                try:
+                    tab._post_engine_p_deferred = False
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
     # ---- moved from StrategyTab._poll_suggest_results ----
     def poll_suggest_results(self, tab) -> None:
         active_updated = False
@@ -128,6 +254,36 @@ class StagedScheduler:
                 stage, kind, h = "FULL", "ALL", None
             else:
                 key, _gen, sugg, err, stage, kind, h = item
+
+            if key == "NGU":
+                allow_fn = getattr(tab, "_should_enqueue_ngu_jobs", None)
+                allow_ngu_result = True
+                if callable(allow_fn):
+                    try:
+                        allow_ngu_result = bool(allow_fn())
+                    except Exception:
+                        allow_ngu_result = False
+                if not allow_ngu_result:
+                    clear_fn = getattr(tab, "_clear_ngu_for_ineligible_room", None)
+                    if callable(clear_fn):
+                        try:
+                            clear_fn()
+                        except Exception:
+                            pass
+                    if h is not None and tab._scheduled_hash.get(key) == h:
+                        tab._scheduled_hash[key] = None
+                    self.job_running = False
+                    self.run_next_job(tab)
+                    continue
+
+            if h is not None:
+                cur_codes = tab._ngu_base_codes if key == "NGU" else (tab._codes_slot_order.get(key) or [])
+                if len(cur_codes) != 13 or tab._hand_hash(cur_codes) != h:
+                    if tab._scheduled_hash.get(key) == h:
+                        tab._scheduled_hash[key] = None
+                    self.job_running = False
+                    self.run_next_job(tab)
+                    continue
 
             if err is not None:
                 if h is not None and tab._scheduled_hash.get(key) == h:
@@ -212,7 +368,7 @@ class StagedScheduler:
 
                     # (2) Pre-render compute-only để P không active vẫn có label_html sẵn
                     try:
-                        tab._pre_render_profile(key)
+                        self._pre_render_profile(tab, key)
                     except Exception:
                         pass
 
@@ -262,7 +418,7 @@ class StagedScheduler:
 
                     # Pre-render compute-only (để label_html cập nhật sẵn cho P không active)
                     try:
-                        tab._pre_render_profile(key)
+                        self._pre_render_profile(tab, key)
                     except Exception:
                         pass
 
@@ -321,7 +477,7 @@ class StagedScheduler:
                         if merged and tab._is_special_row(merged[0]) and idx <= 0 and len(merged) > 1:
                             idx = 1
                         tab._selected_index[key] = idx
-                        tab._pre_render_profile(key)
+                        self._pre_render_profile(tab, key)
                     except Exception:
                         pass
 
@@ -331,30 +487,19 @@ class StagedScheduler:
             self.job_running = False
             self.run_next_job(tab)
 
+        defer_ngu_work = bool(self.job_running or self.job_q)
+        try:
+            defer_ngu_work = defer_ngu_work or (not tab._q.empty())
+        except Exception:
+            pass
+        defer_p_work = bool(defer_ngu_work)
+
         # === SAU KHI XỬ LÝ QUEUE: RENDER UI =====
-        if ngu_updated or p_changed_any:
-            # Bất cứ khi nào NGU hoặc bất kỳ P nào đổi -> rebuild label OPP
-            try:
-                tab._rebuild_ngu_labels_html()
-                tab.view.set_ngu_labels(
-                    tab._ngu_suggestions[:tab.MAX_UI_NGU_ITEMS],
-                    tab._ngu_selected_index,
-                )
-            except Exception:
-                # Không để crash UI nếu có bug nhỏ trong rebuild
-                pass
-
-            # Render OPP + P active với label mới
-            tab._render_ngu()
-            tab._render_p_active()
-            try:
-                tab._maybe_run_auto_play()
-            except Exception:
-                tab.log.exception("[AUTO-PLAY] trigger after suggestions failed")
-
-        elif active_updated:
-            # Nếu chỉ P active đổi (không ảnh hưởng OPP) -> chỉ render lại P active
-            try:
-                tab._render_p_active()
-            except Exception:
-                pass
+        self._render_after_queue(
+            tab,
+            ngu_updated=ngu_updated,
+            p_changed_any=p_changed_any,
+            active_updated=active_updated,
+            defer_ngu_work=defer_ngu_work,
+            defer_p_work=defer_p_work,
+        )

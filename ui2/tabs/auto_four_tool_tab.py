@@ -20,13 +20,14 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QSplitter, QStackedWidget, QFrame, QTextEdit,
     QSizePolicy, QSpinBox, QScrollArea, QDialog, QFormLayout,
-    QDialogButtonBox, QLineEdit,
+    QDialogButtonBox, QLineEdit, QMessageBox,
 )
 
 from core.config import AUTO_TOOL_SLOTS, load_config, save_config
 from core.logger import log
 from core.gold_threshold_notifier import ToolSlotGoldThresholdNotifier
 from ui2.runtime.task_runner import UiTaskResult, UiTaskRunner
+from ui2.tabs.strategy2.modules.auto_play_controller import classify_auto_room_context
 
 # ── Màu demo ──────────────────────────────────────────────────────
 _BG     = "#0f1216"
@@ -232,7 +233,6 @@ class ToolSlotCard(QFrame):
         self._lbl_meta = QLabel("Chưa khởi động")
         self._lbl_meta.setStyleSheet(
             f"color:{_MUTED}; font-size:11px;"
-            " white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
         )
 
         # Row 3: mini P1/P2/P3  — label bên trái, dot 5px bên phải
@@ -373,6 +373,7 @@ class AutoFourToolTab(QWidget):
         self._poll_cursor = 0
         self._log_redraw_pending = False
         self._profile_signal_cache: dict[tuple[int, str], str] = {}
+        self._profile_activity_cache: dict[tuple[int, str], tuple[str, str]] = {}
         self._gold_cache: dict[tuple[int, str], Optional[int]] = {}
         self._capital_cache: dict[int, dict[str, Optional[int]]] = {}
 
@@ -512,11 +513,11 @@ class AutoFourToolTab(QWidget):
 
         lay.addWidget(_lbl("Delay", f"color:{_MUTED};"))
         self._spn_dmin = QSpinBox()
-        self._spn_dmin.setRange(0, 120); self._spn_dmin.setValue(8)
+        self._spn_dmin.setRange(0, 120); self._spn_dmin.setValue(2)
         self._spn_dmin.setFixedWidth(52)
         self._spn_dmin.setStyleSheet(spin_style)
         self._spn_dmax = QSpinBox()
-        self._spn_dmax.setRange(0, 120); self._spn_dmax.setValue(18)
+        self._spn_dmax.setRange(0, 120); self._spn_dmax.setValue(5)
         self._spn_dmax.setFixedWidth(52)
         self._spn_dmax.setStyleSheet(spin_style)
         lay.addWidget(self._spn_dmin)
@@ -524,14 +525,13 @@ class AutoFourToolTab(QWidget):
         lay.addWidget(self._spn_dmax)
         lay.addWidget(_lbl("giây", f"color:{_MUTED};"))
 
-        lay.addStretch()
-
         self._btn_start_all = self._topbtn("Chạy tất cả", _GREEN2, _GREEN)
         self._btn_stop_all  = self._topbtn("Dừng tất cả", "#532e32", "#98444b")
         self._btn_start_all.clicked.connect(self.start_all)
         self._btn_stop_all.clicked.connect(self.stop_all)
         lay.addWidget(self._btn_start_all)
         lay.addWidget(self._btn_stop_all)
+        lay.addStretch()
         return bar
 
     def _topbtn(self, text: str, bg: str, border: str) -> QPushButton:
@@ -542,6 +542,17 @@ class AutoFourToolTab(QWidget):
             " border-radius:4px; padding:0 12px; font-weight:700; }}"
         )
         return b
+
+    def _confirm_action(self, title: str, message: str) -> bool:
+        box = QMessageBox(self)
+        box.setWindowTitle(title)
+        box.setIcon(QMessageBox.Question)
+        box.setText(message)
+        yes_btn = box.addButton("Có", QMessageBox.YesRole)
+        no_btn = box.addButton("Không", QMessageBox.NoRole)
+        box.setDefaultButton(no_btn)
+        box.exec()
+        return box.clickedButton() is yes_btn
 
     # ── Sidebar ────────────────────────────────────────────────────
 
@@ -1115,10 +1126,20 @@ class AutoFourToolTab(QWidget):
         self._log(slot, "Auto Play ĐÃ TẮT", "warn")
 
     def start_all(self):
+        if not self._confirm_action(
+            "Xác nhận chạy tất cả",
+            f"Bạn có chắc muốn bật Auto Play cho toàn bộ {AUTO_TOOL_SLOTS} tool không?",
+        ):
+            return
         for slot in range(1, AUTO_TOOL_SLOTS + 1):
             self.start_tool(slot)
 
     def stop_all(self):
+        if not self._confirm_action(
+            "Xác nhận dừng tất cả",
+            f"Bạn có chắc muốn dừng Auto Play cho toàn bộ {AUTO_TOOL_SLOTS} tool không?",
+        ):
+            return
         for slot in range(1, AUTO_TOOL_SLOTS + 1):
             self.stop_tool(slot)
 
@@ -1126,6 +1147,11 @@ class AutoFourToolTab(QWidget):
 
     def _on_open_browsers(self):
         slot = self._current_slot
+        if not self._confirm_action(
+            "Xác nhận mở trình duyệt",
+            f"Bạn có chắc muốn mở 3 trình duyệt cho Tool {slot} không?",
+        ):
+            return
         ctx = self._contexts[slot - 1]
         if ctx is None:
             return
@@ -1167,6 +1193,11 @@ class AutoFourToolTab(QWidget):
 
     def _on_reconnect_all(self):
         slot = self._current_slot
+        if not self._confirm_action(
+            "Xác nhận kết nối lại",
+            f"Bạn có chắc muốn kết nối lại P1/P2/P3 cho Tool {slot} không?",
+        ):
+            return
         ctx = self._contexts[slot - 1]
         if ctx is None:
             self._log(slot, "Không có context", "err")
@@ -1307,6 +1338,11 @@ class AutoFourToolTab(QWidget):
 
     def _on_reset_proxy(self):
         slot = self._current_slot
+        if not self._confirm_action(
+            "Xác nhận reset proxy",
+            f"Bạn có chắc muốn reset proxy P1/P2/P3 cho Tool {slot} không?",
+        ):
+            return
         ctx = self._contexts[slot - 1]
         if ctx is None:
             self._log(slot, "Không có context", "err")
@@ -1402,6 +1438,156 @@ class AutoFourToolTab(QWidget):
             if changed:
                 card.set_gold_state(golds, profit)
         self._update_total_profit_label()
+        self._refresh_profile_activity()
+
+    def _plain_suggestion_label(self, suggestion: Optional[dict]) -> str:
+        if not suggestion:
+            return ""
+        text = str(suggestion.get("label") or suggestion.get("name") or "").strip()
+        if not text:
+            html = str(suggestion.get("label_html") or "").strip()
+            text = html.replace("<br>", " ").replace("<br/>", " ").replace("<br />", " ")
+            while "<" in text and ">" in text:
+                a = text.find("<")
+                b = text.find(">", a)
+                if b < 0:
+                    break
+                text = text[:a] + text[b + 1:]
+            text = text.strip()
+        text = text.replace("[Auto]", "").strip(" -")
+        return text[:44] + ("…" if len(text) > 44 else "")
+
+    def _auto_selected_suggestion(self, strategy_tab, pid: str) -> Optional[dict]:
+        for source in (
+            list((getattr(strategy_tab, "_suggestions_render", {}) or {}).get(pid) or []),
+            list((getattr(strategy_tab, "_suggestions", {}) or {}).get(pid) or []),
+        ):
+            for item in source:
+                if isinstance(item, dict) and (item.get("_auto_profile_money") or item.get("_auto_opp_money")):
+                    return item
+        render_list = list((getattr(strategy_tab, "_suggestions_render", {}) or {}).get(pid) or [])
+        idx = int((getattr(strategy_tab, "_selected_index", {}) or {}).get(pid, 0) or 0)
+        if 0 <= idx < len(render_list):
+            item = render_list[idx]
+            return item if isinstance(item, dict) else None
+        return None
+
+    def _profile_activity_state(self, strategy_tab, pid: str) -> tuple[str, str]:
+        if strategy_tab is None:
+            return ("Chưa khởi tạo chiến thuật", "warn")
+        codes = list((getattr(strategy_tab, "_codes_slot_order", {}) or {}).get(pid) or [])
+        auto_enabled = bool(getattr(strategy_tab, "_auto_play_enabled", False))
+        busy = bool((getattr(strategy_tab, "_apply_busy", {}) or {}).get(pid, False))
+        if busy:
+            return ("Đang xếp bài", "run")
+
+        key_fn = getattr(strategy_tab, "_auto_profile_apply_key", None)
+        profile_key = ""
+        if callable(key_fn) and len(codes) == 13:
+            try:
+                profile_key = str(key_fn(pid))
+            except Exception:
+                profile_key = ""
+        reservations = getattr(strategy_tab, "_auto_play_reservations", {}) or {}
+        state = reservations.get(profile_key) if profile_key else None
+        if state == "pending":
+            return ("Chờ tới lượt xếp", "warn")
+        if state == "applied":
+            return ("Đang xếp bài", "run")
+        if state == "done":
+            return ("Đã xếp xong", "ok")
+        if state == "failed":
+            return ("Xếp lỗi / dừng P này", "err")
+
+        if len(codes) != 13:
+            return ("Đang lấy 13 lá" if auto_enabled else "Chờ 13 lá", "run" if auto_enabled else "idle")
+
+        suggestions = list((getattr(strategy_tab, "_suggestions", {}) or {}).get(pid) or [])
+        render_suggestions = list((getattr(strategy_tab, "_suggestions_render", {}) or {}).get(pid) or [])
+        if not suggestions and not render_suggestions:
+            return ("Đang tính gợi ý", "run")
+
+        selected = self._auto_selected_suggestion(strategy_tab, pid)
+        label = self._plain_suggestion_label(selected)
+        if label:
+            return (f"Chọn: {label}", "ok")
+        return ("Đã có gợi ý", "ok")
+
+    def _tool_activity_state(self, ctx, strategy_tab) -> tuple[str, str]:
+        if strategy_tab is None:
+            return ("Chưa khởi tạo chiến thuật", "warn")
+        if not bool(getattr(strategy_tab, "_auto_play_enabled", False)):
+            return ("Đang tắt", "idle")
+
+        pids = ("P1", "P2", "P3")
+        codes_by_pid = getattr(strategy_tab, "_codes_slot_order", {}) or {}
+        ready_count = sum(1 for pid in pids if len(list(codes_by_pid.get(pid) or [])) == 13)
+        ready_text = f"{ready_count}/3 có 13 lá"
+
+        try:
+            context = classify_auto_room_context(getattr(ctx, "room_engine", None))
+        except Exception:
+            log.exception("[AutoFourToolTab] classify auto room context failed")
+            return (f"Không đọc được trạng thái phòng | {ready_text}", "err")
+
+        kind = getattr(context, "kind", "unknown")
+        controlled = tuple(getattr(context, "controlled_pids", ()) or ())
+        external = tuple(getattr(context, "external_uids", ()) or ())
+        reason = str(getattr(context, "reason", "") or "").strip()
+
+        if kind == "external_opp":
+            if ready_count == 3:
+                return ("Đủ 3P + OPP | sẵn sàng auto", "ok")
+            return (f"Đủ 3P + OPP | {ready_text}", "run")
+        if kind == "internal_3p":
+            if ready_count == 3:
+                return ("Đủ 3P, không có OPP", "warn")
+            return (f"Đủ 3P, không có OPP | {ready_text}", "warn")
+        if kind == "internal_2p":
+            joined = ",".join(controlled) if controlled else "2P"
+            return (f"{joined} cùng bàn, không có OPP | {ready_text}", "warn")
+
+        if external:
+            base = f"Có {len(external)} OPP nhưng chưa đủ 3P"
+        elif controlled:
+            base = f"Đã có {len(controlled)}/3P cùng bàn"
+        else:
+            base = "Chưa xác định bàn"
+        if reason:
+            base = f"{base}: {reason}"
+        if len(base) > 72:
+            base = base[:69] + "..."
+        return (f"{base} | {ready_text}", "warn")
+
+    def _refresh_profile_activity(self) -> None:
+        for slot, ctx in enumerate(self._contexts, start=1):
+            room_tab = getattr(ctx, "room_tab", None) if ctx is not None else None
+            strategy_tab = getattr(ctx, "strategy_tab", None) if ctx is not None else None
+            if room_tab is None:
+                continue
+            if hasattr(room_tab, "set_tool_activity"):
+                text, level = self._tool_activity_state(ctx, strategy_tab)
+                cache_key = (slot, "AUTO")
+                cached = self._profile_activity_cache.get(cache_key)
+                if cached != (text, level):
+                    self._profile_activity_cache[cache_key] = (text, level)
+                    try:
+                        room_tab.set_tool_activity(text, level)
+                    except Exception:
+                        pass
+            if not hasattr(room_tab, "set_profile_activity"):
+                continue
+            for pid in ("P1", "P2", "P3"):
+                text, level = self._profile_activity_state(strategy_tab, pid)
+                cache_key = (slot, pid)
+                cached = self._profile_activity_cache.get(cache_key)
+                if cached == (text, level):
+                    continue
+                self._profile_activity_cache[cache_key] = (text, level)
+                try:
+                    room_tab.set_profile_activity(pid, text, level)
+                except Exception:
+                    pass
 
     def _compute_profile_room_signals(self, ctx) -> dict[str, str]:
         pids = ("P1", "P2", "P3")
