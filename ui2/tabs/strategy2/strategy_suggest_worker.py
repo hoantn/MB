@@ -160,6 +160,22 @@ def build_suggestions_for_codes(
         cards = [Card.from_code(c) for c in usable]
     except Exception:
         return []
+
+    def _arrange_for_special_fallback(
+        split_cards: List[Card],
+        *,
+        max_candidates: Optional[int] = 1,
+    ) -> List[Tuple[List[Card], List[Card], List[Card]]]:
+        engine_out = build_suggest_engine_output(
+            split_cards,
+            strategy=ArrangeStrategy.STYLE_BRUTEFORCE_ALL,
+            max_candidates=max_candidates,
+            engine_mode=engine_mode_u,
+            profile_id=pid,
+            hand_hash=hand_h,
+        )
+        return engine_out.splits
+
     # --------------------------
     # SPECIAL (build in WORKER)
     # --------------------------
@@ -172,7 +188,11 @@ def build_suggestions_for_codes(
     if sp:
         special_name, chi_pts = sp
         try:
-            built = build_special_split(cards, special_name)  # (c1,c2,c3) or None
+            built = build_special_split(
+                cards,
+                special_name,
+                arrange_fn=_arrange_for_special_fallback,
+            )  # (c1,c2,c3) or None
         except Exception:
             built = None
 

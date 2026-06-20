@@ -565,7 +565,12 @@ def _build_pairs_trips_split(cards: List[Card], *, need_pairs: int, need_trips: 
     return None
 
 
-def build_special_split(cards13: List[Card], special_name: str) -> Optional[Tuple[List[Card], List[Card], List[Card]]]:
+def build_special_split(
+    cards13: List[Card],
+    special_name: str,
+    *,
+    arrange_fn=None,
+) -> Optional[Tuple[List[Card], List[Card], List[Card]]]:
     """
     Build a concrete 5-5-3 split to APPLY so that the UI can click the special row
     and the table will recognize the special 13-card hand.
@@ -573,6 +578,7 @@ def build_special_split(cards13: List[Card], special_name: str) -> Optional[Tupl
     Input:
       - cards13: List[Card] length 13
       - special_name: name returned by detect_special_13()
+      - arrange_fn: optional arranger used by fallback_valid_split().
 
     Output: (chi1, chi2, chi3) or None
     """
@@ -583,11 +589,16 @@ def build_special_split(cards13: List[Card], special_name: str) -> Optional[Tupl
 
     def fallback_valid_split() -> Optional[Tuple[List[Card], List[Card], List[Card]]]:
         # Reporting a special hand still needs a concrete non-foul 5-5-3 layout.
-        # Reuse the stable arranger when a shape-specific builder cannot place
-        # all 13 cards, notably six-pairs hands with only one natural kicker.
+        # Reuse the caller's arranger when a shape-specific builder cannot
+        # place all 13 cards, notably six-pairs hands with only one natural
+        # kicker. This lets Strategy2 fast/compare modes prefill the matching
+        # engine cache instead of running an unrelated stable pass first.
         try:
-            from engine.arranger import arrange_13_cards
-            items = arrange_13_cards(cards13, max_candidates=1)
+            if arrange_fn is not None:
+                items = arrange_fn(cards13, max_candidates=1)
+            else:
+                from engine.arranger import arrange_13_cards
+                items = arrange_13_cards(cards13, max_candidates=1)
             return items[0] if items else None
         except Exception:
             return None
