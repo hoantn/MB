@@ -110,39 +110,56 @@ _static_combo_lock = RLock()
 _static_13_5_combos: Optional[Tuple[Tuple[int, int, int, int, int], ...]] = None
 _static_rem8_by_chi1: Optional[Dict[Tuple[int, int, int, int, int], Tuple[int, ...]]] = None
 _static_rem8_5_combos: Optional[Dict[Tuple[int, ...], Tuple[Tuple[int, int, int, int, int], ...]]] = None
+_static_rem3_by_rem8_idx2: Optional[
+    Dict[Tuple[Tuple[int, ...], Tuple[int, int, int, int, int]], Tuple[int, int, int]]
+] = None
 
 
 def _ensure_static_combos() -> Tuple[
     Tuple[Tuple[int, int, int, int, int], ...],
     Dict[Tuple[int, int, int, int, int], Tuple[int, ...]],
     Dict[Tuple[int, ...], Tuple[Tuple[int, int, int, int, int], ...]],
+    Dict[Tuple[Tuple[int, ...], Tuple[int, int, int, int, int]], Tuple[int, int, int]],
 ]:
     global _static_13_5_combos, _static_rem8_by_chi1, _static_rem8_5_combos
+    global _static_rem3_by_rem8_idx2
     with _static_combo_lock:
         if (
             _static_13_5_combos is not None
             and _static_rem8_by_chi1 is not None
             and _static_rem8_5_combos is not None
+            and _static_rem3_by_rem8_idx2 is not None
         ):
-            return _static_13_5_combos, _static_rem8_by_chi1, _static_rem8_5_combos
+            return _static_13_5_combos, _static_rem8_by_chi1, _static_rem8_5_combos, _static_rem3_by_rem8_idx2
 
         combos13: Tuple[Tuple[int, int, int, int, int], ...] = tuple(
             tuple(c) for c in combinations(range(13), 5)  # type: ignore[misc]
         )
         rem8_by_chi1: Dict[Tuple[int, int, int, int, int], Tuple[int, ...]] = {}
         rem8_5_combos: Dict[Tuple[int, ...], Tuple[Tuple[int, int, int, int, int], ...]] = {}
+        rem3_by_rem8_idx2: Dict[
+            Tuple[Tuple[int, ...], Tuple[int, int, int, int, int]],
+            Tuple[int, int, int],
+        ] = {}
         for idx1 in combos13:
             idx1_set = set(idx1)
             rem8 = tuple(i for i in range(13) if i not in idx1_set)
-            rem8_by_chi1[idx1] = rem8
-            rem8_5_combos[rem8] = tuple(
+            combos8 = tuple(
                 tuple(c) for c in combinations(rem8, 5)  # type: ignore[misc]
             )
+            rem8_by_chi1[idx1] = rem8
+            rem8_5_combos[rem8] = combos8
+            for idx2 in combos8:
+                idx2_set = set(idx2)
+                rem3_by_rem8_idx2[(rem8, idx2)] = tuple(
+                    i for i in rem8 if i not in idx2_set
+                )  # type: ignore[assignment]
 
         _static_13_5_combos = combos13
         _static_rem8_by_chi1 = rem8_by_chi1
         _static_rem8_5_combos = rem8_5_combos
-        return combos13, rem8_by_chi1, rem8_5_combos
+        _static_rem3_by_rem8_idx2 = rem3_by_rem8_idx2
+        return combos13, rem8_by_chi1, rem8_5_combos, rem3_by_rem8_idx2
 
 
 # ============================================================
@@ -491,8 +508,14 @@ def _arrange_13_cards_impl(
     static_13_5_combos = None
     static_rem8_by_chi1 = None
     static_rem8_5_combos = None
+    static_rem3_by_rem8_idx2 = None
     if _use_static_combos:
-        static_13_5_combos, static_rem8_by_chi1, static_rem8_5_combos = _ensure_static_combos()
+        (
+            static_13_5_combos,
+            static_rem8_by_chi1,
+            static_rem8_5_combos,
+            static_rem3_by_rem8_idx2,
+        ) = _ensure_static_combos()
 
     # ---- Precompute chi1 candidates (1287) và sort mạnh→yếu ----
     chi1_candidates: List[Tuple[Tuple[int, int, int, int, int], Tuple[int, List[int]]]] = []
@@ -943,11 +966,18 @@ def _arrange_13_cards_impl(
                         continue
                     processed_variant_keys.add(variant_key)
                 e2 = _eval5(v_idx2)
-                set2 = set(v_idx2)
-                rem3 = [i for i in rem8 if i not in set2]
-                if len(rem3) != 3:
-                    continue
-                idx3 = tuple(sorted(rem3))  # type: ignore
+                if _use_static_combos:
+                    idx3 = static_rem3_by_rem8_idx2.get(  # type: ignore[union-attr]
+                        (rem8_tuple, v_idx2)
+                    )
+                    if idx3 is None:
+                        continue
+                else:
+                    set2 = set(v_idx2)
+                    rem3 = [i for i in rem8 if i not in set2]
+                    if len(rem3) != 3:
+                        continue
+                    idx3 = tuple(sorted(rem3))  # type: ignore
                 e3 = _eval3(idx3)
 
                 # foul check:
