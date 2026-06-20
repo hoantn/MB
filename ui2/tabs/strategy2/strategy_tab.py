@@ -236,6 +236,7 @@ class StrategyTab(QWidget):
         self._pre_render_request_seq: int = 0
         self._pre_render_auto_deferred: bool = False
         self._pre_render_budget_ms: float = 6.0
+        self._pre_render_defer_ms: int = 80
         self._ngu_render_last_input_sig: Optional[tuple] = None
         self._ngu_render_last_output_sig: Optional[tuple] = None
         self._ngu_render_cached_output: List[dict] = []
@@ -759,8 +760,14 @@ class StrategyTab(QWidget):
             self._hand_hash(list(getattr(self, "_ngu_base_codes", []) or [])),
             ngu_idx,
             opp_sig,
+            tuple(
+                self._selected_suggestion_cache_key(profile_id)
+                for profile_id in self.profiles
+                if profile_id != pid
+            ),
             bool(getattr(self, "_ngu_clicked_once", False)),
             bool(getattr(self, "_anti_sap_enabled", False)),
+            str(getattr(self, "_SPECIAL_MODE", "__special13__")),
             int(getattr(self, "MAX_UI_P_ITEMS", MAX_UI_P_ITEMS)),
         )
 
@@ -807,6 +814,28 @@ class StrategyTab(QWidget):
 
     def _has_pending_pre_render_work(self) -> bool:
         return self._has_queued_pre_render_work() or bool(getattr(self, "_pre_render_inflight", None))
+
+    def _has_pending_suggest_work(self) -> bool:
+        scheduler = getattr(self, "_scheduler", None)
+        if scheduler is not None:
+            try:
+                if bool(getattr(scheduler, "job_running", False)):
+                    return True
+            except Exception:
+                pass
+            try:
+                if bool(getattr(scheduler, "job_q", None)):
+                    return True
+            except Exception:
+                pass
+        q = getattr(self, "_q", None)
+        if q is not None:
+            try:
+                if not q.empty():
+                    return True
+            except Exception:
+                pass
+        return False
 
     def _clear_pending_pre_render_profile(self, pid: str) -> None:
         pid = str(pid)
@@ -1001,6 +1030,15 @@ class StrategyTab(QWidget):
 
     def _drain_pre_render_queue(self) -> None:
         if bool(getattr(self, "_pre_render_inflight", None)):
+            return
+        if self._has_pending_suggest_work():
+            timer = getattr(self, "_pre_render_timer", None)
+            if timer is not None:
+                try:
+                    delay_ms = max(1, int(getattr(self, "_pre_render_defer_ms", 80) or 80))
+                    timer.start(delay_ms)
+                except Exception:
+                    pass
             return
 
         pid = None
@@ -1725,12 +1763,11 @@ class StrategyTab(QWidget):
 
     def _render_p_active(self) -> None:
         pid = self.active_profile
-        self._flush_pre_render_for_profile(pid)
         if self._show_active_profile_from_render_cache(pid):
             self._clear_pending_pre_render_profile(pid)
             return
-        self._renderer.render_p_active(self)
         self._clear_pending_pre_render_profile(pid)
+        self._renderer.render_p_active(self)
         self._mark_p_render_cache_valid(pid)
         self._update_special_labels()   # mỗi lần render P active, cập nhật label
         self._refresh_sap_lang_combo()

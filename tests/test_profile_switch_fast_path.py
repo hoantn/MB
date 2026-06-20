@@ -1,4 +1,6 @@
 import unittest
+from collections import deque
+import queue
 
 from ui2.tabs.strategy2.strategy_tab import StrategyTab
 
@@ -86,7 +88,16 @@ class ProfileSwitchFastPathTests(unittest.TestCase):
 
         self.assertNotEqual(before, after)
 
-    def test_render_p_active_uses_valid_cache_before_heavy_renderer(self):
+    def test_pre_render_request_signature_tracks_peer_selection(self):
+        tab = self._cache_tab()
+
+        before = StrategyTab._build_pre_render_request_signature(tab, "P2")
+        tab._selected_index["P1"] = 1
+        after = StrategyTab._build_pre_render_request_signature(tab, "P2")
+
+        self.assertNotEqual(before, after)
+
+    def test_render_p_active_uses_valid_cache_without_sync_prerender_flush(self):
         tab = self._tab()
         calls = []
         tab._flush_pre_render_for_profile = lambda pid: calls.append(("flush", pid))
@@ -104,7 +115,31 @@ class ProfileSwitchFastPathTests(unittest.TestCase):
 
         StrategyTab._render_p_active(tab)
 
-        self.assertEqual(calls, [("flush", "P1"), ("cache", "P1"), ("clear", "P1")])
+        self.assertEqual(calls, [("cache", "P1"), ("clear", "P1")])
+
+    def test_drain_pre_render_queue_defers_while_suggest_jobs_are_pending(self):
+        tab = self._tab()
+        calls = []
+
+        class _Timer:
+            def start(self, delay=0):
+                calls.append(("timer", delay))
+
+        tab._pre_render_inflight = {}
+        tab._pre_render_pending = {"P1": ("sig",)}
+        tab._pre_render_queue = deque(["P1"])
+        tab._pre_render_timer = _Timer()
+        tab._pre_render_defer_ms = 80
+        tab._scheduler = type("Scheduler", (), {"job_running": True, "job_q": deque()})()
+        tab._q = queue.Queue()
+        tab._start_pre_render_worker = lambda pid, sig: calls.append(("start", pid, sig))
+        tab._has_pending_pre_render_work = lambda: True
+        tab._resume_auto_after_pre_render_if_needed = lambda: calls.append(("resume",))
+
+        StrategyTab._drain_pre_render_queue(tab)
+
+        self.assertEqual(calls, [("timer", 80)])
+        self.assertEqual(tab._pre_render_pending, {"P1": ("sig",)})
 
 
 if __name__ == "__main__":

@@ -120,16 +120,36 @@ class StagedScheduler:
             tab.view.set_p_status("Đang tính gợi ý…")
 
         def _worker():
+            start = time.perf_counter()
+            out_count = 0
             try:
                 if stage == "BASE":
                     res = tab._build_base_suggestion(k, codes, kind)
+                    out_count = 1 if res else 0
                     tab._q.put((k, None, [res] if res else [], None, stage, kind, h))
                 else:
                     full = tab.build_suggestions_for_codes(k, codes)
                     extras = tab._filter_extras(full)
+                    out_count = len(extras or [])
                     tab._q.put((k, None, extras, None, stage, kind, h))
             except Exception as e:
                 tab._q.put((k, None, None, e, stage, kind, h))
+            finally:
+                elapsed_ms = (time.perf_counter() - start) * 1000.0
+                if elapsed_ms >= 25.0:
+                    try:
+                        logger = getattr(tab, "log", None)
+                        if logger is not None:
+                            logger.info(
+                                "[Strategy2][suggest-worker] %s:%s/%s %.1fms items=%s",
+                                k,
+                                stage,
+                                kind,
+                                elapsed_ms,
+                                out_count,
+                            )
+                    except Exception:
+                        pass
 
         threading.Thread(
             target=_worker,
