@@ -35,10 +35,17 @@ _arrange_cache_hits = 0
 _arrange_cache_misses = 0
 
 
-def _arrange_cache_key(cards: List[Card], strategy: ArrangeStrategy) -> Tuple[Tuple[Tuple[int, int], ...], str]:
+def _arrange_cache_key(
+    cards: List[Card],
+    strategy: ArrangeStrategy,
+    cache_variant: str = "",
+) -> Tuple[Tuple[Tuple[int, int], ...], str]:
     # Key theo đúng thứ tự input list để đảm bảo idx mapping ra đúng cards[].
     sig = tuple((c.rank_index, c.suit) for c in cards)
-    return sig, str(strategy.value)
+    strategy_key = str(strategy.value)
+    if cache_variant:
+        strategy_key = f"{strategy_key}|{str(cache_variant)}"
+    return sig, strategy_key
 
 
 def _arrange_cache_get(key):
@@ -98,6 +105,45 @@ def arrange_cache_stats() -> Dict[str, int]:
             "hits": _arrange_cache_hits,
             "misses": _arrange_cache_misses,
         }
+
+_static_combo_lock = RLock()
+_static_13_5_combos: Optional[Tuple[Tuple[int, int, int, int, int], ...]] = None
+_static_rem8_by_chi1: Optional[Dict[Tuple[int, int, int, int, int], Tuple[int, ...]]] = None
+_static_rem8_5_combos: Optional[Dict[Tuple[int, ...], Tuple[Tuple[int, int, int, int, int], ...]]] = None
+
+
+def _ensure_static_combos() -> Tuple[
+    Tuple[Tuple[int, int, int, int, int], ...],
+    Dict[Tuple[int, int, int, int, int], Tuple[int, ...]],
+    Dict[Tuple[int, ...], Tuple[Tuple[int, int, int, int, int], ...]],
+]:
+    global _static_13_5_combos, _static_rem8_by_chi1, _static_rem8_5_combos
+    with _static_combo_lock:
+        if (
+            _static_13_5_combos is not None
+            and _static_rem8_by_chi1 is not None
+            and _static_rem8_5_combos is not None
+        ):
+            return _static_13_5_combos, _static_rem8_by_chi1, _static_rem8_5_combos
+
+        combos13: Tuple[Tuple[int, int, int, int, int], ...] = tuple(
+            tuple(c) for c in combinations(range(13), 5)  # type: ignore[misc]
+        )
+        rem8_by_chi1: Dict[Tuple[int, int, int, int, int], Tuple[int, ...]] = {}
+        rem8_5_combos: Dict[Tuple[int, ...], Tuple[Tuple[int, int, int, int, int], ...]] = {}
+        for idx1 in combos13:
+            idx1_set = set(idx1)
+            rem8 = tuple(i for i in range(13) if i not in idx1_set)
+            rem8_by_chi1[idx1] = rem8
+            rem8_5_combos[rem8] = tuple(
+                tuple(c) for c in combinations(rem8, 5)  # type: ignore[misc]
+            )
+
+        _static_13_5_combos = combos13
+        _static_rem8_by_chi1 = rem8_by_chi1
+        _static_rem8_5_combos = rem8_5_combos
+        return combos13, rem8_by_chi1, rem8_5_combos
+
 
 # ============================================================
 # Helpers: so sánh hand theo (type, detail) đã evaluate sẵn
@@ -354,6 +400,8 @@ def _arrange_13_cards_impl(
     *,
     strategy: ArrangeStrategy = ArrangeStrategy.STYLE_BRUTEFORCE_ALL,
     max_candidates: Optional[int] = None,
+    _use_static_combos: bool = False,
+    _cache_variant: str = "",
 ) -> List[Tuple[List[Card], List[Card], List[Card]]]:
     """
     Brute-force 72k split 5-5-3, lọc foul, rồi dedup theo struct_key=(t1,t2,t3).
@@ -372,7 +420,7 @@ def _arrange_13_cards_impl(
         max_candidates = 0
     # ---- Cross-call cache (giữ nguyên kết quả) ----
     # Lưu/đọc cache theo đúng thứ tự input cards để idx mapping chuẩn.
-    cache_key = _arrange_cache_key(cards, strategy)
+    cache_key = _arrange_cache_key(cards, strategy, _cache_variant)
     cached = _arrange_cache_get(cache_key)
     if cached is not None:
         # cached là list idx tuples: [(idx1,idx2,idx3), ...]
@@ -440,10 +488,17 @@ def _arrange_13_cards_impl(
         eval3_cache[idx3] = v
         return v
 
+    static_13_5_combos = None
+    static_rem8_by_chi1 = None
+    static_rem8_5_combos = None
+    if _use_static_combos:
+        static_13_5_combos, static_rem8_by_chi1, static_rem8_5_combos = _ensure_static_combos()
+
     # ---- Precompute chi1 candidates (1287) và sort mạnh→yếu ----
     chi1_candidates: List[Tuple[Tuple[int, int, int, int, int], Tuple[int, List[int]]]] = []
-    for comb5 in combinations(range(13), 5):
-        idx5 = tuple(sorted(comb5))  # type: ignore
+    chi1_combo_source = static_13_5_combos if _use_static_combos else combinations(range(13), 5)
+    for comb5 in chi1_combo_source:
+        idx5 = comb5 if _use_static_combos else tuple(sorted(comb5))  # type: ignore
         e = _eval5(idx5)
         chi1_candidates.append((idx5, e))
 
@@ -843,14 +898,23 @@ def _arrange_13_cards_impl(
     # ---- main loop: chi1 (1287) x chi2 (56) = 72k ----
 
     for idx1, e1 in chi1_candidates:
-        set1 = set(idx1)
-        rem8 = [i for i in range(13) if i not in set1]  # size 8
+        if _use_static_combos:
+            rem8_tuple = static_rem8_by_chi1[idx1]  # type: ignore[index]
+            rem8 = list(rem8_tuple)  # size 8
+        else:
+            set1 = set(idx1)
+            rem8 = [i for i in range(13) if i not in set1]  # size 8
 
         # Với chi1 cố định, ta chỉ cần 56 chi2 combos.
         # Ta sẽ tạo list chi2 candidate + eval và sort theo mạnh→yếu để "đại diện đầu" tốt.
         chi2_candidates: List[Tuple[Tuple[int, int, int, int, int], Tuple[int, List[int]]]] = []
-        for comb5 in combinations(rem8, 5):
-            idx2 = tuple(sorted(comb5))  # type: ignore
+        chi2_combo_source = (
+            static_rem8_5_combos[rem8_tuple]  # type: ignore[index]
+            if _use_static_combos
+            else combinations(rem8, 5)
+        )
+        for comb5 in chi2_combo_source:
+            idx2 = comb5 if _use_static_combos else tuple(sorted(comb5))  # type: ignore
             e2 = _eval5(idx2)
             # prune thô: chi2 mạnh hơn chi1 => chắc chắn foul
             if e2[0] > e1[0]:
@@ -1058,6 +1122,25 @@ def arrange_13_cards(
     )
 
 
+def _arrange_cached_money_split_impl(
+    cards: List[Card],
+    *,
+    strategy: ArrangeStrategy = ArrangeStrategy.STYLE_BRUTEFORCE_ALL,
+    _cache_variant: str = "",
+) -> Optional[Tuple[List[Card], List[Card], List[Card]]]:
+    if not cards or len(cards) != 13:
+        return None
+    cached = _arrange_money_cache_get(_arrange_cache_key(cards, strategy, _cache_variant))
+    if cached is None:
+        return None
+    idx1, idx2, idx3 = cached
+    return (
+        [cards[i] for i in idx1],
+        [cards[i] for i in idx2],
+        [cards[i] for i in idx3],
+    )
+
+
 def arrange_cached_money_split(
     cards: List[Card],
     *,
@@ -1069,17 +1152,7 @@ def arrange_cached_money_split(
     This helper never starts a scan. Call arrange_13_cards() first so Auto Play
     reuses the same 72k pass already required for normal suggestions.
     """
-    if not cards or len(cards) != 13:
-        return None
-    cached = _arrange_money_cache_get(_arrange_cache_key(cards, strategy))
-    if cached is None:
-        return None
-    idx1, idx2, idx3 = cached
-    return (
-        [cards[i] for i in idx1],
-        [cards[i] for i in idx2],
-        [cards[i] for i in idx3],
-    )
+    return _arrange_cached_money_split_impl(cards, strategy=strategy)
 
 
 def arrange_cards(

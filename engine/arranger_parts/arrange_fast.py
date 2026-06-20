@@ -5,9 +5,13 @@ from typing import Dict, List, Optional, Tuple
 from engine.card import Card
 from engine.arranger_parts.arrange import (
     ArrangeStrategy,
-    arrange_13_cards as _arrange_13_cards_stable,
-    arrange_cached_money_split as _arrange_cached_money_split_stable,
+    _arrange_13_cards_impl,
+    _arrange_cached_money_split_impl,
+    arrange_cache_clear as _arrange_cache_clear,
+    arrange_cache_stats as _arrange_cache_stats,
 )
+
+_FAST_CACHE_VARIANT = "fast_combo_v1"
 
 
 def arrange_13_cards_fast(
@@ -16,16 +20,18 @@ def arrange_13_cards_fast(
     strategy: ArrangeStrategy = ArrangeStrategy.STYLE_BRUTEFORCE_ALL,
     max_candidates: Optional[int] = None,
 ) -> List[Tuple[List[Card], List[Card], List[Card]]]:
-    """Phase-0 fast engine adapter.
+    """Fast-v1 arranger.
 
-    It intentionally delegates to the stable arranger until the A/B harness
-    proves the whole Strategy2 pipeline can swap engines without changing
-    output. Real micro-optimizations will land here, behind the same API.
+    The hand-ranking, filtering, style, and money-choice logic stays shared
+    with stable. This path only swaps in static 13-card combination tables and
+    an isolated cache namespace, so A/B compare can validate it independently.
     """
-    return _arrange_13_cards_stable(
+    return _arrange_13_cards_impl(
         cards,
         strategy=strategy,
         max_candidates=max_candidates,
+        _use_static_combos=True,
+        _cache_variant=_FAST_CACHE_VARIANT,
     )
 
 
@@ -34,13 +40,17 @@ def arrange_cached_money_split_fast(
     *,
     strategy: ArrangeStrategy = ArrangeStrategy.STYLE_BRUTEFORCE_ALL,
 ) -> Optional[Tuple[List[Card], List[Card], List[Card]]]:
-    return _arrange_cached_money_split_stable(cards, strategy=strategy)
+    return _arrange_cached_money_split_impl(
+        cards,
+        strategy=strategy,
+        _cache_variant=_FAST_CACHE_VARIANT,
+    )
 
 
 def arrange_fast_cache_clear() -> None:
-    """Reserved for the future independent fast cache."""
-    return None
+    """Clear the shared arranger LRU storage used by the fast cache variant."""
+    _arrange_cache_clear()
 
 
 def arrange_fast_cache_stats() -> Dict[str, int]:
-    return {"size": 0, "money_size": 0, "max": 0, "hits": 0, "misses": 0}
+    return _arrange_cache_stats()

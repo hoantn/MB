@@ -3,6 +3,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from engine.arranger_parts.arrange import arrange_cache_clear
 from ui2.tabs.strategy2.modules.labeling import Labeling
 from ui2.tabs.strategy2.modules.render_controller import RenderController
 from ui2.tabs.strategy2.modules.special_row import is_special_row
@@ -98,6 +99,7 @@ def _normalize_suggestions(items):
 
 
 def _make_tab(engine_mode, *, ngu_clicked_once=False):
+    arrange_cache_clear()
     for key in ("P1", "P2", "P3", "NGU"):
         clear_cache_for_pid(key)
 
@@ -161,6 +163,7 @@ def _render_snapshot(engine_mode, *, ngu_clicked_once=False):
 
 def _worker_snapshot(key, codes, engine_mode):
     clear_cache_for_pid(key)
+    arrange_cache_clear()
     return _normalize_suggestions(build_suggestions_for_codes(key, codes, engine_mode=engine_mode))
 
 
