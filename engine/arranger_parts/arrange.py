@@ -420,6 +420,7 @@ def arrange_13_cards(
     _flush_straight_info_cache: Dict[Tuple[int, int, int, int, int], Optional[dict]] = {}
     _style_extras_cache: Dict[Tuple[int, ...], Tuple[int, ...]] = {}
     _money_score_cache: Dict[Tuple[int, Tuple[int, ...], int, Tuple[int, ...], int, Tuple[int, ...]], float] = {}
+    _is_flush_idx_cache: Dict[Tuple[int, int, int, int, int], bool] = {}
 
     def _eval5(idx5: Tuple[int, int, int, int, int]) -> Tuple[int, List[int]]:
         v = eval5_cache.get(idx5)
@@ -728,8 +729,13 @@ def arrange_13_cards(
         return [0]
 
     def _is_flush_idx(idx5: Tuple[int, int, int, int, int]) -> bool:
+        cached = _is_flush_idx_cache.get(idx5)
+        if cached is not None:
+            return cached
         suit = suits13[idx5[0]]
-        return all(suits13[i] == suit for i in idx5[1:])
+        value = all(suits13[i] == suit for i in idx5[1:])
+        _is_flush_idx_cache[idx5] = value
+        return value
 
     def _overflow_kind_for_idx2(
         idx5: Tuple[int, int, int, int, int],
