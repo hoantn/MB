@@ -4,6 +4,7 @@ from PyInstaller.utils.hooks import (
     collect_submodules,
     collect_data_files,
     collect_dynamic_libs,
+    collect_all,
 )
 from glob import glob
 
@@ -27,6 +28,8 @@ hiddenimports += collect_submodules("ui2")
 hiddenimports += collect_submodules("engine")
 hiddenimports += collect_submodules("browser")
 hiddenimports += collect_submodules("capture")
+cv2_datas, cv2_binaries, cv2_hiddenimports = collect_all("cv2")
+hiddenimports += cv2_hiddenimports
 hiddenimports += ["cv2"]
 
 # --- Datas: đúng yêu cầu của anh ---
@@ -47,10 +50,12 @@ binaries += collect_dynamic_libs("nacl")
 binaries += collect_dynamic_libs("cbor2")
 binaries += collect_dynamic_libs("PySide6")
 binaries += collect_dynamic_libs("shiboken6")
+binaries += cv2_binaries
 
 # PySide6/Qt plugins: gom data để tránh lỗi runtime (đen màn hình, missing plugin)
 datas += collect_data_files("PySide6")
 datas += collect_data_files("shiboken6")
+datas += cv2_datas
 
 a = Analysis(
     ["ui2/main.py"],

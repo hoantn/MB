@@ -115,6 +115,13 @@ class ApplyController:
                 QMessageBox.warning(tab, "HÚP", f"{pid}: Chưa có đủ 13 lá.")
                 return
 
+            flush_pre_render = getattr(tab, "_flush_pre_render_for_profile", None)
+            if callable(flush_pre_render):
+                try:
+                    flush_pre_render(pid)
+                except Exception:
+                    pass
+
             # suggestions store: prefer rendered if available
             suggs = tab._suggestions_render.get(pid) or tab._suggestions.get(pid) or []
             idx = tab._selected_index.get(pid, 0)
@@ -183,6 +190,12 @@ class ApplyController:
                 ws_codes = tab._codes_slot_order.get(pid) or []
                 if len(ws_codes) != 13:
                     continue
+                flush_pre_render = getattr(tab, "_flush_pre_render_for_profile", None)
+                if callable(flush_pre_render):
+                    try:
+                        flush_pre_render(pid)
+                    except Exception:
+                        pass
                 suggs = tab._suggestions_render.get(pid) or tab._suggestions.get(pid) or []
                 idx = tab._selected_index.get(pid, 0)
                 if not suggs or idx < 0 or idx >= len(suggs):

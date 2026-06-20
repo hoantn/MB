@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QMessageBox
 
 from core.config import load_config
 from core.logger import log
+from core.apply_lock import acquire as _acquire_apply_lock, release as _release_apply_lock
 from engine.action import apply_arrangement
 from engine.card import Card
 
@@ -195,8 +196,8 @@ def apply_manual_dashboard_style(
 
     This mirrors the MB-Copy drag behavior: pass 1 from the known layout,
     a short settle wait, then an unconditional second pass from the cached
-    predicted layout. It deliberately avoids auto-only gates, cross-tab apply
-    locks, fast drag flags and cmd=606 confirmation/repair.
+    predicted layout. It deliberately avoids auto-only action gates, fast drag
+    flags and cmd=606 confirmation/repair.
     """
 
     pid = str(profile_id)
@@ -246,6 +247,14 @@ def apply_manual_dashboard_style(
         old_thread = None
 
     if old_thread is not None and getattr(old_thread, "is_alive", lambda: False)():
+        return
+
+    try:
+        apply_slot = int(getattr(getattr(tab, "browser_manager", None), "_slot", 1) or 1)
+    except Exception:
+        apply_slot = 1
+    if not _acquire_apply_lock(apply_slot, pid):
+        log.warning("[MANUAL APPLY] skip: slot=%d pid=%s is already applying", apply_slot, pid)
         return
 
     _unlock_manual_layout(tab, pid)
@@ -389,6 +398,10 @@ def apply_manual_dashboard_style(
                 manual_freeze[pid] = False
             except Exception:
                 pass
+            try:
+                _release_apply_lock(apply_slot, pid)
+            except Exception:
+                pass
 
             try:
                 if hasattr(tab, "refresh_manual_slot_order"):
@@ -406,6 +419,10 @@ def apply_manual_dashboard_style(
         thread.start()
     except Exception:
         threads.pop(pid, None)
+        try:
+            _release_apply_lock(apply_slot, pid)
+        except Exception:
+            pass
         try:
             _call_manual_default(tab, pid)
         except Exception:

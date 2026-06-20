@@ -63,6 +63,11 @@ class _TabWithBlockedNgu(_Tab):
         return False
 
 
+class _TabWithPreRenderQueue(_Tab):
+    def _queue_pre_render_profile(self, pid):
+        self.calls.append(("queue_pre_render", pid))
+
+
 class PostEngineRendererTests(unittest.TestCase):
     def test_pre_render_profile_delegates_without_changing_contract(self):
         tab = _Tab()
@@ -71,6 +76,14 @@ class PostEngineRendererTests(unittest.TestCase):
         renderer.pre_render_profile(tab, "P2")
 
         self.assertEqual(tab.calls, [("pre_render", "P2")])
+
+    def test_pre_render_profile_uses_idle_queue_when_available(self):
+        tab = _TabWithPreRenderQueue()
+        renderer = PostEngineRenderer()
+
+        renderer.pre_render_profile(tab, "P2")
+
+        self.assertEqual(tab.calls, [("queue_pre_render", "P2")])
 
     def test_full_post_engine_sequence_keeps_legacy_order(self):
         tab = _Tab()

@@ -28,8 +28,9 @@ call venv\Scripts\activate
 REM --- B5: upgrade pip ---
 python -m pip install --upgrade pip
 
-REM --- B5.1: opencv-python GUI dễ lỗi DLL trong PyInstaller; dùng headless cho xử lý ảnh ---
-pip uninstall -y opencv-python >nul 2>nul
+REM --- B5.1: opencv GUI de loi DLL trong PyInstaller; dung headless cho xu ly anh ---
+REM Go ca metadata/cu muc cv2 bi hong de pip khong nham la da cai du.
+pip uninstall -y opencv-python opencv-contrib-python opencv-contrib-python-headless opencv-python-headless >nul 2>nul
 
 REM --- B6: cài dependency ---
 if exist requirements.txt (
@@ -39,10 +40,26 @@ if exist requirements.txt (
     echo [WARN] requirements.txt not found, skipping.
 )
 
+REM --- B6.0: dam bao cv2 thuc su ton tai sau khi go ban GUI ---
+pip install --force-reinstall --no-cache-dir opencv-python-headless
+if errorlevel 1 (
+    echo [ERROR] Cannot install opencv-python-headless.
+    pause
+    exit /b 1
+)
+
 REM --- B6.1: fail fast nếu Qt binding không có trong đúng venv build ---
 python -c "import PySide6, shiboken6; print('[INFO] PySide6 OK:', PySide6.__file__)"
 if errorlevel 1 (
     echo [ERROR] PySide6 is missing in build venv. Check requirements.txt/install log.
+    pause
+    exit /b 1
+)
+
+REM --- B6.2: fail fast neu OpenCV/cv2 khong co trong dung venv build ---
+python -c "import cv2; print('[INFO] cv2 OK:', cv2.__version__, cv2.__file__)"
+if errorlevel 1 (
+    echo [ERROR] cv2 is missing in build venv. Install opencv-python-headless.
     pause
     exit /b 1
 )

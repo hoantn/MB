@@ -41,6 +41,9 @@ class _FakeProxyno1Client:
             },
         }
 
+    def change_ip(self):
+        return {"status": 0, "message": f"changed:{self.api_key}"}
+
 
 class TestProxyno1SlotIsolation(unittest.TestCase):
     def test_get_proxy_info_uses_and_saves_requested_slot(self):
@@ -67,6 +70,34 @@ class TestProxyno1SlotIsolation(unittest.TestCase):
         self.assertEqual(info["http_port"], 2222)
         self.assertEqual(_FakeProxyno1Client.seen_keys, ["TOOL2_KEY"])
         self.assertEqual([slot for slot, _ in saved], [2])
+
+    def test_change_ip_uses_and_saves_requested_slot(self):
+        configs = {
+            1: _cfg("TOOL1_KEY"),
+            2: _cfg("TOOL2_KEY"),
+        }
+        saved = []
+
+        def fake_load_config(slot=1):
+            return copy.deepcopy(configs[slot])
+
+        def fake_save_config(cfg, slot=1):
+            saved.append((slot, cfg))
+
+        _FakeProxyno1Client.seen_keys = []
+        with patch.object(proxyno1_provider, "load_config", side_effect=fake_load_config), patch.object(
+            proxyno1_provider, "save_config", side_effect=fake_save_config
+        ), patch.object(proxyno1_provider, "Proxyno1Client", _FakeProxyno1Client):
+            ok, msg = proxyno1_provider.proxyno1_change_ip_for_profile("P1", slot=2)
+
+        self.assertTrue(ok, msg)
+        self.assertIn("changed:TOOL2_KEY", msg)
+        self.assertEqual(_FakeProxyno1Client.seen_keys, ["TOOL2_KEY"])
+        self.assertEqual([slot for slot, _ in saved], [2])
+        self.assertEqual(
+            saved[0][1]["profiles"]["P1"]["proxy"]["proxyno1_last_message"],
+            "changed:TOOL2_KEY",
+        )
 
 
 if __name__ == "__main__":

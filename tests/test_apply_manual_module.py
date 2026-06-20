@@ -113,11 +113,9 @@ def _load_config(_slot=1):
 class ApplyManualModuleTests(unittest.TestCase):
     def _run_apply(self, tab):
         with patch("ui2.tabs.strategy2.modules.apply_manual.load_config", side_effect=_load_config):
-            with patch("ui2.tabs.strategy2.modules.apply_manual.acquire_profile_action", return_value=object()):
-                with patch("ui2.tabs.strategy2.modules.apply_manual.release_profile_action"):
-                    with patch("ui2.tabs.strategy2.modules.apply_manual._acquire_apply_lock", return_value=True):
-                        with patch("ui2.tabs.strategy2.modules.apply_manual._release_apply_lock"):
-                            apply_manual_dashboard_style(tab, "P1", list(WS_LAYOUT), dict(SUGGESTION))
+            with patch("ui2.tabs.strategy2.modules.apply_manual._acquire_apply_lock", return_value=True):
+                with patch("ui2.tabs.strategy2.modules.apply_manual._release_apply_lock"):
+                    apply_manual_dashboard_style(tab, "P1", list(WS_LAYOUT), dict(SUGGESTION))
 
         deadline = time.time() + 2.5
         while time.time() < deadline:

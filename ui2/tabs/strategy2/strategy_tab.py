@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
-from collections import Counter
+from collections import Counter, deque
 import hashlib
 import threading
 import queue
@@ -45,11 +45,24 @@ from .modules.staged_scheduler import StagedScheduler
 from .modules.post_engine_renderer import PostEngineRenderer
 from .modules.apply_controller import ApplyController
 from .modules.auto_play_controller import (
+    AutoPlayPlan,
     build_auto_play_plan,
     build_internal_balance_plan,
     build_internal_sap_ham_plan,
     build_money_fallback_plan,
     classify_auto_room_context,
+)
+from .modules.auto_plan_worker import (
+    AutoOppPlanResult,
+    AutoOppPlanSnapshot,
+    run_auto_opp_plan_snapshot,
+)
+from .modules.pre_render_worker import (
+    PreRenderSnapshot,
+    PreRenderResult,
+    apply_auto_mark_plan,
+    copy_suggestions as _copy_pre_render_suggestions,
+    run_pre_render_snapshot,
 )
 
 from engine.card import Card
@@ -217,6 +230,12 @@ class StrategyTab(QWidget):
         self._suggestions_render: Dict[str, List[dict]] = {pid: [] for pid in self.profiles}
         self._selected_index: Dict[str, int] = {pid: 0 for pid in self.profiles}
         self._p_render_core_sig: Dict[str, Optional[tuple]] = {pid: None for pid in self.profiles}
+        self._pre_render_pending: Dict[str, tuple] = {}
+        self._pre_render_queue = deque()
+        self._pre_render_inflight: Dict[str, tuple] = {}
+        self._pre_render_request_seq: int = 0
+        self._pre_render_auto_deferred: bool = False
+        self._pre_render_budget_ms: float = 6.0
         self._ngu_render_last_input_sig: Optional[tuple] = None
         self._ngu_render_last_output_sig: Optional[tuple] = None
         self._ngu_render_cached_output: List[dict] = []
@@ -244,6 +263,9 @@ class StrategyTab(QWidget):
         self._auto_play_internal_sap_ham_done: bool = False
         self._auto_play_round_modes: Dict[str, str] = {}
         self._auto_play_session: int = 0
+        self._auto_opp_plan_request_seq: int = 0
+        self._auto_opp_plan_inflight: Optional[tuple] = None
+        self._auto_opp_plan_force_sync_key: Optional[str] = None
         self._auto_play_log_sink = auto_play_log_sink
         self._auto_settings_notifier = auto_settings_notifier
         self._missing_3p_alert_timer = QTimer(self)
@@ -268,6 +290,11 @@ class StrategyTab(QWidget):
         self._batch_debounce.setSingleShot(True)
         self._batch_debounce.setInterval(140)
         self._batch_debounce.timeout.connect(self._enqueue_batch_jobs)
+
+        self._pre_render_timer = QTimer(self)
+        self._pre_render_timer.setSingleShot(True)
+        self._pre_render_timer.setInterval(0)
+        self._pre_render_timer.timeout.connect(self._drain_pre_render_queue)
 
         self._ngu_refresh_pending: bool = False
         self._ngu_refresh_debounce = QTimer(self)
@@ -710,6 +737,311 @@ class StrategyTab(QWidget):
 
         self._suggestions_render[pid] = list(render_suggs[:self.MAX_UI_P_ITEMS])
 
+    def _build_pre_render_request_signature(self, pid: str) -> tuple:
+        """Small stale guard for idle pre-render work."""
+        try:
+            selected_idx = int((self._selected_index or {}).get(pid, 0) or 0)
+        except Exception:
+            selected_idx = 0
+        try:
+            ngu_idx = int(getattr(self, "_ngu_selected_index", 0) or 0)
+        except Exception:
+            ngu_idx = 0
+        try:
+            opp_sig = self._ngu_suggestion_cache_key(self._pick_current_ngu_suggestion())
+        except Exception:
+            opp_sig = ()
+        return (
+            str(pid),
+            self._hand_hash(list((self._codes_slot_order or {}).get(pid) or [])),
+            self._suggestions_cache_key((self._suggestions or {}).get(pid) or []),
+            selected_idx,
+            self._hand_hash(list(getattr(self, "_ngu_base_codes", []) or [])),
+            ngu_idx,
+            opp_sig,
+            bool(getattr(self, "_ngu_clicked_once", False)),
+            bool(getattr(self, "_anti_sap_enabled", False)),
+            int(getattr(self, "MAX_UI_P_ITEMS", MAX_UI_P_ITEMS)),
+        )
+
+    def _queue_pre_render_profile(self, pid: str) -> None:
+        if pid not in self.profiles:
+            return
+        try:
+            sig = self._build_pre_render_request_signature(pid)
+        except Exception:
+            self._pre_render_profile(pid)
+            return
+
+        pending = getattr(self, "_pre_render_pending", None)
+        if not isinstance(pending, dict):
+            self._pre_render_pending = {}
+            pending = self._pre_render_pending
+
+        q = getattr(self, "_pre_render_queue", None)
+        if q is None:
+            self._pre_render_queue = deque()
+            q = self._pre_render_queue
+
+        pending[pid] = sig
+        if pid not in q:
+            q.append(pid)
+
+        timer = getattr(self, "_pre_render_timer", None)
+        if timer is not None:
+            try:
+                if not timer.isActive():
+                    timer.start(0)
+            except Exception:
+                pass
+
+    def _has_queued_pre_render_work(self) -> bool:
+        pending = getattr(self, "_pre_render_pending", None)
+        q = getattr(self, "_pre_render_queue", None)
+        if not isinstance(pending, dict) or not pending or not q:
+            return False
+        try:
+            return any(str(pid) in pending for pid in list(q))
+        except Exception:
+            return bool(pending) and bool(q)
+
+    def _has_pending_pre_render_work(self) -> bool:
+        return self._has_queued_pre_render_work() or bool(getattr(self, "_pre_render_inflight", None))
+
+    def _clear_pending_pre_render_profile(self, pid: str) -> None:
+        pid = str(pid)
+        try:
+            self._pre_render_pending.pop(pid, None)
+        except Exception:
+            pass
+        try:
+            self._pre_render_inflight.pop(pid, None)
+        except Exception:
+            pass
+
+    def _flush_pre_render_for_profile(self, pid: str) -> None:
+        pid = str(pid)
+        pending = getattr(self, "_pre_render_pending", None)
+        inflight = getattr(self, "_pre_render_inflight", None)
+        expected = None
+        if isinstance(pending, dict):
+            expected = pending.pop(pid, None)
+        if expected is None and isinstance(inflight, dict):
+            inflight_item = inflight.pop(pid, None)
+            if inflight_item:
+                try:
+                    _request_id, expected = inflight_item
+                except Exception:
+                    expected = None
+        if expected is None:
+            return
+        try:
+            current = self._build_pre_render_request_signature(pid)
+        except Exception:
+            current = None
+        if expected is not None and current == expected:
+            self._run_pre_render_profile_timed(pid)
+
+        timer = getattr(self, "_pre_render_timer", None)
+        if self._has_queued_pre_render_work():
+            if timer is not None:
+                try:
+                    timer.start(0)
+                except Exception:
+                    pass
+        elif not self._has_pending_pre_render_work():
+            self._resume_auto_after_pre_render_if_needed()
+
+    def _flush_pre_render_queue(self) -> None:
+        while self._has_queued_pre_render_work():
+            try:
+                pid = self._pre_render_queue.popleft()
+            except Exception:
+                break
+            self._flush_pre_render_for_profile(str(pid))
+        for pid in list((getattr(self, "_pre_render_inflight", None) or {}).keys()):
+            self._flush_pre_render_for_profile(str(pid))
+
+    def _run_pre_render_profile_timed(self, pid: str) -> None:
+        start = time.perf_counter()
+        try:
+            self._pre_render_profile(pid)
+        finally:
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            if elapsed_ms >= 8.0:
+                try:
+                    self.log.info("[Strategy2][post-engine] pre_render_idle:%s %.1fms", pid, elapsed_ms)
+                except Exception:
+                    pass
+
+    def _build_pre_render_snapshot(self, pid: str, request_id: int, sig: tuple) -> PreRenderSnapshot:
+        return PreRenderSnapshot(
+            pid=str(pid),
+            request_id=int(request_id),
+            signature=sig,
+            profiles=tuple(self.profiles),
+            suggestions={
+                profile_id: _copy_pre_render_suggestions((self._suggestions or {}).get(profile_id) or [])
+                for profile_id in self.profiles
+            },
+            suggestions_render={
+                profile_id: _copy_pre_render_suggestions((self._suggestions_render or {}).get(profile_id) or [])
+                for profile_id in self.profiles
+            },
+            selected_index={
+                profile_id: int((self._selected_index or {}).get(profile_id, 0) or 0)
+                for profile_id in self.profiles
+            },
+            codes_slot_order={
+                profile_id: list((self._codes_slot_order or {}).get(profile_id) or [])
+                for profile_id in self.profiles
+            },
+            ngu_suggestions=_copy_pre_render_suggestions(getattr(self, "_ngu_suggestions", []) or []),
+            ngu_selected_index=int(getattr(self, "_ngu_selected_index", 0) or 0),
+            ngu_clicked_once=bool(getattr(self, "_ngu_clicked_once", False)),
+            anti_sap_enabled=bool(getattr(self, "_anti_sap_enabled", False)),
+            max_ui_p_items=int(getattr(self, "MAX_UI_P_ITEMS", MAX_UI_P_ITEMS)),
+            special_mode=str(getattr(self, "_SPECIAL_MODE", "__special13__")),
+        )
+
+    def _start_pre_render_worker(self, pid: str, sig: tuple) -> None:
+        pid = str(pid)
+        self._pre_render_request_seq = int(getattr(self, "_pre_render_request_seq", 0) or 0) + 1
+        request_id = int(self._pre_render_request_seq)
+        try:
+            snapshot = self._build_pre_render_snapshot(pid, request_id, sig)
+        except Exception:
+            self._run_pre_render_profile_timed(pid)
+            return
+
+        self._pre_render_inflight[pid] = (request_id, sig)
+
+        def _worker() -> None:
+            result = run_pre_render_snapshot(snapshot)
+            try:
+                self.ui_call.emit(lambda r=result: self._on_pre_render_worker_done(r))
+            except Exception:
+                pass
+
+        try:
+            threading.Thread(
+                target=_worker,
+                name=f"MB-Strategy2-PreRender-{pid}-{request_id}",
+                daemon=True,
+            ).start()
+        except Exception:
+            try:
+                self._pre_render_inflight.pop(pid, None)
+            except Exception:
+                pass
+            self._run_pre_render_profile_timed(pid)
+
+    def _on_pre_render_worker_done(self, result: PreRenderResult) -> None:
+        pid = str(getattr(result, "pid", "") or "")
+        if pid not in self.profiles:
+            return
+        inflight = getattr(self, "_pre_render_inflight", None)
+        expected = None
+        if isinstance(inflight, dict):
+            expected = inflight.get(pid)
+        if expected != (int(getattr(result, "request_id", -1)), getattr(result, "signature", None)):
+            return
+        try:
+            inflight.pop(pid, None)
+        except Exception:
+            pass
+
+        try:
+            current = self._build_pre_render_request_signature(pid)
+        except Exception:
+            current = None
+
+        if getattr(result, "error", None):
+            try:
+                self.log.warning("[Strategy2][post-engine] pre_render_bg:%s failed: %s", pid, result.error)
+            except Exception:
+                pass
+        elif current == getattr(result, "signature", None):
+            try:
+                self._invalidate_p_render_cache(pid)
+                self._selected_index[pid] = int(getattr(result, "selected_index", 0) or 0)
+                self._suggestions_render[pid] = list(getattr(result, "suggestions_render", []) or [])
+                apply_auto_mark_plan(
+                    self._suggestions.get(pid) or [],
+                    self._suggestions_render.get(pid) or [],
+                    getattr(result, "auto_mark_plan", None),
+                )
+                elapsed_ms = float(getattr(result, "elapsed_ms", 0.0) or 0.0)
+                if elapsed_ms >= 8.0:
+                    self.log.info("[Strategy2][post-engine] pre_render_bg:%s %.1fms", pid, elapsed_ms)
+            except Exception:
+                try:
+                    self.log.exception("[Strategy2][post-engine] pre_render_bg commit failed")
+                except Exception:
+                    pass
+
+        timer = getattr(self, "_pre_render_timer", None)
+        if self._has_queued_pre_render_work():
+            if timer is not None:
+                try:
+                    timer.start(0)
+                except Exception:
+                    pass
+            return
+
+        if not self._has_pending_pre_render_work():
+            self._resume_auto_after_pre_render_if_needed()
+
+    def _resume_auto_after_pre_render_if_needed(self) -> None:
+        if bool(getattr(self, "_pre_render_auto_deferred", False)):
+            self._pre_render_auto_deferred = False
+            if bool(getattr(self, "_auto_play_enabled", False)):
+                session = int(getattr(self, "_auto_play_session", 0) or 0)
+                QTimer.singleShot(0, lambda s=session: self._maybe_run_auto_play(s))
+
+    def _drain_pre_render_queue(self) -> None:
+        if bool(getattr(self, "_pre_render_inflight", None)):
+            return
+
+        pid = None
+        sig = None
+        while self._has_queued_pre_render_work():
+            try:
+                candidate = str(self._pre_render_queue.popleft())
+            except Exception:
+                break
+            pending = getattr(self, "_pre_render_pending", None)
+            if not isinstance(pending, dict):
+                break
+            candidate_sig = pending.pop(candidate, None)
+            if candidate_sig is None:
+                continue
+            try:
+                current = self._build_pre_render_request_signature(candidate)
+            except Exception:
+                current = None
+            if current != candidate_sig:
+                continue
+            pid = candidate
+            sig = candidate_sig
+            break
+
+        if pid is not None and sig is not None:
+            self._start_pre_render_worker(pid, sig)
+            return
+
+        if self._has_queued_pre_render_work():
+            timer = getattr(self, "_pre_render_timer", None)
+            if timer is not None:
+                try:
+                    timer.start(0)
+                except Exception:
+                    pass
+            return
+
+        if not self._has_pending_pre_render_work():
+            self._resume_auto_after_pre_render_if_needed()
+
     def _invalidate_p_render_cache(self, pid: Optional[str] = None) -> None:
         cache = getattr(self, "_p_render_core_sig", None)
         if not isinstance(cache, dict):
@@ -906,8 +1238,13 @@ class StrategyTab(QWidget):
         return (idx, self._suggestion_cache_key(selected))
 
     def _build_p_render_cache_signature(self, pid: str) -> tuple:
+        peer_selection_sig = tuple(
+            self._selected_suggestion_cache_key(profile_id)
+            for profile_id in self.profiles
+            if profile_id != pid
+        )
         return (
-            "p-render-v1",
+            "p-render-v2",
             str(pid),
             self._hand_hash(list((self._codes_slot_order or {}).get(pid) or [])),
             self._suggestions_cache_key((self._suggestions or {}).get(pid) or []),
@@ -916,7 +1253,7 @@ class StrategyTab(QWidget):
             bool(getattr(self, "_ngu_clicked_once", False)),
             bool(getattr(self, "_anti_sap_enabled", False)),
             int(getattr(self, "MAX_UI_P_ITEMS", MAX_UI_P_ITEMS)),
-            tuple(self._selected_suggestion_cache_key(p) for p in self.profiles),
+            peer_selection_sig,
         )
 
     def _mark_p_render_cache_valid(self, pid: str) -> None:
@@ -1387,8 +1724,14 @@ class StrategyTab(QWidget):
         self._render_ngu()
 
     def _render_p_active(self) -> None:
+        pid = self.active_profile
+        self._flush_pre_render_for_profile(pid)
+        if self._show_active_profile_from_render_cache(pid):
+            self._clear_pending_pre_render_profile(pid)
+            return
         self._renderer.render_p_active(self)
-        self._mark_p_render_cache_valid(self.active_profile)
+        self._clear_pending_pre_render_profile(pid)
+        self._mark_p_render_cache_valid(pid)
         self._update_special_labels()   # mỗi lần render P active, cập nhật label
         self._refresh_sap_lang_combo()
         self._sync_apply_button_enabled()
@@ -2067,10 +2410,287 @@ class StrategyTab(QWidget):
             for job in list(getattr(scheduler, "job_q", ()) or ())
         )
 
+    def _build_auto_opp_plan_signature(self, hand_key: str, room_context, allow_intentional_foul: bool) -> tuple:
+        room_key = self._auto_room_context_key(room_context)
+        return (
+            "auto-opp-plan-v1",
+            int(getattr(self, "_auto_play_session", 0) or 0),
+            str(hand_key or ""),
+            room_key,
+            tuple(self._auto_profile_apply_key(pid) for pid in self.profiles),
+            tuple(sorted(map(str, getattr(self, "_auto_play_applied_profile_keys", set()) or set()))),
+            self._suggestions_cache_key(getattr(self, "_ngu_suggestions", []) or []),
+            tuple(
+                (
+                    pid,
+                    self._suggestions_cache_key((self._suggestions or {}).get(pid) or []),
+                    self._suggestions_cache_key((self._suggestions_render or {}).get(pid) or []),
+                )
+                for pid in self.profiles
+            ),
+            bool(getattr(self, "_anti_sap_enabled", False)),
+            bool(allow_intentional_foul),
+            str(getattr(self, "_SPECIAL_MODE", "__special13__")),
+        )
+
+    def _build_auto_opp_plan_snapshot(
+        self,
+        *,
+        request_id: int,
+        signature: tuple,
+        hand_key: str,
+        room_context_key: str,
+        allow_intentional_foul: bool,
+    ) -> AutoOppPlanSnapshot:
+        return AutoOppPlanSnapshot(
+            request_id=int(request_id),
+            signature=signature,
+            session=int(getattr(self, "_auto_play_session", 0) or 0),
+            hand_key=str(hand_key or ""),
+            room_context_key=str(room_context_key or ""),
+            suggestions={
+                pid: _copy_pre_render_suggestions((self._suggestions or {}).get(pid) or [])
+                for pid in self.profiles
+            },
+            suggestions_render={
+                pid: _copy_pre_render_suggestions((self._suggestions_render or {}).get(pid) or [])
+                for pid in self.profiles
+            },
+            codes_slot_order={
+                pid: list((self._codes_slot_order or {}).get(pid) or [])
+                for pid in self.profiles
+            },
+            hand_generation={
+                pid: int((getattr(self, "_hand_generation", {}) or {}).get(pid, 0) or 0)
+                for pid in self.profiles
+            },
+            ngu_suggestions=_copy_pre_render_suggestions(getattr(self, "_ngu_suggestions", []) or []),
+            applied_profile_keys=tuple(sorted(map(str, getattr(self, "_auto_play_applied_profile_keys", set()) or set()))),
+            anti_sap_enabled=bool(getattr(self, "_anti_sap_enabled", False)),
+            allow_intentional_foul=bool(allow_intentional_foul),
+            special_mode=str(getattr(self, "_SPECIAL_MODE", "__special13__")),
+        )
+
+    def _start_auto_opp_plan_worker(self, hand_key: str, room_context, allow_intentional_foul: bool) -> bool:
+        if str(getattr(self, "_auto_opp_plan_force_sync_key", "") or "") == str(hand_key or ""):
+            self._auto_opp_plan_force_sync_key = None
+            return False
+
+        try:
+            signature = self._build_auto_opp_plan_signature(hand_key, room_context, allow_intentional_foul)
+            room_context_key = self._auto_room_context_key(room_context)
+        except Exception:
+            return False
+
+        inflight = getattr(self, "_auto_opp_plan_inflight", None)
+        if inflight is not None:
+            try:
+                _request_id, inflight_sig = inflight
+            except Exception:
+                inflight_sig = None
+            if inflight_sig == signature:
+                return True
+
+        self._auto_opp_plan_request_seq = int(getattr(self, "_auto_opp_plan_request_seq", 0) or 0) + 1
+        request_id = int(self._auto_opp_plan_request_seq)
+        try:
+            snapshot = self._build_auto_opp_plan_snapshot(
+                request_id=request_id,
+                signature=signature,
+                hand_key=hand_key,
+                room_context_key=room_context_key,
+                allow_intentional_foul=allow_intentional_foul,
+            )
+        except Exception:
+            return False
+
+        self._auto_opp_plan_inflight = (request_id, signature)
+
+        def _worker() -> None:
+            result = run_auto_opp_plan_snapshot(snapshot)
+            try:
+                self.ui_call.emit(lambda r=result: self._on_auto_opp_plan_worker_done(r))
+            except Exception:
+                pass
+
+        try:
+            threading.Thread(
+                target=_worker,
+                name=f"MB-Strategy2-AutoOppPlan-{request_id}",
+                daemon=True,
+            ).start()
+            return True
+        except Exception:
+            self._auto_opp_plan_inflight = None
+            return False
+
+    def _on_auto_opp_plan_worker_done(self, result: AutoOppPlanResult) -> None:
+        expected = getattr(self, "_auto_opp_plan_inflight", None)
+        if expected != (int(getattr(result, "request_id", -1)), getattr(result, "signature", None)):
+            return
+        self._auto_opp_plan_inflight = None
+
+        if int(getattr(result, "session", -1)) != int(getattr(self, "_auto_play_session", 0) or 0):
+            return
+        hand_key = str(getattr(result, "hand_key", "") or "")
+        if not hand_key or hand_key != str(self._current_auto_play_hand_key() or ""):
+            return
+
+        try:
+            room_context = classify_auto_room_context(self._get_room_engine())
+        except Exception:
+            return
+        if self._auto_room_context_key(room_context) != str(getattr(result, "room_context_key", "") or ""):
+            return
+        try:
+            allow_intentional_foul = (
+                room_context.kind == "external_opp"
+                and len(room_context.external_uids) == 1
+                and bool(
+                    self._auto_settings_notifier is not None
+                    and self._auto_settings_notifier.is_intentional_foul_enabled()
+                )
+            )
+        except Exception:
+            allow_intentional_foul = False
+        try:
+            current_signature = self._build_auto_opp_plan_signature(hand_key, room_context, allow_intentional_foul)
+        except Exception:
+            return
+        if current_signature != getattr(result, "signature", None):
+            return
+
+        elapsed_ms = float(getattr(result, "elapsed_ms", 0.0) or 0.0)
+        if elapsed_ms >= 8.0:
+            try:
+                self.log.info("[AUTO-PLAY][worker] external_opp_plan %.1fms", elapsed_ms)
+            except Exception:
+                pass
+
+        if getattr(result, "error", None):
+            try:
+                self.log.warning("[AUTO-PLAY][worker] external_opp_plan failed: %s", result.error)
+            except Exception:
+                pass
+            self._auto_opp_plan_force_sync_key = hand_key
+            session = int(getattr(self, "_auto_play_session", 0) or 0)
+            QTimer.singleShot(0, lambda s=session: self._maybe_run_auto_play(s))
+            return
+
+        self._commit_external_opp_auto_plan(
+            getattr(result, "plan", None),
+            hand_key=hand_key,
+            room_context=room_context,
+        )
+
+    def _commit_external_opp_auto_plan(
+        self,
+        plan: Optional[AutoPlayPlan],
+        *,
+        hand_key: str,
+        room_context,
+    ) -> None:
+        if plan is None:
+            self._auto_play_log("Bo qua: chua co P nao du bai/goi y hop le de Auto Play.")
+            return
+
+        plan.suggestions = {
+            pid: dict(sug)
+            for pid, sug in (plan.suggestions or {}).items()
+            if self._auto_profile_apply_key(pid) not in self._auto_play_applied_profile_keys
+        }
+        plan.selected_index = {
+            pid: int(idx)
+            for pid, idx in (plan.selected_index or {}).items()
+            if pid in plan.suggestions
+        }
+        plan.report_binh_pids = tuple(
+            pid for pid in (plan.report_binh_pids or ()) if pid in plan.suggestions
+        )
+        if not plan.suggestions:
+            return
+
+        self._auto_play_hand_key = hand_key
+        self._auto_register_round_mode("other")
+
+        if plan.kind not in ("money_fallback", "internal_balance", "internal_sap_ham"):
+            self._ngu_clicked_once = True
+            self._ngu_selected_index = int(plan.opp_index)
+
+        expected_room_context_key = self._auto_room_context_key(room_context)
+        if plan.kind == "sap_lang" and plan.combo is not None:
+            self._auto_play_log(
+                f"Chon OPP #{plan.opp_index + 1} | dung Be Sap Lang | score={plan.score}"
+            )
+            self._auto_apply_suggestions_random(
+                plan.suggestions,
+                dependency_groups=plan.dependency_groups,
+                expected_room_context_key=expected_room_context_key,
+            )
+            self._sync_auto_play_sink_state()
+            return
+
+        if plan.kind == "intentional_foul":
+            foul_pids = set(plan.report_binh_pids or self.profiles)
+            self._auto_play_log(
+                f"OPP quet khong the chay | dung Binh Lung {','.join(sorted(foul_pids))}."
+            )
+            if foul_pids == set(self.profiles):
+                self._auto_apply_intentional_foul_random(
+                    plan.suggestions,
+                    hand_key,
+                    expected_room_context_key=expected_room_context_key,
+                )
+            else:
+                self._auto_apply_suggestions_random(
+                    plan.suggestions,
+                    no_complete_pids=foul_pids,
+                    expected_profile_keys={pid: self._auto_profile_apply_key(pid) for pid in self.profiles},
+                    dependency_groups=plan.dependency_groups,
+                    expected_room_context_key=expected_room_context_key,
+                )
+            self._sync_auto_play_sink_state()
+            return
+
+        ready_pids = list((plan.suggestions or {}).keys())
+        binh_text = f" | bao binh {','.join(plan.report_binh_pids)}" if plan.report_binh_pids else ""
+        self._auto_play_log(
+            f"Chon OPP #{plan.opp_index + 1} | "
+            f"{'xep rieng ' + ','.join(ready_pids) if plan.partial else 'xep toi uu'}"
+            f"{binh_text} | score={plan.score}"
+        )
+        try:
+            opp = self._ngu_suggestions[int(plan.opp_index)]
+        except Exception:
+            return
+        for pid in ready_pids:
+            rendered = list(self._build_render_suggestions(list(self._suggestions.get(pid) or []), opp) or [])
+            self._suggestions_render[pid] = rendered[:self.MAX_UI_P_ITEMS]
+            self._selected_index[pid] = int(plan.selected_index.get(pid, 0))
+        self._render_ngu()
+        self._render_p_active()
+        self._auto_apply_suggestions_random(
+            plan.suggestions,
+            report_binh_pids=set(plan.report_binh_pids or ()),
+            dependency_groups=plan.dependency_groups,
+            expected_room_context_key=expected_room_context_key,
+        )
+        self._sync_auto_play_sink_state()
+
     def _maybe_run_auto_play(self, expected_session: Optional[int] = None) -> None:
         if expected_session is not None and expected_session != self._auto_play_session:
             return
         if not self._auto_play_enabled:
+            return
+        if self._has_pending_pre_render_work():
+            self._pre_render_auto_deferred = True
+            timer = getattr(self, "_pre_render_timer", None)
+            if timer is not None:
+                try:
+                    if not timer.isActive():
+                        timer.start(0)
+                except Exception:
+                    pass
             return
 
         if self._is_ngu_refresh_pending():
@@ -2144,6 +2764,8 @@ class StrategyTab(QWidget):
                 and bool(getattr(self, "_auto_play_internal_sap_ham_done", False))
             )
             if allow_opp_plan and has_auto_opp:
+                if self._start_auto_opp_plan_worker(hand_key, room_context, allow_intentional_foul):
+                    return
                 plan = build_auto_play_plan(
                     self,
                     max_opp=3,

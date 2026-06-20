@@ -1,12 +1,17 @@
 import copy
 import json
 import os
+import tempfile
+import threading
+import time
 from typing import Any, Dict, Optional, Tuple
 
 from .constants import CONFIG_DIR
 from .logger import log
 
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+_CONFIG_WRITE_LOCKS: Dict[str, threading.RLock] = {}
+_CONFIG_WRITE_LOCKS_GUARD = threading.Lock()
 
 # NEW: folder chứa tọa độ theo game
 GAMES_DIR = os.path.join(CONFIG_DIR, "games")
@@ -182,13 +187,60 @@ def _atomic_write_json(path: str, data: Dict[str, Any]) -> None:
     Ghi JSON an toàn: write tmp -> replace.
     Tránh trường hợp crash làm hỏng config.json.
     """
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp_path = path + ".tmp"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp_path, path)
+    folder = os.path.dirname(path)
+    os.makedirs(folder, exist_ok=True)
+    abs_path = os.path.abspath(path)
+    lock = _get_config_write_lock(abs_path)
+    tmp_path = ""
+    with lock:
+        try:
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=folder,
+                prefix=f".{os.path.basename(path)}.",
+                suffix=".tmp",
+                delete=False,
+            ) as f:
+                tmp_path = f.name
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            _replace_file_with_retry(tmp_path, path)
+            tmp_path = ""
+        finally:
+            if tmp_path:
+                try:
+                    os.remove(tmp_path)
+                except FileNotFoundError:
+                    pass
+                except Exception:
+                    log.debug("Failed to cleanup temp config file: %s", tmp_path, exc_info=True)
+
+
+def _get_config_write_lock(abs_path: str) -> threading.RLock:
+    with _CONFIG_WRITE_LOCKS_GUARD:
+        lock = _CONFIG_WRITE_LOCKS.get(abs_path)
+        if lock is None:
+            lock = threading.RLock()
+            _CONFIG_WRITE_LOCKS[abs_path] = lock
+        return lock
+
+
+def _replace_file_with_retry(src: str, dst: str) -> None:
+    delays = (0.02, 0.05, 0.10, 0.20, 0.35)
+    last_error: Optional[BaseException] = None
+    for attempt in range(len(delays) + 1):
+        try:
+            os.replace(src, dst)
+            return
+        except OSError as e:
+            last_error = e
+            if attempt >= len(delays):
+                break
+            time.sleep(delays[attempt])
+    if last_error is not None:
+        raise last_error
 
 
 def save_config(config: Dict[str, Any], slot: int = 1) -> None:

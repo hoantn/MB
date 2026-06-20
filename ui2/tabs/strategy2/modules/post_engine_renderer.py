@@ -34,6 +34,10 @@ class PostEngineRenderer:
                     pass
 
     def pre_render_profile(self, tab, pid: str) -> None:
+        queue_fn = getattr(tab, "_queue_pre_render_profile", None)
+        if callable(queue_fn):
+            queue_fn(pid)
+            return
         self._time_step(tab, f"pre_render:{pid}", lambda: tab._pre_render_profile(pid))
 
     def _render_ngu_post_engine(self, tab) -> None:

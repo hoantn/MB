@@ -10,6 +10,7 @@ from collections import Counter
 
 from core.logger import log
 from core.apply_trace import apply_trace
+from core.apply_lock import acquire as _acquire_apply_lock, release as _release_apply_lock
 from engine.card import Card
 from engine.action import apply_arrangement, compute_moves
 from core.config import load_config
@@ -17,7 +18,6 @@ from engine.foul_rules import is_no_foul, is_no_foul_slot_layout
 from ui2.tabs.strategy2.modules.apply_diagnostics import record_apply_failure
 from ui2.bridge.ws_layout_store import ws_layout_store
 from ui2.tabs.strategy2.modules.apply_confirmation import confirm_and_repair_layout
-from ui2.tabs.strategy2.modules.action_gate import acquire_profile_action, release_profile_action
 
 
 # ---------------------------------------------------------------------------
@@ -195,8 +195,9 @@ def apply_manual_dashboard_style(
     if t_old is not None and getattr(t_old, "is_alive", lambda: False)():
         return
 
-    action_lease = acquire_profile_action(tab, pid, "apply", owner="strategy_suggest_manual")
-    if action_lease is False:
+    apply_slot = getattr(getattr(tab, "browser_manager", None), "_slot", 1)
+    if not _acquire_apply_lock(apply_slot, pid):
+        log.warning("[Strategy2] MANUAL skip: slot=%s pid=%s is already applying", apply_slot, pid)
         return
 
     # 5) Đặt nút Apply sang trạng thái "busy"
@@ -387,14 +388,17 @@ def apply_manual_dashboard_style(
                 tab._ws_freeze[pid] = False
             except Exception:
                 pass
-            release_profile_action(tab, action_lease)
+            try:
+                _release_apply_lock(apply_slot, pid)
+            except Exception:
+                pass
 
     t = threading.Thread(target=_worker_apply, name=f"MB-Strategy2-Apply-{pid}", daemon=True)
     tab._apply_threads[pid] = t
     try:
         t.start()
     except Exception:
-        release_profile_action(tab, action_lease)
+        _release_apply_lock(apply_slot, pid)
         tab._apply_threads.pop(pid, None)
 
 
@@ -497,9 +501,10 @@ def apply_suggestion_dashboard_style(
         apply_trace("apply_reject_thread_alive", pid)
         return False
 
-    action_lease = acquire_profile_action(tab, pid, "apply", owner="strategy_suggest_auto")
-    if action_lease is False:
-        apply_trace("apply_reject_action_gate", pid)
+    apply_slot = getattr(getattr(tab, "browser_manager", None), "_slot", 1)
+    if not _acquire_apply_lock(apply_slot, pid):
+        apply_trace("apply_reject_cross_tab_lock", pid)
+        log.warning("[Strategy2] AUTO skip: slot=%s pid=%s is already applying", apply_slot, pid)
         return False
 
     # 5) Set busy
@@ -706,7 +711,10 @@ def apply_suggestion_dashboard_style(
                 tab._ws_freeze[pid] = False
             except Exception:
                 pass
-            release_profile_action(tab, action_lease)
+            try:
+                _release_apply_lock(apply_slot, pid)
+            except Exception:
+                pass
 
     t = threading.Thread(target=_worker_apply, name=f"MB-Strategy2-Apply-{pid}", daemon=True)
     tab._apply_threads[pid] = t
@@ -714,7 +722,7 @@ def apply_suggestion_dashboard_style(
     try:
         t.start()
     except Exception:
-        release_profile_action(tab, action_lease)
+        _release_apply_lock(apply_slot, pid)
         tab._apply_threads.pop(pid, None)
         return False
     return True
