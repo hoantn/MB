@@ -349,7 +349,7 @@ def _generate_flush_straight_variants(
 
     return out
 
-def arrange_13_cards(
+def _arrange_13_cards_impl(
     cards: List[Card],
     *,
     strategy: ArrangeStrategy = ArrangeStrategy.STYLE_BRUTEFORCE_ALL,
@@ -1043,6 +1043,19 @@ def arrange_13_cards(
 
         out.append((c1, c2, c3))
     return out
+
+
+def arrange_13_cards(
+    cards: List[Card],
+    *,
+    strategy: ArrangeStrategy = ArrangeStrategy.STYLE_BRUTEFORCE_ALL,
+    max_candidates: Optional[int] = None,
+) -> List[Tuple[List[Card], List[Card], List[Card]]]:
+    return _arrange_13_cards_impl(
+        cards,
+        strategy=strategy,
+        max_candidates=max_candidates,
+    )
 
 
 def arrange_cached_money_split(
