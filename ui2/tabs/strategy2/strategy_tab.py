@@ -44,6 +44,7 @@ from .modules.render_controller import RenderController
 from .modules.staged_scheduler import StagedScheduler
 from .modules.post_engine_renderer import PostEngineRenderer
 from .modules.apply_controller import ApplyController
+from .modules.suggest_engine_selector import configured_engine_mode_for_slot
 from .modules.auto_play_controller import (
     AutoPlayPlan,
     build_auto_play_plan,
@@ -1687,7 +1688,19 @@ class StrategyTab(QWidget):
     # =================== NEW: staged sequential scheduler ===================
     @property
     def build_suggestions_for_codes(self):
-        return build_suggestions_for_codes
+        mode = self._suggest_engine_mode()
+
+        def _build(profile_id: str, codes: List[str], stage: str = "FULL") -> List[dict]:
+            return build_suggestions_for_codes(profile_id, codes, stage, engine_mode=mode)
+
+        return _build
+
+    def _suggest_engine_mode(self) -> str:
+        try:
+            slot = int(getattr(getattr(self, "browser_manager", None), "_slot", 1) or 1)
+        except Exception:
+            slot = 1
+        return configured_engine_mode_for_slot(slot)
 
     @property
     def pick_default_suggestion(self):
@@ -1723,7 +1736,7 @@ class StrategyTab(QWidget):
 
         def _worker():
             try:
-                out = build_suggestions_for_codes(key, codes_cp)
+                out = self.build_suggestions_for_codes(key, codes_cp)
                 self._q.put((key, gen, out, None))
             except Exception as e:
                 self._q.put((key, gen, None, e))

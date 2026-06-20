@@ -391,6 +391,10 @@ def arrange_13_cards(
         Tuple[str, Tuple[int, ...]],
         List[Tuple[int, int, int, int, int]],
     ] = {}
+    variant_subset_cache: Dict[
+        Tuple[str, Tuple[int, ...], Tuple[int, ...]],
+        List[Tuple[int, int, int, int, int]],
+    ] = {}
     # ---- Precompute ranks/suits/index maps (dùng cho _style_tuple, giảm CPU) ----
     ranks13: List[int] = [c.rank_index for c in cards]
     suits13: List[int] = [c.suit for c in cards]
@@ -413,6 +417,9 @@ def arrange_13_cards(
     # Cache base (cnt/pairs/singles) theo idx tuple để reuse trong vòng 72k
     # Key có thể là idx5 hoặc idx3 (tuple length 5 hoặc 3)
     _base_ps_cache: Dict[Tuple[int, ...], Tuple[Dict[int, int], Tuple[int, ...], Tuple[int, ...]]] = {}
+    _flush_straight_info_cache: Dict[Tuple[int, int, int, int, int], Optional[dict]] = {}
+    _style_extras_cache: Dict[Tuple[int, ...], Tuple[int, ...]] = {}
+    _money_score_cache: Dict[Tuple[int, Tuple[int, ...], int, Tuple[int, ...], int, Tuple[int, ...]], float] = {}
 
     def _eval5(idx5: Tuple[int, int, int, int, int]) -> Tuple[int, List[int]]:
         v = eval5_cache.get(idx5)
@@ -519,6 +526,10 @@ def arrange_13_cards(
               - Straight (chỉ áp cho 5 lá): lấy indices theo rank_to_indices trong biên straight.
             Kết quả là list rank_index extras (có thể trùng, sẽ dedup sau).
             """
+            cached = _style_extras_cache.get(ch_idx)
+            if cached is not None:
+                return list(cached)
+
             ch_set = set(ch_idx)
             extras: List[int] = []
 
@@ -554,6 +565,7 @@ def arrange_13_cards(
                             if j not in ch_set:
                                 extras.append(ranks13[j])
 
+            _style_extras_cache[ch_idx] = tuple(extras)
             return extras
 
         def build(ch_idx: Tuple[int, ...], allow_extras: bool) -> Tuple[List[int], List[int]]:
@@ -763,6 +775,65 @@ def arrange_13_cards(
 
         return bases
 
+    def _analyze_flush_straight_cached(
+        idx5: Tuple[int, int, int, int, int],
+    ) -> Optional[dict]:
+        if idx5 in _flush_straight_info_cache:
+            return _flush_straight_info_cache[idx5]
+        info = _analyze_flush_straight(
+            idx5,
+            ranks13,
+            suits13,
+            rank_to_indices,
+            suit_to_indices,
+        )
+        _flush_straight_info_cache[idx5] = info
+        return info
+
+    def _variants_for_rem8(
+        idx2: Tuple[int, int, int, int, int],
+        info: dict,
+        rem8_list: List[int],
+    ) -> List[Tuple[int, int, int, int, int]]:
+        variants = _generate_flush_straight_variants(
+            idx2,
+            info["related"],
+            ranks13,
+            suits13,
+            info["type"],
+            variant_cache=variant_cache,
+        )
+        if len(variants) <= 1:
+            return variants
+
+        rem8_key = tuple(rem8_list)
+        all_cards_key = tuple(sorted(set(idx2) | set(info["related"])))
+        subset_key = (str(info["type"]), rem8_key, all_cards_key)
+        cached = variant_subset_cache.get(subset_key)
+        if cached is not None:
+            return cached
+
+        rem8_set = set(rem8_key)
+        filtered = [v for v in variants if all(i in rem8_set for i in v)]
+        variant_subset_cache[subset_key] = filtered
+        return filtered
+
+    def _cached_money_score(e1, e2, e3_mapped) -> float:
+        key = (
+            int(e1[0]),
+            tuple(int(x) for x in e1[1]),
+            int(e2[0]),
+            tuple(int(x) for x in e2[1]),
+            int(e3_mapped[0]),
+            tuple(int(x) for x in e3_mapped[1]),
+        )
+        cached = _money_score_cache.get(key)
+        if cached is not None:
+            return cached
+        value = float(_score_max_money(e1, e2, e3_mapped))
+        _money_score_cache[key] = value
+        return value
+
     # ---- main loop: chi1 (1287) x chi2 (56) = 72k ----
 
     for idx1, e1 in chi1_candidates:
@@ -782,32 +853,25 @@ def arrange_13_cards(
 
         chi2_candidates.sort(key=lambda it: (it[1][0], it[1][1]), reverse=True)
         rem8_base_by_kind = _rem8_flush_straight_bases(chi2_candidates, rem8)
+        processed_variant_keys = set()
 
         # prune theo (t1,t2): khi đã lấy đủ t3 hợp lệ cho t2 thì skip các chi2 còn lại cùng t2
         # seen_t3_by_t2: Dict[int, set[int]] = {}
         for idx2, _e2 in chi2_candidates:
             variants2 = [idx2]
 
-            info = _analyze_flush_straight(
-                idx2,
-                ranks13,
-                suits13,
-                rank_to_indices,
-                suit_to_indices,
-            )
+            info = _analyze_flush_straight_cached(idx2)
 
             if info:
-                variants2 = _generate_flush_straight_variants(
-                    idx2,
-                    info["related"],
-                    ranks13,
-                    suits13,
-                    info["type"],
-                    variant_cache=variant_cache,
-                )
+                variants2 = _variants_for_rem8(idx2, info, rem8)
 
             variant_records = []
             for v_idx2 in variants2:
+                if info:
+                    variant_key = (str(info["type"]), v_idx2)
+                    if variant_key in processed_variant_keys:
+                        continue
+                    processed_variant_keys.add(variant_key)
                 e2 = _eval5(v_idx2)
                 set2 = set(v_idx2)
                 rem3 = [i for i in rem8 if i not in set2]
@@ -855,7 +919,7 @@ def arrange_13_cards(
                 # Capture the best self-money split inside the existing scan.
                 # Auto Play can reuse it without starting another 72k pass.
                 money_e3 = (_map_3_to_5_scale(e3[0]), e3[1])
-                money_score = float(_score_max_money(e1, e2, money_e3))
+                money_score = _cached_money_score(e1, e2, money_e3)
                 money_candidates.append(
                     HumanChoiceCandidate(
                         idx1=idx1,

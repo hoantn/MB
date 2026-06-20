@@ -5,8 +5,12 @@ import hashlib
 import copy
 
 from engine.card import Card
-from engine.arranger import arrange_cards, arrange_13_cards, ArrangeStrategy
-from engine.arranger_parts import arrange_cached_money_split
+from engine.arranger_parts.arrange import arrange_cards, ArrangeStrategy
+from ui2.tabs.strategy2.modules.suggest_engine_selector import (
+    DEFAULT_ENGINE_MODE,
+    build_suggest_engine_output,
+    normalize_engine_mode,
+)
 
 from ui2.tabs.dashboard.dashboard_constants import classify_chis, _format_suggestion_label
 
@@ -25,9 +29,9 @@ def special_html_7colors(text: str) -> str:
 
 # -----------------------------------------------------------------------------
 # Worker-level cache (per hand)
-# Key: (pid, hand_hash, stage) -> suggestions(list[dict])
+# Key: (pid, hand_hash, stage, engine_mode) -> suggestions(list[dict])
 # -----------------------------------------------------------------------------
-_SUGG_CACHE: Dict[Tuple[str, str, str], List[dict]] = {}
+_SUGG_CACHE: Dict[Tuple[str, str, str, str], List[dict]] = {}
 _SUGG_CACHE_MAX = 800  # keep modest
 
 
@@ -37,16 +41,16 @@ def _hand_hash(codes: List[str]) -> str:
     return hashlib.md5(s.encode("utf-8")).hexdigest()
 
 
-def _cache_get(pid: str, hand_h: str, stage: str) -> Optional[List[dict]]:
-    key = (pid, hand_h, stage)
+def _cache_get(pid: str, hand_h: str, stage: str, engine_mode: str) -> Optional[List[dict]]:
+    key = (pid, hand_h, stage, normalize_engine_mode(engine_mode))
     v = _SUGG_CACHE.get(key)
     if v is None:
         return None
     return copy.deepcopy(v)
 
 
-def _cache_set(pid: str, hand_h: str, stage: str, suggestions: List[dict]) -> None:
-    key = (pid, hand_h, stage)
+def _cache_set(pid: str, hand_h: str, stage: str, engine_mode: str, suggestions: List[dict]) -> None:
+    key = (pid, hand_h, stage, normalize_engine_mode(engine_mode))
     _SUGG_CACHE[key] = copy.deepcopy(suggestions)
     if len(_SUGG_CACHE) > _SUGG_CACHE_MAX:
         _SUGG_CACHE.clear()
@@ -87,11 +91,11 @@ def _split_key_from_codes(chi1_codes: List[str], chi2_codes: List[str], chi3_cod
         return ""
 
 
-def _build_money_suggestion(pid: str, stage: str, cards: List[Card]) -> Optional[dict]:
-    try:
-        money_split = arrange_cached_money_split(cards)
-    except Exception:
-        money_split = None
+def _build_money_suggestion(
+    pid: str,
+    stage: str,
+    money_split: Optional[Tuple[List[Card], List[Card], List[Card]]],
+) -> Optional[dict]:
     if not money_split:
         return None
 
@@ -123,7 +127,13 @@ def _build_money_suggestion(pid: str, stage: str, cards: List[Card]) -> Optional
     }
 
 
-def build_suggestions_for_codes(profile_id: str, codes: List[str], stage: str = "FULL") -> List[dict]:
+def build_suggestions_for_codes(
+    profile_id: str,
+    codes: List[str],
+    stage: str = "FULL",
+    *,
+    engine_mode: str = DEFAULT_ENGINE_MODE,
+) -> List[dict]:
     """
     StrategyTab suggestions (STYLE brute-force).
 
@@ -134,6 +144,7 @@ def build_suggestions_for_codes(profile_id: str, codes: List[str], stage: str = 
     """
     pid = profile_id
     stage_u = "FULL"
+    engine_mode_u = normalize_engine_mode(engine_mode)
 
     usable = [c for c in (codes or []) if c and c not in ("--", "??")]
     if len(usable) != 13:
@@ -141,7 +152,7 @@ def build_suggestions_for_codes(profile_id: str, codes: List[str], stage: str = 
 
     # CACHE: mặc định tắt để bạn debug (bật lại khi cần tối ưu).
     hand_h = _hand_hash(usable)
-    cached = _cache_get(pid, hand_h, stage_u)
+    cached = _cache_get(pid, hand_h, stage_u, engine_mode_u)
     if cached is not None:
         return cached
 
@@ -209,8 +220,18 @@ def build_suggestions_for_codes(profile_id: str, codes: List[str], stage: str = 
 
     # 1) ALL splits từ arrange_13_cards (max_candidates=None => không cắt)
     all_splits: List[Tuple[List[Card], List[Card], List[Card]]] = []
+    money_split: Optional[Tuple[List[Card], List[Card], List[Card]]] = None
     try:
-        all_splits = arrange_13_cards(cards, max_candidates=None)
+        engine_out = build_suggest_engine_output(
+            cards,
+            strategy=ArrangeStrategy.STYLE_BRUTEFORCE_ALL,
+            max_candidates=None,
+            engine_mode=engine_mode_u,
+            profile_id=pid,
+            hand_hash=hand_h,
+        )
+        all_splits = engine_out.splits
+        money_split = engine_out.money_split
     except Exception:
         all_splits = []
 
@@ -250,7 +271,7 @@ def build_suggestions_for_codes(profile_id: str, codes: List[str], stage: str = 
         )
 
     # CACHE: mặc định tắt để tránh reuse list cũ khi bạn đang test/đổi arrange.
-    money_sugg = _build_money_suggestion(pid, stage_u, cards)
+    money_sugg = _build_money_suggestion(pid, stage_u, money_split)
     if money_sugg:
         money_key = str(money_sugg.get("_split_key") or "")
         deduped: List[dict] = []
@@ -265,7 +286,7 @@ def build_suggestions_for_codes(profile_id: str, codes: List[str], stage: str = 
             deduped.append(item)
         out = [money_sugg] + deduped
 
-    _cache_set(pid, hand_h, stage_u, out)
+    _cache_set(pid, hand_h, stage_u, engine_mode_u, out)
     # Prepend SPECIAL (nếu có) -> trả đúng 1 row special có đủ chi1/chi2/chi3 để APPLY
     if special_sugg:
         return [special_sugg] + out

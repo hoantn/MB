@@ -100,6 +100,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "verify_drag": True,
             "verify_min_confidence": 0.70
         },
+        "strategy2": {
+            "suggest_engine_mode": "stable"
+        },
         "active_game": "hit",
     },
     "game_ui": {
