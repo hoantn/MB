@@ -488,6 +488,9 @@
       "slot_click_px": 0.5,
       "slot_click_py": 0.5
     },
+    "strategy2": {
+      "suggest_engine_mode": "fast"
+    },
     "theme_colors": {
       "Sáng": {
         "bg": "#e6e6e6",
@@ -546,9 +549,9 @@
       "manage_chrome_by_tool": true
     },
     "auto_play_capital": {
-      "P1": 200000,
-      "P2": 200000,
-      "P3": 200000
+      "P1": 50000,
+      "P2": 50000,
+      "P3": 17005
     }
   },
   "profiles": {
@@ -571,28 +574,28 @@
         "height": 780,
         "scale_percent": 34
       },
-      "target_url": "https://play.top88.si/?a=LT8"
+      "target_url": "https://play.top88.am/?a=LT8"
     },
     "P2": {
       "name": "Profile 2",
       "chrome_path": "D:/Users/PC GAMING/Downloads/goc",
       "user_data_dir": "",
       "proxy": {
-        "host": "",
-        "port": 0,
-        "username": "",
-        "password": "",
+        "host": "http://hndc39.proxyno1.com",
+        "port": 19536,
+        "username": "jfgrxy",
+        "password": "TmlQphOL",
         "tmproxy_api_key": "0dbaaf04399cac6331792cf50b32a901",
         "tmproxy_type": "https",
-        "proxyno1_api_key": "z1VRf8msFfQrDBY4KT3RUl1780375585",
-        "provider": "none"
+        "proxyno1_api_key": "WMTnlzyW4woKoSYVlOhm6v1781847532",
+        "provider": "proxyno1"
       },
       "window": {
         "width": 1280,
         "height": 780,
         "scale_percent": 34
       },
-      "target_url": "https://play.vic.singles/?a=mswl_422687af00955c6f6207d6fd054ab9f8"
+      "target_url": "https://play.go88.me/?a=GO88K"
     },
     "P3": {
       "name": "Profile 3",
@@ -613,7 +616,7 @@
         "height": 780,
         "scale_percent": 34
       },
-      "target_url": "https://play.ricwin.ac/?a=RIC001"
+      "target_url": "https://play.ricwin.mx/?a=RIC001"
     }
   },
   "capture": {

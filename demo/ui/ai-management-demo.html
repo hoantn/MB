@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Qu&#7843;n L&#253; AI - Demo</title>
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --bg:#0f1216; --top:#171a1f; --panel:#151a20; --panel2:#1b222b;
+      --line:#303946; --line2:#222a34; --text:#f3f7fb; --muted:#9aa8b5;
+      --blue:#4e8bd9; --green:#28a766; --amber:#d89a2b; --red:#d65b65;
+      --cyan:#42b8c8; --violet:#9b7cf0;
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0; min-width: 1280px; overflow: hidden;
+      background: var(--bg); color: var(--text);
+      font: 12px/1.35 "Segoe UI", Arial, sans-serif;
+    }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .app { height: 100vh; display: grid; grid-template-rows: 30px 46px 1fr 26px; }
+    .menu {
+      display: flex; align-items: end; justify-content: center; gap: 2px;
+      background: #1b1b1b; border-bottom: 1px solid #303030; padding-top: 3px;
+    }
+    .tab {
+      height: 27px; min-width: 92px; padding: 0 13px; border: 1px solid #3b3f46;
+      border-bottom: 0; border-radius: 4px 4px 0 0; background: #15181d;
+      color: #e8edf3; display: inline-flex; align-items: center; justify-content: center;
+      font-weight: 700;
+    }
+    .tab.active {
+      background: #0f141a; color: #7dd3fc; border-color: var(--blue);
+      box-shadow: inset 0 -2px 0 var(--blue);
+    }
+    .topbar {
+      display: flex; align-items: center; gap: 12px; padding: 0 14px;
+      border-bottom: 1px solid var(--line); background: var(--top);
+    }
+    .brand { font-size: 15px; font-weight: 900; white-space: nowrap; }
+    .brand span { color: #5ee787; }
+    .summary { display: flex; gap: 10px; color: var(--muted); white-space: nowrap; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px;
+      border: 1px solid var(--line); border-radius: 4px; background: #10161d; color: #dce6f1;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+    .spacer { flex: 1; }
+    .btn {
+      height: 30px; padding: 0 12px; border: 1px solid var(--line); border-radius: 5px;
+      background: #222a35; color: white; font-weight: 800;
+    }
+    .btn.blue { background: #165aa8; border-color: #2777ca; }
+    .btn.green { background: #15733f; border-color: #24a35b; }
+    .btn.amber { background: #8a5b12; border-color: #d39a25; }
+    .btn.red { background: #87333a; border-color: #d85d65; }
+    .btn.ghost { background: #111820; color: #c7d3df; }
+    .main {
+      min-height: 0; display: grid; grid-template-columns: 270px 1fr 390px;
+      gap: 10px; padding: 10px; background: #0d1116;
+    }
+    .panel {
+      min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: 6px;
+      background: var(--panel); display: flex; flex-direction: column; overflow: hidden;
+    }
+    .panel-head {
+      min-height: 38px; display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--line);
+      background: #111820; font-weight: 900;
+    }
+    .panel-body { min-height: 0; overflow: auto; padding: 12px; }
+    .section { border: 1px solid var(--line2); border-radius: 6px; background: #10161d; margin-bottom: 10px; }
+    .section-title {
+      height: 30px; display: flex; align-items: center; padding: 0 10px;
+      border-bottom: 1px solid var(--line2); color: #dbeafe; font-weight: 900;
+    }
+    .section-content { padding: 10px; }
+    .field { margin-bottom: 9px; }
+    .field label { display: block; margin-bottom: 4px; color: var(--muted); font-weight: 700; }
+    input, select {
+      width: 100%; height: 30px; border: 1px solid #3a4452; border-radius: 5px;
+      background: #0c1117; color: var(--text); padding: 0 9px; outline: none;
+    }
+    .check-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; }
+    .switch { width: 36px; height: 18px; border-radius: 10px; background: #26313c; position: relative; border: 1px solid #435060; }
+    .switch::after { content: ""; width: 14px; height: 14px; border-radius: 50%; background: #aab6c2; position: absolute; left: 2px; top: 1px; }
+    .switch.on { background: #145b37; border-color: #2dad68; }
+    .switch.on::after { left: 18px; background: #5ee787; }
+    .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .metric { border: 1px solid var(--line2); border-radius: 5px; padding: 8px; background: #0d1319; }
+    .metric strong { display: block; font-size: 18px; }
+    .metric span { color: var(--muted); }
+    .subtabs { display: flex; gap: 2px; padding: 8px 10px 0; background: #111820; border-bottom: 1px solid var(--line); }
+    .subtab { padding: 9px 13px; color: #aebdca; font-weight: 900; border-radius: 5px 5px 0 0; }
+    .subtab.active { color: white; background: var(--panel); box-shadow: inset 0 -2px 0 var(--blue); }
+    .toolbar { display: flex; align-items: center; gap: 8px; padding: 10px; border-bottom: 1px solid var(--line); }
+    .toolbar input { width: 280px; }
+    .toolbar select { width: 150px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--line2); padding: 8px 9px; text-align: left; vertical-align: middle; }
+    th { position: sticky; top: 0; background: #1d232b; color: #b9c7d4; z-index: 1; }
+    tbody tr { background: #111820; }
+    tbody tr:nth-child(even) { background: #0f151c; }
+    tbody tr.active { outline: 1px solid var(--blue); background: #162233; }
+    .tag {
+      display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 4px;
+      border: 1px solid var(--line); background: #202936; font-weight: 900; white-space: nowrap;
+    }
+    .tag.green { color: #70f1a4; border-color: #23784a; background: #10251a; }
+    .tag.amber { color: #ffd37d; border-color: #8d641e; background: #251b0c; }
+    .tag.blue { color: #9fd0ff; border-color: #2e69a7; background: #0f1c2c; }
+    .tag.red { color: #ff9aa2; border-color: #8d3038; background: #261014; }
+    .cards { font-weight: 900; color: #eaf2fb; letter-spacing: .2px; }
+    .muted { color: var(--muted); }
+    .score-pos { color: #42e886; font-weight: 900; }
+    .score-neg { color: #ff737d; font-weight: 900; }
+    .detail-title { font-size: 16px; font-weight: 900; }
+    .decision-chain { display: grid; gap: 8px; }
+    .step {
+      border: 1px solid var(--line2); border-radius: 6px; padding: 9px; background: #0e151c;
+      display: grid; grid-template-columns: 24px 1fr auto; gap: 9px; align-items: start;
+    }
+    .num {
+      width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+      background: #26313e; color: #dbeafe; font-weight: 900;
+    }
+    .step.good .num { background: #145b37; color: #82f3b0; }
+    .step.warn .num { background: #6d4510; color: #ffd37d; }
+    .hand-preview { display: grid; gap: 7px; margin-top: 8px; }
+    .chi {
+      display: grid; grid-template-columns: 44px 1fr; gap: 8px; align-items: center;
+      border: 1px solid var(--line2); border-radius: 5px; padding: 7px; background: #0d1319;
+    }
+    .card-row { display: flex; gap: 5px; }
+    .mini-card {
+      width: 30px; height: 40px; border-radius: 5px; background: #f2f4f7; color: #111;
+      display: flex; align-items: center; justify-content: center; font-weight: 900; box-shadow: inset 0 -2px 0 #cbd1d8;
+    }
+    .mini-card.red { color: #ca2f38; }
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .compare-card { border: 1px solid var(--line2); border-radius: 6px; padding: 9px; background: #0d1319; }
+    .compare-card.active { border-color: #2ba864; box-shadow: inset 3px 0 0 #2ba864; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .grow { flex: 1; }
+    .row { display: flex; gap: 8px; align-items: center; }
+    .statusbar {
+      display: flex; align-items: center; justify-content: space-between; padding: 0 10px;
+      border-top: 1px solid #2a3038; background: #101010; color: #cbd5df;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <nav class="menu">
+      <div class="tab">Auto Play</div>
+      <div class="tab">X&#224;o V&#224;ng</div>
+      <div class="tab">Tr&#236;nh duy&#7879;t</div>
+      <div class="tab">C&#7845;u h&#236;nh</div>
+      <div class="tab active">Qu&#7843;n L&#253; AI</div>
+    </nav>
+
+    <header class="topbar">
+      <div class="brand">MB CONTROL <span>/ QU&#7842;N L&#221; AI</span></div>
+      <div class="summary">
+        <span class="pill"><i class="dot"></i> Exact DB: <b>428</b></span>
+        <span class="pill">Pattern: <b>36</b></span>
+        <span class="pill">&#272;&#7897; kh&#7899;p TB: <b>91%</b></span>
+        <span class="pill">Fallback Money: <b>17%</b></span>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn blue">Nh&#7853;p d&#7919; li&#7879;u</button>
+      <button class="btn ghost">Xu&#7845;t backup</button>
+      <button class="btn green">Ki&#7875;m th&#7917; h&#224;ng lo&#7841;t</button>
+    </header>
+
+    <main class="main">
+      <aside class="panel">
+        <div class="panel-head"><span>B&#7897; l&#7885;c AI</span><span class="muted">Tool 1-12</span></div>
+        <div class="panel-body">
+          <div class="section">
+            <div class="section-title">T&#236;m ki&#7871;m</div>
+            <div class="section-content">
+              <div class="field"><label>T&#7915; kh&#243;a / 13 l&#225;</label><input value="c&#249; th&#250; m&#7853;u"></div>
+              <div class="field"><label>Ngu&#7891;n quy&#7871;t &#273;&#7883;nh</label><select><option>T&#7845;t c&#7843;</option><option>Ng&#432;&#7901;i d&#249;ng l&#432;u</option><option>Pattern h&#7885;c</option><option>Money fallback</option></select></div>
+              <div class="field"><label>Lo&#7841;i b&#224;i</label><select><option>T&#7845;t c&#7843; th&#7871; b&#224;i</option><option>C&#249; / X&#225;m</option><option>Th&#249; / &#272;&#244;i</option><option>Th&#249;ng / S&#7843;nh</option><option>H&#224;ng bonus</option></select></div>
+              <div class="field"><label>Tr&#7841;ng th&#225;i</label><select><option>&#272;ang &#225;p d&#7909;ng</option><option>C&#7847;n xem l&#7841;i</option><option>B&#7883; v&#244; hi&#7879;u</option></select></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">T&#7893;ng quan</div>
+            <div class="section-content metric-grid">
+              <div class="metric"><strong>428</strong><span>Exact hand</span></div>
+              <div class="metric"><strong>36</strong><span>Pattern rule</span></div>
+              <div class="metric"><strong>1.284</strong><span>L&#7847;n &#225;p d&#7909;ng</span></div>
+              <div class="metric"><strong>24</strong><span>C&#7847;n review</span></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">C&#7845;u h&#236;nh h&#7885;c</div>
+            <div class="section-content">
+              <div class="check-row"><span>&#431;u ti&#234;n exact theo 13 l&#225;</span><span class="switch on"></span></div>
+              <div class="check-row"><span>G&#7907;i &#253; pattern t&#432;&#417;ng t&#7921;</span><span class="switch on"></span></div>
+              <div class="check-row"><span>T&#7921; gom pattern khi tr&#249;ng nhi&#7873;u</span><span class="switch"></span></div>
+              <div class="field"><label>Ng&#432;&#7905;ng tin c&#7853;y pattern</label><input value="85%"></div>
+              <button class="btn amber" style="width:100%">Duy&#7879;t 24 m&#7909;c c&#7847;n xem l&#7841;i</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <div class="subtabs">
+          <div class="subtab active">D&#7919; li&#7879;u h&#7885;c</div>
+          <div class="subtab">Quy&#7871;t &#273;&#7883;nh g&#7847;n &#273;&#226;y</div>
+          <div class="subtab">Ki&#7875;m th&#7917;</div>
+          <div class="subtab">C&#7845;u h&#236;nh</div>
+        </div>
+        <div class="toolbar">
+          <input value="T&#236;m theo 13 l&#225;, label, th&#7871; b&#224;i...">
+          <select><option>S&#7855;p x&#7871;p: m&#7899;i nh&#7845;t</option><option>D&#249;ng nhi&#7873;u nh&#7845;t</option><option>&#272;&#7897; tin c&#7853;y</option></select>
+          <select><option>Tool: t&#7845;t c&#7843;</option><option>Tool 1</option><option>Tool 2</option></select>
+          <div class="spacer"></div>
+          <button class="btn ghost">L&#224;m m&#7899;i</button>
+          <button class="btn blue">Th&#234;m rule</button>
+        </div>
+        <div class="panel-body" style="padding:0">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:96px">Ngu&#7891;n</th>
+                <th>13 l&#225; / Pattern</th>
+                <th style="width:155px">Auto ch&#7885;n</th>
+                <th style="width:132px">Money</th>
+                <th style="width:100px">&#272;&#7897; tin c&#7853;y</th>
+                <th style="width:105px">L&#7847;n d&#249;ng</th>
+                <th style="width:112px">Tr&#7841;ng th&#225;i</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="active">
+                <td><span class="tag green">Exact DB</span></td>
+                <td><div class="cards">8H TH QC | 2D 7D 9D JD QD | 3H 3C KD KH KC</div><div class="muted">Ng&#432;&#7901;i d&#249;ng ch&#7885;n trong v&#225;n th&#7853;t</div></td>
+                <td>C&#249; - S&#7843;nh - &#272;&#244;i</td>
+                <td>C&#249; - Th&#249;ng - M&#7853;u</td>
+                <td><span class="score-pos">100%</span></td>
+                <td>18</td>
+                <td><span class="tag green">&#272;ang b&#7853;t</span></td>
+              </tr>
+              <tr>
+                <td><span class="tag blue">Pattern</span></td>
+                <td><div class="cards">C&#249; nh&#7887; + s&#7843;nh chi gi&#7919;a + &#273;&#244;i chi &#273;&#7847;u</div><div class="muted">&#193;p d&#7909;ng cho 27 bi&#7871;n th&#7875; rank t&#432;&#417;ng t&#7921;</div></td>
+                <td>C&#249; - S&#7843;nh - &#272;&#244;i</td>
+                <td>Kh&#225;c nhau</td>
+                <td><span class="score-pos">91%</span></td>
+                <td>64</td>
+                <td><span class="tag amber">C&#7847;n duy&#7879;t</span></td>
+              </tr>
+              <tr>
+                <td><span class="tag green">Exact DB</span></td>
+                <td><div class="cards">9D TC AS | 2H 6C 7S QD QH | 4S 5C 6D 7H 8H</div><div class="muted">Ch&#7885;n s&#7843;nh - &#273;&#244;i - m&#7853;u thay v&#236; ba &#273;&#244;i</div></td>
+                <td>S&#7843;nh - &#272;&#244;i - M&#7853;u</td>
+                <td>&#272;&#244;i - &#272;&#244;i - &#272;&#244;i</td>
+                <td><span class="score-pos">100%</span></td>
+                <td>9</td>
+                <td><span class="tag green">&#272;ang b&#7853;t</span></td>
+              </tr>
+              <tr>
+                <td><span class="tag amber">Money</span></td>
+                <td><div class="cards">Money engine row</div><div class="muted">Ch&#432;a c&#243; DB exact/pattern, d&#249;ng fallback Money</div></td>
+                <td>[auto] Money</td>
+                <td>[auto] Money</td>
+                <td><span class="score-pos">78%</span></td>
+                <td>312</td>
+                <td><span class="tag blue">Fallback</span></td>
+              </tr>
+              <tr>
+                <td><span class="tag red">Review</span></td>
+                <td><div class="cards">T&#7913; qu&#253; nh&#7887; + &#273;&#244;i b&#233; + m&#7853;u K/A</div><div class="muted">C&#7847;n x&#225;c nh&#7853;n n&#234;n gi&#7919; h&#224;ng hay &#273;&#225;nh c&#226;n chi</div></td>
+                <td>T&#7913; qu&#253; - Th&#250; - M&#7853;u</td>
+                <td>T&#7913; qu&#253; - &#272;&#244;i - &#272;&#244;i</td>
+                <td><span class="score-neg">62%</span></td>
+                <td>4</td>
+                <td><span class="tag red">C&#7847;n xem</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="panel-head"><span>Chi ti&#7871;t quy&#7871;t &#273;&#7883;nh</span><span class="tag green">Exact DB</span></div>
+        <div class="panel-body">
+          <div class="detail-title">C&#249; - S&#7843;nh - &#272;&#244;i</div>
+          <div class="muted" style="margin:4px 0 10px">L&#432;u t&#7915; thao t&#225;c chu&#7897;t ph&#7843;i: "Ch&#7885;n l&#224;m g&#7907;i &#253; Auto"</div>
+
+          <div class="section">
+            <div class="section-title">Chu&#7895;i quy&#7871;t &#273;&#7883;nh</div>
+            <div class="section-content decision-chain">
+              <div class="step good"><span class="num">1</span><div><b>Exact 13 l&#225;</b><br><span class="muted">Kh&#7899;p tuy&#7879;t &#273;&#7889;i card key trong DB</span></div><span class="tag green">match</span></div>
+              <div class="step"><span class="num">2</span><div><b>Pattern t&#432;&#417;ng t&#7921;</b><br><span class="muted">B&#7883; b&#7887; qua v&#236; Exact DB &#432;u ti&#234;n h&#417;n</span></div><span class="tag blue">skip</span></div>
+              <div class="step warn"><span class="num">3</span><div><b>Money fallback</b><br><span class="muted">Money ch&#7885;n kh&#225;c, ch&#7881; d&#249;ng khi DB kh&#244;ng c&#243;</span></div><span class="tag amber">fallback</span></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">B&#7843;n x&#7871;p &#273;&#227; l&#432;u</div>
+            <div class="section-content hand-preview">
+              <div class="chi"><b>Chi 3</b><div class="card-row"><span class="mini-card red">8H</span><span class="mini-card red">TH</span><span class="mini-card">QC</span></div></div>
+              <div class="chi"><b>Chi 2</b><div class="card-row"><span class="mini-card red">2D</span><span class="mini-card red">7D</span><span class="mini-card red">9D</span><span class="mini-card red">JD</span><span class="mini-card red">QD</span></div></div>
+              <div class="chi"><b>Chi 1</b><div class="card-row"><span class="mini-card red">3H</span><span class="mini-card">3C</span><span class="mini-card red">KD</span><span class="mini-card red">KH</span><span class="mini-card">KC</span></div></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">So s&#225;nh</div>
+            <div class="section-content compare">
+              <div class="compare-card active"><b>Ng&#432;&#7901;i d&#249;ng</b><br><span>C&#249; - S&#7843;nh - &#272;&#244;i</span><br><span class="score-pos">18 l&#7847;n d&#249;ng</span></div>
+              <div class="compare-card"><b>Money</b><br><span>C&#249; - Th&#249;ng - M&#7853;u</span><br><span class="muted">fallback</span></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Action qu&#7843;n l&#253;</div>
+            <div class="section-content actions">
+              <button class="btn blue">S&#7917;a g&#7907;i &#253;</button>
+              <button class="btn ghost">Nh&#226;n b&#7843;n</button>
+              <button class="btn amber">G&#7897;p pattern</button>
+              <button class="btn red">T&#7855;t rule</button>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Ki&#7875;m th&#7917; nhanh</div>
+            <div class="section-content">
+              <div class="field"><label>D&#225;n 13 l&#225;</label><input value="8H,TH,QC,2D,7D,9D,JD,QD,3H,3C,KD,KH,KC"></div>
+              <div class="row"><button class="btn blue grow">M&#244; ph&#7887;ng ch&#7885;n Auto</button><button class="btn ghost">So Money</button></div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="statusbar">
+      <span>Ready | AI DB: connected | mode: exact - pattern - money</span>
+      <span>License OK | Tool 1 | 12 c&#7909;m / 36P</span>
+    </footer>
+  </div>
+</body>
+</html>

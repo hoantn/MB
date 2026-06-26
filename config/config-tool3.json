@@ -84,6 +84,9 @@
     },
     "tool_window_geometries": {},
     "theme": "Tối",
+    "strategy2": {
+      "suggest_engine_mode": "fast"
+    },
     "theme_colors": {
       "Tối": {
         "bg": "#1E1E1E",

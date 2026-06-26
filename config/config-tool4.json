@@ -69,6 +69,9 @@
     "browser_window_positions": {},
     "tool_window_geometries": {},
     "theme": "Tối",
+    "strategy2": {
+      "suggest_engine_mode": "fast"
+    },
     "theme_colors": {
       "Sáng": {
         "bg": "#e6e6e6",

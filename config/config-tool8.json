@@ -488,6 +488,9 @@
       "slot_click_px": 0.5,
       "slot_click_py": 0.5
     },
+    "strategy2": {
+      "suggest_engine_mode": "fast"
+    },
     "theme_colors": {
       "Sáng": {
         "bg": "#e6e6e6",
