@@ -26,12 +26,19 @@ class WSCardStore:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._cards_by_profile: Dict[str, List[str]] = {}
+        self._hand_context_by_profile: Dict[str, Any] = {}
         # Dedup theo ws_codes (int) để tránh spam/replay cùng nội dung
         self._last_ws_codes_by_profile: Dict[str, List[int]] = {}
 
     # ---- API công khai -------------------------------------------------
 
-    def update_cards(self, profile_id: str, ws_codes: List[int]) -> List[str]:
+    def update_cards(
+        self,
+        profile_id: str,
+        ws_codes: List[int],
+        *,
+        hand_context: Any = None,
+    ) -> List[str]:
         """
         Cập nhật 13 lá bài mới nhất cho profile_id từ list mã WS (0..51).
         Trả về list mã lá bài TOOL (2B, TT,...).
@@ -40,6 +47,7 @@ class WSCardStore:
 
         with self._lock:
             self._cards_by_profile[profile_id] = cards
+            self._hand_context_by_profile[profile_id] = hand_context
 
         if logger:
             logger.info(
@@ -61,6 +69,21 @@ class WSCardStore:
         with self._lock:
             cards = self._cards_by_profile.get(profile_id)
             return list(cards) if cards is not None else None
+
+    def get_last_hand_context(self, profile_id: str) -> Any:
+        """Return metadata captured at the cmd=600 hand-start moment."""
+        with self._lock:
+            return self._hand_context_by_profile.get(profile_id)
+
+    def clear_profile(self, profile_id: str) -> None:
+        """Forget the last hand for one profile after it leaves/changes table."""
+        pid = str(profile_id or "")
+        if not pid:
+            return
+        with self._lock:
+            self._cards_by_profile.pop(pid, None)
+            self._hand_context_by_profile.pop(pid, None)
+            self._last_ws_codes_by_profile.pop(pid, None)
 
 
 # Singleton dùng chung

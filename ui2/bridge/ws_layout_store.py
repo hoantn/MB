@@ -64,6 +64,18 @@ class WSLayoutStore:
                 self._condition.notify_all()
                 apply_trace("layout606_hand_begin", pid)
 
+    def clear_profile(self, profile_id: str) -> None:
+        """Forget the current hand/layout history after the profile changes table."""
+        pid = str(profile_id)
+        with self._condition:
+            self._original_by_profile.pop(pid, None)
+            self._hand_generation_by_profile[pid] = int(
+                self._hand_generation_by_profile.get(pid, 0)
+            ) + 1
+            self._history_by_profile.pop(pid, None)
+            self._condition.notify_all()
+        apply_trace("layout606_hand_cleared", pid)
+
     def update_layout(
         self,
         profile_id: str,

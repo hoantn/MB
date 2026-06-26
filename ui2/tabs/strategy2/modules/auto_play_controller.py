@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ui2.tabs.strategy2.strategy_anti_sap import _codes_to_threechi, _eval_vs_opp
 from ui2.tabs.strategy2.strategy_combo_sap_lang import find_sap_lang_combo, SapLangCombo
@@ -11,6 +11,59 @@ from engine.money_scoring import score_money_vs_opp, evaluate_5cards, evaluate_3
 
 
 PROFILES = ("P1", "P2", "P3")
+_ROSTER_UID_KEYS = ("uid", "u", "id", "userId", "user_id")
+
+
+def _profile_auto_ready(tab, pid: str, *, require_suggestions: bool = False) -> bool:
+    checker = getattr(tab, "_is_profile_auto_hand_ready", None)
+    if callable(checker):
+        try:
+            return bool(checker(pid, require_suggestions=require_suggestions))
+        except TypeError:
+            try:
+                return bool(checker(pid))
+            except Exception:
+                return False
+        except Exception:
+            return False
+    if len(list(tab._codes_slot_order.get(pid) or [])) != 13:
+        return False
+    if require_suggestions and not (_auto_rows(tab, pid) or []):
+        return False
+    return True
+
+
+def _normalize_roster_uid(item: Any) -> str:
+    """Extract a UID from cmd=600 lpi items that may be strings or player objects."""
+    if item is None:
+        return ""
+    if isinstance(item, dict):
+        for key in _ROSTER_UID_KEYS:
+            value = item.get(key)
+            if value is not None:
+                uid = str(value).strip()
+                if uid:
+                    return uid
+        return ""
+    for key in _ROSTER_UID_KEYS:
+        try:
+            value = getattr(item, key)
+        except Exception:
+            continue
+        if value is not None:
+            uid = str(value).strip()
+            if uid:
+                return uid
+    return str(item).strip()
+
+
+def _normalize_roster_uids(roster_uids) -> Tuple[str, ...]:
+    return tuple(
+        sorted(
+            uid for uid in (_normalize_roster_uid(item) for item in (roster_uids or ()))
+            if uid
+        )
+    )
 
 
 @dataclass
@@ -134,6 +187,66 @@ def classify_auto_room_context(room_engine) -> AutoRoomContext:
     )
 
 
+def classify_hand_start_room_context(room_engine, roster_uids) -> AutoRoomContext:
+    """Classify one cmd=600 hand-start roster without waiting for all P reports."""
+    roster = _normalize_roster_uids(roster_uids)
+    if not roster:
+        return classify_auto_room_context(room_engine)
+    if room_engine is None or not hasattr(room_engine, "get_room_monitor_state"):
+        return AutoRoomContext(kind="unknown", roster=roster, reason="chua co RoomEngine realtime")
+
+    controlled_uid_by_pid: Dict[str, str] = {}
+    gold_by_pid: Dict[str, Optional[int]] = {}
+    for pid in PROFILES:
+        try:
+            state = room_engine.get_room_monitor_state(pid) or {}
+        except Exception:
+            return AutoRoomContext(kind="unknown", roster=roster, reason=f"khong doc duoc UID {pid}")
+        profiles_info = state.get("profiles") or {}
+        own = profiles_info.get(pid) or {}
+        uid = str(own.get("uid") or "").strip()
+        if uid:
+            controlled_uid_by_pid[pid] = uid
+        gold_raw = own.get("gold")
+        try:
+            gold_by_pid[pid] = int(gold_raw) if gold_raw is not None else None
+        except (TypeError, ValueError):
+            gold_by_pid[pid] = None
+
+    controlled_uid_set = set(controlled_uid_by_pid.values())
+    controlled_pids = tuple(
+        pid for pid in PROFILES
+        if controlled_uid_by_pid.get(pid) in set(roster)
+    )
+    external_uids = tuple(uid for uid in roster if uid not in controlled_uid_set)
+
+    if len(controlled_pids) == 3 and len(external_uids) == 1:
+        return AutoRoomContext(
+            kind="external_opp",
+            roster=roster,
+            controlled_pids=controlled_pids,
+            external_uids=external_uids,
+            gold_by_pid=gold_by_pid,
+        )
+
+    if not external_uids and len(controlled_pids) in (2, 3):
+        return AutoRoomContext(
+            kind="internal_3p" if len(controlled_pids) == 3 else "internal_2p",
+            roster=roster,
+            controlled_pids=controlled_pids,
+            gold_by_pid=gold_by_pid,
+        )
+
+    return AutoRoomContext(
+        kind="unknown",
+        roster=roster,
+        controlled_pids=controlled_pids,
+        external_uids=external_uids,
+        reason="hand-start roster khong du chac de chot Auto mode",
+        gold_by_pid=gold_by_pid,
+    )
+
+
 # ===========================================================================
 # Internal balance helpers
 # ===========================================================================
@@ -143,12 +256,12 @@ def _get_money_split(tab, pid: str) -> Optional[Tuple[int, dict]]:
     Trả về (index, suggestion) của split Auto trong list gợi ý cuối cho pid.
     Dùng cho P_min (3P) và P_less (2P): cho phép chơi thế bài tự nhiên tốt nhất.
 
-    Ưu tiên lấy split có flag _auto_profile_money (do worker arranger đánh dấu).
+    Ưu tiên lấy split auto money, dù đang đọc từ list render của UI hay list worker thô.
     Fallback về split playable đầu tiên nếu không tìm thấy money split.
     """
     rows = _auto_rows(tab, pid)
     for idx, s in enumerate(rows):
-        if s.get("_auto_profile_money") and _is_playable(tab, s):
+        if (s.get("_auto_profile_money") or s.get("_auto_engine_money")) and _is_playable(tab, s):
             return idx, dict(s)
     for idx, s in enumerate(rows):
         if _is_playable(tab, s):
@@ -676,7 +789,7 @@ def _opp_has_bonus_line(opp: dict) -> bool:
 def _has_any_special(tab) -> bool:
     for pid in PROFILES:
         codes = list(tab._codes_slot_order.get(pid) or [])
-        if len(codes) == 13:
+        if _profile_auto_ready(tab, pid):
             try:
                 if detect_special_13(codes):
                     return True
@@ -853,7 +966,7 @@ def build_partial_plan_for_opp(tab, opp_index: int, opp: dict) -> Optional[AutoP
     applied_keys = getattr(tab, "_auto_play_applied_profile_keys", set()) or set()
 
     for pid in PROFILES:
-        if len(list(tab._codes_slot_order.get(pid) or [])) != 13:
+        if not _profile_auto_ready(tab, pid):
             continue
         if hasattr(tab, "_auto_profile_apply_key"):
             try:
@@ -890,8 +1003,9 @@ def build_money_fallback_plan(tab, profile_ids=None) -> Optional[AutoPlayPlan]:
     """
     Build an OPP-free safety plan for every ready profile.
 
-    Prefer a reportable special hand. Otherwise use the Auto split selected
-    from that profile's final suggestion list.
+    Prefer a reportable special hand. Otherwise use the Auto money split from
+    the final render list or the raw worker list when a profile has not been
+    rendered yet.
     """
     selected_index: Dict[str, int] = {}
     suggestions: Dict[str, dict] = {}
@@ -901,7 +1015,7 @@ def build_money_fallback_plan(tab, profile_ids=None) -> Optional[AutoPlayPlan]:
     source_profiles = PROFILES if profile_ids is None else profile_ids
     scoped_profiles = tuple(pid for pid in source_profiles if pid in PROFILES)
     for pid in scoped_profiles:
-        if len(list(tab._codes_slot_order.get(pid) or [])) != 13:
+        if not _profile_auto_ready(tab, pid):
             continue
         if hasattr(tab, "_auto_profile_apply_key"):
             try:
@@ -925,7 +1039,12 @@ def build_money_fallback_plan(tab, profile_ids=None) -> Optional[AutoPlayPlan]:
 
         if picked is None:
             for idx, sug in enumerate(rows):
-                if sug.get("_auto_profile_money") and _is_playable(tab, sug):
+                if (sug.get("_auto_profile_money") or sug.get("_auto_engine_money")) and _is_playable(tab, sug):
+                    picked = (idx, dict(sug))
+                    break
+        if picked is None:
+            for idx, sug in enumerate(rows):
+                if _is_playable(tab, sug):
                     picked = (idx, dict(sug))
                     break
 
@@ -994,8 +1113,7 @@ def build_auto_play_plan(
                 pass
 
     full_ready = full_has_no_prior_apply and all(
-        len(list(tab._codes_slot_order.get(pid) or [])) == 13
-        and bool(_auto_rows(tab, pid))
+        _profile_auto_ready(tab, pid, require_suggestions=True)
         for pid in PROFILES
     )
     idx, opp = opp_candidate

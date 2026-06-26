@@ -11,6 +11,33 @@ from ui2.tabs.room_tab import TrangThaiPhong, RoomControlTab, NguoiChoiPhong
 from core.logger import log
 from core.config import load_config
 
+
+_ROSTER_UID_KEYS = ("uid", "u", "id", "userId", "user_id")
+
+
+def _normalize_roster_uid(item: Any) -> str:
+    """Extract a UID from realtime roster items that may be strings or player objects."""
+    if item is None:
+        return ""
+    if isinstance(item, dict):
+        for key in _ROSTER_UID_KEYS:
+            value = item.get(key)
+            if value is not None:
+                uid = str(value).strip()
+                if uid:
+                    return uid
+        return ""
+    for key in _ROSTER_UID_KEYS:
+        try:
+            value = getattr(item, key)
+        except Exception:
+            continue
+        if value is not None:
+            uid = str(value).strip()
+            if uid:
+                return uid
+    return str(item).strip()
+
 # ---------------------------------------------------------------------------
 # Mô hình dữ liệu: danh sách phòng ở lobby (cmd=300)
 # ---------------------------------------------------------------------------
@@ -76,6 +103,10 @@ class RoomEngine(QObject):
 
     # args: profiles mapping from get_room_monitor_state()
     sig_gold_monitor_changed = Signal(object)
+
+    # args: profile_id, reason. StrategyTab uses this to drop stale hands when
+    # the controlled profile changes table/session.
+    sig_profile_room_session_changed = Signal(str, str)
 
     # args: profile_id, error text. Worker thread emits this when sync click fails.
     sig_join_click_error = Signal(str, str)
@@ -670,6 +701,41 @@ class RoomEngine(QObject):
             getattr(st, "my_uid", None),
         )
 
+    def _emit_room_session_changed_if_needed(
+        self,
+        profile_id: str,
+        old_key: Optional[Tuple],
+        new_key: Optional[Tuple],
+        reason: str,
+    ) -> None:
+        if old_key == new_key:
+            return
+        if old_key is None and reason in ("task_snapshot", "room_snapshot"):
+            try:
+                log.debug(
+                    "[ROOM-SESSION] %s baseline reason=%s new=%s",
+                    profile_id,
+                    reason,
+                    new_key,
+                )
+            except Exception:
+                pass
+            return
+        try:
+            log.info(
+                "[ROOM-SESSION] %s changed reason=%s old=%s new=%s",
+                profile_id,
+                reason,
+                old_key,
+                new_key,
+            )
+        except Exception:
+            pass
+        try:
+            self.sig_profile_room_session_changed.emit(str(profile_id), str(reason or "room_changed"))
+        except Exception:
+            log.exception("RoomEngine emit room session changed failed pid=%s", profile_id)
+
     def is_room_task_active(self, profile_id: str) -> bool:
         tv = self.tac_vu.get(str(profile_id or ""))
         return bool(tv and tv.che_do in ("create", "join", "find_guest"))
@@ -754,10 +820,13 @@ class RoomEngine(QObject):
     # ======================================================================
 
     def _accept_room_task_snapshot(self, profile_id: str, trang_thai: TrangThaiPhong) -> None:
-        self._last_room_key[profile_id] = self._make_room_key(trang_thai)
+        old_key = self._last_room_key.get(profile_id)
+        room_key = self._make_room_key(trang_thai)
+        self._last_room_key[profile_id] = room_key
         self._last_snapshot[profile_id] = trang_thai
         self._sync_room_monitor_snapshot(profile_id, trang_thai)
         self._schedule_room_ui(profile_id)
+        self._emit_room_session_changed_if_needed(profile_id, old_key, room_key, "task_snapshot")
 
     def _handle_room_task_snapshot(self, profile_id: str, trang_thai: TrangThaiPhong) -> None:
         tv = self.tac_vu[profile_id]
@@ -851,11 +920,13 @@ class RoomEngine(QObject):
                 self._handle_room_task_snapshot(profile_id, trang_thai)
                 return
 
+            old_key = self._last_room_key.get(profile_id)
             room_key = self._make_room_key(trang_thai)
             self._last_room_key[profile_id] = room_key
             self._last_snapshot[profile_id] = trang_thai
             self._sync_room_monitor_snapshot(profile_id, trang_thai)
             self._schedule_room_ui(profile_id)
+            self._emit_room_session_changed_if_needed(profile_id, old_key, room_key, "room_snapshot")
 
             if self._refresh_waiting.get(profile_id):
                 self._refresh_waiting[profile_id] = False
@@ -904,6 +975,7 @@ class RoomEngine(QObject):
         """Return a read-only monitoring snapshot for UI/debug consumers."""
         pid = str(profile_id or "")
         room_uids = set(self._room_uids_by_profile.get(pid) or set())
+        room_key = (getattr(self, "_last_room_key", {}) or {}).get(pid)
         updated_at = float(self._room_roster_updated_at.get(pid, 0.0) or 0.0)
         roster_age_s = max(0.0, time.monotonic() - updated_at) if updated_at else None
         # Roster cũ không được phép tiếp tục điều khiển plan Auto.
@@ -923,6 +995,7 @@ class RoomEngine(QObject):
         return {
             "profile_id": pid,
             "room_uids": sorted(room_uids),
+            "room_key": room_key,
             "profiles": profiles,
             "external_uids": external_uids,
             "has_external_uid": bool(external_uids),
@@ -945,9 +1018,14 @@ class RoomEngine(QObject):
         """Update lightweight room membership from a realtime roster."""
         if not isinstance(uids, list):
             return
-        room_uids = {str(uid).strip() for uid in uids if str(uid or "").strip()}
-        # Danh sách rỗng từ nguồn realtime là tín hiệu đã rời bàn, phải xóa
-        # roster cũ thay vì giữ lại và phân loại nhầm ở ván sau.
+        room_uids = {
+            uid for uid in (_normalize_roster_uid(item) for item in uids)
+            if uid
+        }
+        # Empty cmd=600 lpi usually means "omitted", not a confirmed leave.
+        if not room_uids:
+            return
+        # Non-empty realtime rosters are reliable enough to refresh membership.
         self._room_roster_updated_at[profile_id] = time.monotonic()
         self._room_uids_by_profile[profile_id] = room_uids
         self._room_roster_reliable[profile_id] = bool(room_uids)
@@ -988,9 +1066,6 @@ class RoomEngine(QObject):
                     changed_uids.add(uid)
 
             if not realtime_players:
-                self._room_uids_by_profile[profile_id] = set()
-                self._room_roster_updated_at[profile_id] = time.monotonic()
-                self._room_roster_reliable[profile_id] = False
                 return
 
             # cmd=205 is authoritative for the live table roster after a hand.
@@ -1166,15 +1241,28 @@ class RoomEngine(QObject):
             if player is None:
                 return
 
+            self_uid = str(self._self_uid_by_profile.get(profile_id) or "").strip()
+            room_uids = self._room_uids_by_profile.setdefault(profile_id, set())
+            self_was_in_room = bool(self_uid and self_uid in room_uids)
+
             # Monitor membership even when cmd=200 races ahead of cmd=202.
             if t == 1 or t is None:
-                self._room_uids_by_profile.setdefault(profile_id, set()).add(player.uid)
+                room_uids.add(player.uid)
                 self._room_roster_updated_at[profile_id] = time.monotonic()
                 if player.vang is not None:
                     self._gold_by_uid[player.uid] = int(player.vang)
             elif t in (2, 0, -1):
-                self._room_uids_by_profile.setdefault(profile_id, set()).discard(player.uid)
+                room_uids.discard(player.uid)
                 self._room_roster_updated_at[profile_id] = time.monotonic()
+
+            self_is_in_room = bool(self_uid and self_uid in room_uids)
+            if self_uid and self_was_in_room != self_is_in_room:
+                self._emit_room_session_changed_if_needed(
+                    profile_id,
+                    ("self_in_room", self_was_in_room),
+                    ("self_in_room", self_is_in_room),
+                    "self_join_event" if self_is_in_room else "self_leave_event",
+                )
 
             st = self._last_snapshot.get(profile_id)
 

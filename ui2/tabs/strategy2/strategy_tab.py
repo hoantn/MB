@@ -18,6 +18,7 @@ from .modules.suggest_pipeline import SuggestPipeline
 # UI perf guards
 MAX_UI_P_ITEMS = 12
 MAX_UI_NGU_ITEMS = 12
+HAND_COHORT_MAX_SKEW_S = 30.0
 
 from core.logger import log
 from core.apply_trace import apply_trace
@@ -47,6 +48,7 @@ from .modules.apply_controller import ApplyController
 from .modules.suggest_engine_selector import configured_engine_mode_for_slot
 from .modules.auto_play_controller import (
     AutoPlayPlan,
+    AutoRoomContext,
     build_auto_play_plan,
     build_internal_balance_plan,
     build_internal_sap_ham_plan,
@@ -221,6 +223,16 @@ class StrategyTab(QWidget):
         # Tăng đúng một lần khi nhận bộ bài mới của từng P. Auto dùng generation
         # để không nhầm hai ván khác nhau vô tình có cùng bộ 13 lá.
         self._hand_generation: Dict[str, int] = {pid: 0 for pid in self.profiles}
+        self._hand_seen_at: Dict[str, float] = {pid: 0.0 for pid in self.profiles}
+        self._profile_waiting_new_hand_after_room_change: Dict[str, bool] = {
+            pid: False for pid in self.profiles
+        }
+        self._room_signal_source = None
+        self._ngu_pending_cohort_key: Optional[str] = None
+        self._ngu_ready_cohort_key: Optional[str] = None
+        self._hand_room_context_by_profile: Dict[str, Optional[AutoRoomContext]] = {
+            pid: None for pid in self.profiles
+        }
 
         self._layout_codes: Dict[str, List[str]] = {}
         self._manual_layout_codes: Dict[str, List[str]] = {}
@@ -265,6 +277,8 @@ class StrategyTab(QWidget):
         self._auto_play_internal_sap_ham_done: bool = False
         self._auto_play_round_modes: Dict[str, str] = {}
         self._auto_play_session: int = 0
+        self._auto_wait_last_reason: Optional[str] = None
+        self._auto_wait_last_at: float = 0.0
         self._auto_opp_plan_request_seq: int = 0
         self._auto_opp_plan_inflight: Optional[tuple] = None
         self._auto_opp_plan_force_sync_key: Optional[str] = None
@@ -334,7 +348,9 @@ class StrategyTab(QWidget):
 
         # Pending same-hand snapshot (khi ws_freeze hoặc busy)
         self._pending_ws_samehand: Dict[str, List[str]] = {}
+        self._pending_ws_reset_context: Dict[str, object] = {}
         self._manual_pending_ws_reset: Dict[str, List[str]] = {}
+        self._manual_pending_ws_reset_context: Dict[str, object] = {}
         self._manual_pending_ws_samehand: Dict[str, List[str]] = {}
 
         self._labeling = Labeling()
@@ -344,6 +360,7 @@ class StrategyTab(QWidget):
         self._post_engine_renderer = PostEngineRenderer()
         self._apply_controller = ApplyController()
         self._on_profile_switch(self.active_profile)
+        self._connect_room_engine_signals(self._room_engine)
 
     def set_runtime_services(
         self,
@@ -358,6 +375,7 @@ class StrategyTab(QWidget):
         """Attach per-tool runtime services; fallback globals remain for the main Strategy tab."""
         if room_engine is not None:
             self._room_engine = room_engine
+            self._connect_room_engine_signals(room_engine)
         if layout_store is not None:
             self._layout_store = layout_store
         if game_controller is not None:
@@ -368,6 +386,30 @@ class StrategyTab(QWidget):
             self._auto_play_log_sink = auto_play_log_sink
         if auto_settings_notifier is not None:
             self._auto_settings_notifier = auto_settings_notifier
+
+    def _connect_room_engine_signals(self, room_engine) -> None:
+        old = getattr(self, "_room_signal_source", None)
+        if old is room_engine:
+            return
+        if old is not None:
+            try:
+                old.sig_profile_room_session_changed.disconnect(self._on_profile_room_session_changed)
+            except Exception:
+                pass
+        self._room_signal_source = room_engine
+        sig = getattr(room_engine, "sig_profile_room_session_changed", None)
+        if sig is None:
+            return
+        try:
+            sig.connect(self._on_profile_room_session_changed)
+        except Exception:
+            log.exception("[Strategy2] cannot connect room session signal")
+
+    def _on_profile_room_session_changed(self, profile_id: str, reason: str = "") -> None:
+        try:
+            self._invalidate_profile_hand_for_room_change(str(profile_id), str(reason or "room_changed"))
+        except Exception:
+            log.exception("[Strategy2] room-session invalidation failed pid=%s", profile_id)
 
     def _get_room_engine(self):
         room_engine = getattr(self, "_room_engine", None)
@@ -1336,6 +1378,12 @@ class StrategyTab(QWidget):
 
         # 2) last_hand_hash không còn ý nghĩa theo Hướng A (vẫn có thể giữ để debug)
         self._last_hand_hash[pid] = None
+        try:
+            ctx_store = getattr(self, "_hand_room_context_by_profile", None)
+            if isinstance(ctx_store, dict):
+                ctx_store[pid] = None
+        except Exception:
+            pass
         # Thu hồi state Auto cũ của riêng P này; không chạm P khác đang chạy.
         prefix = f"{pid}:"
         self._auto_play_applied_profile_keys = {
@@ -1352,6 +1400,9 @@ class StrategyTab(QWidget):
         }
         # Khi bất kỳ P nào reset bài, coi như NGU key cũ không còn giá trị
         self._ngu_key = None
+        self._ngu_base_codes = []
+        self._ngu_pending_cohort_key = None
+        self._ngu_ready_cohort_key = None
         self._sap_lang_combo = None
         try:
             self.view.set_break_sap_lang_available(False)
@@ -1384,6 +1435,121 @@ class StrategyTab(QWidget):
             pass
 
 
+    def _invalidate_profile_hand_for_room_change(self, pid: str, reason: str = "room_changed") -> None:
+        """Drop stale hand state when a controlled profile changes table/session."""
+        pid = str(pid or "")
+        if pid not in self.profiles:
+            return
+
+        waiting = getattr(self, "_profile_waiting_new_hand_after_room_change", None)
+        if not isinstance(waiting, dict):
+            self._profile_waiting_new_hand_after_room_change = {p: False for p in self.profiles}
+            waiting = self._profile_waiting_new_hand_after_room_change
+
+        had_cards = len(list((self._codes_slot_order or {}).get(pid) or [])) == 13
+        already_waiting_empty = bool(waiting.get(pid)) and not had_cards
+
+        # Cancel delayed Auto callbacks/plans that may have captured the old hand.
+        self._auto_play_session = int(getattr(self, "_auto_play_session", 0) or 0) + 1
+        self._auto_play_hand_key = None
+        self._auto_play_pending_key = None
+        self._auto_opp_plan_inflight = None
+        self._auto_opp_plan_force_sync_key = None
+
+        waiting[pid] = True
+        self._force_reset_pid_state(pid)
+        try:
+            seen_at = getattr(self, "_hand_seen_at", None)
+            if isinstance(seen_at, dict):
+                seen_at[pid] = 0.0
+        except Exception:
+            pass
+        self._codes_slot_order[pid] = []
+        self._layout_codes[pid] = []
+        try:
+            if not hasattr(self, "_manual_layout_codes"):
+                self._manual_layout_codes = {}
+            self._manual_layout_codes[pid] = []
+        except Exception:
+            pass
+        self._ws_snapshot[pid] = None
+        self._last_hand_hash[pid] = None
+        try:
+            self._hand_room_context_by_profile[pid] = None
+        except Exception:
+            pass
+        for attr in (
+            "_pending_ws_reset",
+            "_pending_ws_samehand",
+            "_pending_ws_reset_context",
+            "_manual_pending_ws_reset",
+            "_manual_pending_ws_samehand",
+            "_manual_pending_ws_reset_context",
+        ):
+            try:
+                value = getattr(self, attr, None)
+                if isinstance(value, dict):
+                    value.pop(pid, None)
+            except Exception:
+                pass
+        try:
+            self._pre_render_pending.pop(pid, None)
+            self._pre_render_inflight.pop(pid, None)
+            self._pre_render_queue = deque(
+                item for item in self._pre_render_queue if not item or item[0] != pid
+            )
+        except Exception:
+            pass
+        try:
+            clear_fn = getattr(self._card_store, "clear_profile", None)
+            if callable(clear_fn):
+                clear_fn(pid)
+        except Exception:
+            log.exception("[Strategy2] clear WSCardStore failed pid=%s", pid)
+        try:
+            clear_layout_fn = getattr(self._layout_store, "clear_profile", None)
+            if callable(clear_layout_fn):
+                clear_layout_fn(pid)
+        except Exception:
+            log.exception("[Strategy2] clear WSLayoutStore failed pid=%s", pid)
+
+        if pid == self.active_profile:
+            try:
+                self.view.set_cards_p_normalized([])
+                self.view.set_p_labels([], 0)
+                self.view.set_p_status("Cho bai...")
+                self.view.set_p_special_text("", None)
+                self.view.btn_hup.setEnabled(False)
+            except Exception:
+                pass
+
+        if not already_waiting_empty:
+            self._auto_play_log(f"{pid}: doi phong/phien ban ({reason}), xoa bai cu va cho van moi.")
+
+    def _mark_profile_hand_seen(self, pid: str) -> None:
+        try:
+            seen_at = getattr(self, "_hand_seen_at", None)
+            if not isinstance(seen_at, dict):
+                self._hand_seen_at = {p: 0.0 for p in self.profiles}
+                seen_at = self._hand_seen_at
+            seen_at[str(pid)] = time.monotonic()
+        except Exception:
+            pass
+
+    def _is_profile_auto_hand_ready(self, pid: str, *, require_suggestions: bool = False) -> bool:
+        pid = str(pid or "")
+        if pid not in self.profiles:
+            return False
+        waiting = getattr(self, "_profile_waiting_new_hand_after_room_change", {}) or {}
+        if bool(waiting.get(pid, False)):
+            return False
+        if len(list((self._codes_slot_order or {}).get(pid) or [])) != 13:
+            return False
+        if require_suggestions and not (self._suggestions.get(pid) or []):
+            return False
+        return True
+
+
     def _manual_layout_is_locked(self, pid: str) -> bool:
         try:
             return bool((getattr(self, "_manual_layout_locked_after_apply", {}) or {}).get(str(pid), False))
@@ -1413,6 +1579,10 @@ class StrategyTab(QWidget):
         if not isinstance(pend, dict):
             return
         codes = pend.pop(pid, None)
+        try:
+            context = (getattr(self, "_pending_ws_reset_context", {}) or {}).pop(pid, None)
+        except Exception:
+            context = None
 
         if codes and isinstance(codes, list) and len(codes) == 13:
             self._invalidate_manual_apply_layout(pid)
@@ -1426,7 +1596,13 @@ class StrategyTab(QWidget):
             # áp dụng lại như một WS update "force"
             self._force_reset_pid_state(pid)
             self._hand_generation[pid] = int(self._hand_generation.get(pid, 0) or 0) + 1
+            self._mark_profile_hand_seen(pid)
+            try:
+                self._profile_waiting_new_hand_after_room_change[pid] = False
+            except Exception:
+                pass
             self._last_hand_hash[pid] = self._hand_hash(codes)
+            self._remember_hand_room_context(pid, context)
             self._codes_slot_order[pid] = list(codes)
             self._layout_codes[pid] = list(codes)
             try:
@@ -1488,6 +1664,10 @@ class StrategyTab(QWidget):
             codes = (getattr(self, "_manual_pending_ws_reset", {}) or {}).pop(pid, None)
         except Exception:
             codes = None
+        try:
+            (getattr(self, "_manual_pending_ws_reset_context", {}) or {}).pop(pid, None)
+        except Exception:
+            pass
 
         if not (codes and isinstance(codes, list) and len(codes) == 13):
             return
@@ -1544,6 +1724,7 @@ class StrategyTab(QWidget):
             ws_snapshot=self._ws_snapshot,
             last_hand_hash=self._last_hand_hash,
             hand_hash_fn=self._hand_hash,
+            ws_get_last_hand_context=getattr(self._card_store, "get_last_hand_context", None),
         )
 
         # keep original behavior: if waiting and active -> show status
@@ -1588,6 +1769,9 @@ class StrategyTab(QWidget):
                     if not hasattr(self, "_pending_ws_reset"):
                         self._pending_ws_reset = {}
                     self._pending_ws_reset[pid] = list(codes)
+                    if not hasattr(self, "_pending_ws_reset_context"):
+                        self._pending_ws_reset_context = {}
+                    self._pending_ws_reset_context[pid] = getattr(up, "hand_context", None)
                     try:
                         samehand = getattr(self, "_pending_ws_samehand", None)
                         if isinstance(samehand, dict):
@@ -1599,6 +1783,9 @@ class StrategyTab(QWidget):
                         if not hasattr(self, "_manual_pending_ws_reset"):
                             self._manual_pending_ws_reset = {}
                         self._manual_pending_ws_reset[pid] = list(codes)
+                        if not hasattr(self, "_manual_pending_ws_reset_context"):
+                            self._manual_pending_ws_reset_context = {}
+                        self._manual_pending_ws_reset_context[pid] = getattr(up, "hand_context", None)
                         try:
                             manual_samehand = getattr(self, "_manual_pending_ws_samehand", None)
                             if isinstance(manual_samehand, dict):
@@ -1630,7 +1817,13 @@ class StrategyTab(QWidget):
                 self._invalidate_manual_apply_layout(pid)
                 self._force_reset_pid_state(pid)
                 self._hand_generation[pid] = int(self._hand_generation.get(pid, 0) or 0) + 1
+                self._mark_profile_hand_seen(pid)
+                try:
+                    self._profile_waiting_new_hand_after_room_change[pid] = False
+                except Exception:
+                    pass
                 self._last_hand_hash[pid] = up.hand_hash
+                self._remember_hand_room_context(pid, getattr(up, "hand_context", None))
 
                 self._codes_slot_order[pid] = list(codes)
                 self._layout_codes[pid] = list(codes)
@@ -1843,25 +2036,183 @@ class StrategyTab(QWidget):
 
 
     # =================== NGU derive ===================
-    def _current_room_context_safe(self):
+    def _live_room_context_safe(self):
         try:
             return classify_auto_room_context(self._get_room_engine())
         except Exception:
             log.exception("[Strategy2] classify room context failed")
             return None
 
+    def _current_room_context_safe(self):
+        frozen = self._resolve_current_hand_room_context()
+        if frozen is not None:
+            return frozen
+        return self._live_room_context_safe()
+
+    def _unknown_room_context(self, reason: str, base=None):
+        try:
+            return AutoRoomContext(
+                kind="unknown",
+                roster=tuple(getattr(base, "roster", ()) or ()),
+                controlled_pids=tuple(getattr(base, "controlled_pids", ()) or ()),
+                external_uids=tuple(getattr(base, "external_uids", ()) or ()),
+                reason=str(reason or "room context unknown"),
+                gold_by_pid=dict(getattr(base, "gold_by_pid", {}) or {}),
+            )
+        except Exception:
+            return AutoRoomContext(kind="unknown", reason=str(reason or "room context unknown"))
+
+    def _merge_live_gold_into_context(self, context, live_context):
+        if context is None:
+            return None
+        try:
+            live_gold = dict(getattr(live_context, "gold_by_pid", {}) or {})
+            merged_gold = dict(getattr(context, "gold_by_pid", {}) or {})
+            for pid in tuple(getattr(context, "controlled_pids", ()) or ()):
+                if live_gold.get(pid) is not None:
+                    merged_gold[pid] = live_gold.get(pid)
+            return AutoRoomContext(
+                kind=str(getattr(context, "kind", "") or "unknown"),
+                roster=tuple(getattr(context, "roster", ()) or ()),
+                controlled_pids=tuple(getattr(context, "controlled_pids", ()) or ()),
+                external_uids=tuple(getattr(context, "external_uids", ()) or ()),
+                reason=str(getattr(context, "reason", "") or ""),
+                gold_by_pid=merged_gold,
+            )
+        except Exception:
+            return context
+
+    def _resolve_current_hand_room_context(self):
+        store = getattr(self, "_hand_room_context_by_profile", None)
+        if not isinstance(store, dict):
+            return None
+        if not self._current_3p_hand_cohort_key():
+            return None
+
+        contexts = []
+        for pid in self.profiles:
+            ctx = store.get(pid)
+            if ctx is None:
+                return self._unknown_room_context("missing hand-start room context")
+            contexts.append(ctx)
+
+        allowed_kinds = {"external_opp", "internal_3p", "internal_2p"}
+        keys = [self._auto_room_context_key(ctx) for ctx in contexts]
+        if len(set(keys)) == 1:
+            frozen = contexts[0]
+        else:
+            # Never promote a hand to external_opp after a controlled hand has
+            # already latched as internal. Late viewers/joiners belong to the
+            # next hand, not the current one.
+            internal_contexts = [
+                ctx
+                for ctx in contexts
+                if str(getattr(ctx, "kind", "") or "") in ("internal_3p", "internal_2p")
+            ]
+            internal_keys = {self._auto_room_context_key(ctx) for ctx in internal_contexts}
+            if len(internal_keys) == 1:
+                frozen = internal_contexts[0]
+            else:
+                return self._unknown_room_context("hand-start room contexts disagree", contexts[0])
+        if str(getattr(frozen, "kind", "") or "") not in allowed_kinds:
+            return frozen
+
+        live = self._live_room_context_safe()
+        if live is None:
+            return self._unknown_room_context("live room context unavailable", frozen)
+
+        frozen_controlled = set(map(str, getattr(frozen, "controlled_pids", ()) or ()))
+        live_controlled = set(map(str, getattr(live, "controlled_pids", ()) or ()))
+        if not frozen_controlled.issubset(live_controlled):
+            return self._unknown_room_context("controlled profiles no longer share the latched table", frozen)
+
+        if str(getattr(frozen, "kind", "") or "") == "external_opp":
+            frozen_external = set(map(str, getattr(frozen, "external_uids", ()) or ()))
+            live_external = set(map(str, getattr(live, "external_uids", ()) or ()))
+            if not frozen_external or not frozen_external.issubset(live_external):
+                return self._unknown_room_context("latched OPP is no longer present", frozen)
+
+        return self._merge_live_gold_into_context(frozen, live)
+
+    def _remember_hand_room_context(self, pid: str, context) -> None:
+        store = getattr(self, "_hand_room_context_by_profile", None)
+        if not isinstance(store, dict):
+            self._hand_room_context_by_profile = {p: None for p in self.profiles}
+            store = self._hand_room_context_by_profile
+        if context is None:
+            context = self._live_room_context_safe()
+        store[str(pid)] = context
+
     @staticmethod
     def _room_context_allows_ngu(context) -> bool:
         return str(getattr(context, "kind", "") or "") in ("external_opp", "internal_3p")
 
-    def _has_all_3p_cards(self) -> bool:
+    def _has_all_3p_card_snapshots(self) -> bool:
         try:
             return all(
-                len(list((getattr(self, "_codes_slot_order", {}) or {}).get(pid) or [])) == 13
+                self._is_profile_auto_hand_ready(pid)
                 for pid in self.profiles
             )
         except Exception:
             return False
+
+    def _current_3p_hand_cohort_key(self) -> Optional[str]:
+        if not self._has_all_3p_card_snapshots():
+            return None
+        prefix = "legacy"
+        seen_at = getattr(self, "_hand_seen_at", None)
+        if isinstance(seen_at, dict):
+            stamps = []
+            try:
+                stamps = [float(seen_at.get(pid, 0.0) or 0.0) for pid in self.profiles]
+            except Exception:
+                stamps = []
+            if stamps and all(stamp > 0.0 for stamp in stamps):
+                max_skew = float(getattr(self, "_hand_cohort_max_skew_s", HAND_COHORT_MAX_SKEW_S) or HAND_COHORT_MAX_SKEW_S)
+                if max(stamps) - min(stamps) > max_skew:
+                    return None
+                prefix = f"t{int(min(stamps) * 1000)}"
+        if prefix == "legacy":
+            generations = []
+            gen_map = getattr(self, "_hand_generation", None)
+            if isinstance(gen_map, dict):
+                try:
+                    generations = [int(gen_map.get(pid, 0) or 0) for pid in self.profiles]
+                except Exception:
+                    generations = []
+            if generations and any(g > 0 for g in generations):
+                if any(g <= 0 for g in generations) or len(set(generations)) != 1:
+                    return None
+                prefix = f"g{generations[0]}"
+        try:
+            parts = [
+                f"{pid}:{self._hand_hash(list((self._codes_slot_order or {}).get(pid) or []))}"
+                for pid in self.profiles
+            ]
+        except Exception:
+            return None
+        return prefix + "|" + "|".join(parts)
+
+    def _has_all_3p_cards(self) -> bool:
+        return bool(self._current_3p_hand_cohort_key())
+
+    def _mark_ngu_collecting(self, status: Optional[str] = None) -> None:
+        self._ngu_base_codes = []
+        self._ngu_key = None
+        self._ngu_ready_cohort_key = None
+        try:
+            self._scheduled_hash["NGU"] = None
+        except Exception:
+            pass
+        if status:
+            try:
+                self.view.set_ngu_status(str(status))
+            except Exception:
+                pass
+
+    def _should_clear_ngu_when_jobs_blocked(self) -> bool:
+        context = self._current_room_context_safe()
+        return not self._room_context_allows_ngu(context)
 
     def _should_allow_ngu_work(self, context=None) -> bool:
         if not self._has_all_3p_cards():
@@ -1886,6 +2237,8 @@ class StrategyTab(QWidget):
         self._invalidate_ngu_render_cache()
         self._ngu_base_codes = []
         self._ngu_key = None
+        self._ngu_pending_cohort_key = None
+        self._ngu_ready_cohort_key = None
         self._ngu_suggestions = []
         self._ngu_selected_index = 0
         try:
@@ -1915,28 +2268,36 @@ class StrategyTab(QWidget):
     def _clear_ngu_for_pending_refresh(self) -> None:
         self._invalidate_p_render_cache()
         self._invalidate_ngu_render_cache()
-        self._ngu_base_codes = []
-        self._ngu_key = None
-        self._ngu_suggestions = []
-        self._ngu_selected_index = 0
+        current_cohort = self._current_3p_hand_cohort_key()
+        ready_cohort = getattr(self, "_ngu_ready_cohort_key", None)
+        keep_ready_ngu = bool(
+            self._ngu_key
+            and current_cohort
+            and ready_cohort
+            and current_cohort == ready_cohort
+            and len(list(self._ngu_base_codes or [])) == 13
+        )
+        if not keep_ready_ngu:
+            self._ngu_base_codes = []
+            self._ngu_key = None
+            self._ngu_ready_cohort_key = None
+            try:
+                self._scheduled_hash["NGU"] = None
+            except Exception:
+                pass
         try:
-            self._scheduled_hash["NGU"] = None
-        except Exception:
-            pass
-        try:
-            self.view.set_cards_ngu_normalized([])
-            self.view.set_ngu_labels([], 0)
             self.view.set_ngu_status("Dang gom 3P de suy NGU...")
-            self.view.set_ngu_special_text("", None)
         except Exception:
             pass
 
     def _schedule_ngu_refresh_from_3p(self) -> None:
-        if not self._should_allow_ngu_work():
+        context = self._current_room_context_safe()
+        if not self._room_context_allows_ngu(context):
             self._clear_ngu_for_ineligible_room("Cho du 3P cung phong de suy NGU...")
             return
 
         self._ngu_refresh_pending = True
+        self._ngu_pending_cohort_key = self._current_3p_hand_cohort_key()
         self._clear_ngu_for_pending_refresh()
         timer = getattr(self, "_ngu_refresh_debounce", None)
         if timer is None:
@@ -1950,8 +2311,13 @@ class StrategyTab(QWidget):
 
     def _run_deferred_ngu_refresh_from_3p(self) -> None:
         self._ngu_refresh_pending = False
-        if not self._should_allow_ngu_work():
+        context = self._current_room_context_safe()
+        if not self._room_context_allows_ngu(context):
             self._clear_ngu_for_ineligible_room("Cho du 3P cung phong de suy NGU...")
+            self._schedule_missing_3p_alert()
+            return
+        if not self._has_all_3p_cards():
+            self._mark_ngu_collecting("Dang gom 3P cung van de suy NGU...")
             self._schedule_missing_3p_alert()
             return
         try:
@@ -1968,8 +2334,12 @@ class StrategyTab(QWidget):
         return list(res.codes13)
 
     def _refresh_ngu_from_3p(self, force: bool) -> None:
-        if not self._should_allow_ngu_work():
+        context = self._current_room_context_safe()
+        if not self._room_context_allows_ngu(context):
             self._clear_ngu_for_ineligible_room("Cho du 3P cung phong de suy NGU...")
+            return
+        if not self._has_all_3p_cards():
+            self._mark_ngu_collecting("Dang gom 3P cung van de suy NGU...")
             return
 
         res = self._ngu_deriver.derive(self._codes_slot_order, FULL_DECK)
@@ -1979,6 +2349,9 @@ class StrategyTab(QWidget):
             self._invalidate_p_render_cache()
             self._invalidate_ngu_render_cache()
             self._ngu_base_codes = []
+            self._ngu_key = None
+            self._ngu_pending_cohort_key = None
+            self._ngu_ready_cohort_key = None
             self._ngu_suggestions = []
             self._ngu_selected_index = 0
             self.view.set_ngu_status("Chờ đủ 3P để suy NGU…")
@@ -1992,6 +2365,12 @@ class StrategyTab(QWidget):
             return
 
         # Nếu không force và key giống hệt ván cũ -> không làm gì
+        if self._ngu_key == res.key and list(self._ngu_base_codes or []) == list(res.codes13):
+            self._ngu_ready_cohort_key = self._current_3p_hand_cohort_key()
+            self._ngu_pending_cohort_key = None
+            if (not force) or (self._ngu_suggestions or []):
+                return
+
         if (not force) and self._ngu_key == res.key:
             return
 
@@ -2000,6 +2379,8 @@ class StrategyTab(QWidget):
         self._invalidate_ngu_render_cache()
         self._ngu_key = res.key
         self._ngu_base_codes = list(res.codes13)
+        self._ngu_ready_cohort_key = self._current_3p_hand_cohort_key()
+        self._ngu_pending_cohort_key = None
 
         # QUAN TRỌNG: xóa mọi gợi ý & selection OPP của ván trước
         self._ngu_suggestions = []
@@ -2085,8 +2466,7 @@ class StrategyTab(QWidget):
                 if state == "pending":
                     self._auto_play_reservations[key] = "cancelled"
             for pid in self.profiles:
-                codes = list(self._codes_slot_order.get(pid) or [])
-                if len(codes) == 13:
+                if self._is_profile_auto_hand_ready(pid):
                     self._auto_play_applied_profile_keys.add(self._auto_profile_apply_key(pid))
             self._auto_play_log(
                 f"Thao tác tay nhận quyền ván hiện tại: {','.join(sorted(requested))}."
@@ -2117,7 +2497,7 @@ class StrategyTab(QWidget):
         parts = []
         for pid in self.profiles:
             codes = list(self._codes_slot_order.get(pid) or [])
-            if len(codes) == 13:
+            if self._is_profile_auto_hand_ready(pid):
                 parts.append(f"{pid}:{','.join(sorted(map(str, codes)))}")
         return "|".join(parts) or None
 
@@ -2176,6 +2556,21 @@ class StrategyTab(QWidget):
             except Exception:
                 pass
 
+    def _auto_log_wait_reason(self, reason: str) -> None:
+        if not bool(getattr(self, "_auto_play_enabled", False)):
+            return
+        reason = str(reason or "")
+        if not reason:
+            return
+        now = time.monotonic()
+        last_reason = getattr(self, "_auto_wait_last_reason", None)
+        last_at = float(getattr(self, "_auto_wait_last_at", 0.0) or 0.0)
+        if reason == last_reason and now - last_at < 3.0:
+            return
+        self._auto_wait_last_reason = reason
+        self._auto_wait_last_at = now
+        self._auto_play_log(f"[WAIT] {reason}")
+
     def _sync_auto_play_sink_state(self) -> None:
         sink = getattr(self, "_auto_play_log_sink", None)
         if sink is not None and hasattr(sink, "set_auto_state"):
@@ -2188,7 +2583,7 @@ class StrategyTab(QWidget):
         cards_ready = {
             pid
             for pid in self.profiles
-            if len(list(self._codes_slot_order.get(pid) or [])) == 13
+            if self._is_profile_auto_hand_ready(pid)
         }
         if len(cards_ready) == len(self.profiles):
             pending = [
@@ -2197,8 +2592,13 @@ class StrategyTab(QWidget):
                 if self._auto_profile_apply_key(pid) not in self._auto_play_applied_profile_keys
             ]
             if not pending:
+                self._auto_log_wait_reason("tat ca P ready da duoc xep cho van hien tai.")
                 return None
-            if any(not (self._suggestions.get(pid) or []) for pid in pending):
+            missing_suggestions = [pid for pid in pending if not (self._suggestions.get(pid) or [])]
+            if missing_suggestions:
+                self._auto_log_wait_reason(
+                    f"cho goi y P: {','.join(missing_suggestions)}"
+                )
                 return None
 
         parts = []
@@ -2207,18 +2607,50 @@ class StrategyTab(QWidget):
             codes = list(self._codes_slot_order.get(pid) or [])
             pkey = self._auto_profile_apply_key(pid)
             if (
-                len(codes) == 13
-                and (self._suggestions.get(pid) or [])
+                self._is_profile_auto_hand_ready(pid, require_suggestions=True)
                 and pkey not in self._auto_play_applied_profile_keys
             ):
                 ready_count += 1
                 parts.append(pkey)
         if ready_count <= 0:
+            waiting = getattr(self, "_profile_waiting_new_hand_after_room_change", {}) or {}
+            waiting_pids = [pid for pid in self.profiles if bool(waiting.get(pid))]
+            card_lens = {
+                pid: len(list((self._codes_slot_order or {}).get(pid) or []))
+                for pid in self.profiles
+            }
+            self._auto_log_wait_reason(
+                f"chua co P san sang | waiting={waiting_pids} card_lens={card_lens}"
+            )
             return None
 
         context = self._current_room_context_safe()
         if self._room_context_allows_ngu(context):
-            context_part = f"NGU:{self._ngu_key or '-'}"
+            ngu_pending = self._is_ngu_refresh_pending()
+            ngu_len = len(list(self._ngu_base_codes or []))
+            has_3p = self._has_all_3p_cards()
+            if (
+                ngu_pending
+                or not self._ngu_key
+                or ngu_len != 13
+                or not has_3p
+            ):
+                seen_at = getattr(self, "_hand_seen_at", {}) or {}
+                stamps = []
+                if isinstance(seen_at, dict):
+                    try:
+                        stamps = [float(seen_at.get(pid, 0.0) or 0.0) for pid in self.profiles]
+                    except Exception:
+                        stamps = []
+                skew = round(max(stamps) - min(stamps), 3) if stamps and all(s > 0 for s in stamps) else None
+                self._auto_log_wait_reason(
+                    "cho NGU/OPP | "
+                    f"pending={ngu_pending} ngu_key={bool(self._ngu_key)} "
+                    f"ngu_len={ngu_len} has3p={has_3p} skew={skew} "
+                    f"gens={dict(getattr(self, '_hand_generation', {}) or {})}"
+                )
+                return None
+            context_part = f"NGU:{self._ngu_key}"
         else:
             context_part = f"ROOM:{str(getattr(context, 'kind', 'unknown') or 'unknown')}"
         return f"{context_part}|" + "|".join(parts)
@@ -2244,7 +2676,7 @@ class StrategyTab(QWidget):
         cards_pids = [
             pid
             for pid in self.profiles
-            if len(list(self._codes_slot_order.get(pid) or [])) == 13
+            if self._is_profile_auto_hand_ready(pid)
         ]
         if not cards_pids:
             return True
@@ -2258,7 +2690,7 @@ class StrategyTab(QWidget):
         return "|".join(
             self._auto_profile_apply_key(pid)
             for pid in self.profiles
-            if len(list(self._codes_slot_order.get(pid) or [])) == 13
+            if self._is_profile_auto_hand_ready(pid)
         )
 
     def _auto_reset_internal_cycle(self) -> None:
@@ -2400,7 +2832,7 @@ class StrategyTab(QWidget):
         for profile_id in affected:
             if profile_id not in self.profiles:
                 continue
-            if len(list((self._codes_slot_order or {}).get(profile_id) or [])) != 13:
+            if not self._is_profile_auto_hand_ready(profile_id):
                 continue
             profile_key = self._auto_profile_apply_key(profile_id)
             state = (self._auto_play_reservations or {}).get(profile_key)
@@ -2586,9 +3018,8 @@ class StrategyTab(QWidget):
         if not hand_key or hand_key != str(self._current_auto_play_hand_key() or ""):
             return
 
-        try:
-            room_context = classify_auto_room_context(self._get_room_engine())
-        except Exception:
+        room_context = self._current_room_context_safe()
+        if room_context is None:
             return
         if self._auto_room_context_key(room_context) != str(getattr(result, "room_context_key", "") or ""):
             return
@@ -2744,10 +3175,7 @@ class StrategyTab(QWidget):
             return
 
         if self._is_ngu_refresh_pending():
-            try:
-                pending_context = classify_auto_room_context(self._get_room_engine())
-            except Exception:
-                pending_context = None
+            pending_context = self._current_room_context_safe()
             if getattr(pending_context, "kind", None) == "external_opp":
                 session = self._auto_play_session
                 QTimer.singleShot(250, lambda s=session: self._maybe_run_auto_play(s))
@@ -2767,7 +3195,9 @@ class StrategyTab(QWidget):
             return
         try:
             has_auto_opp = any(s.get("_auto_opp_money") for s in self._ngu_suggestions)
-            room_context = classify_auto_room_context(self._get_room_engine())
+            room_context = self._current_room_context_safe()
+            if room_context is None:
+                return
             allow_opp_plan = room_context.kind == "external_opp"
             allow_intentional_foul = (
                 allow_opp_plan
@@ -3140,7 +3570,7 @@ class StrategyTab(QWidget):
         for pid in self.profiles:
             sug = dict((suggestions_by_pid or {}).get(pid) or {})
             ws_codes = list(self._codes_slot_order.get(pid) or [])
-            if len(ws_codes) != 13 or not sug:
+            if not self._is_profile_auto_hand_ready(pid) or not sug:
                 continue
 
             delay_ms = self._auto_random_delay_ms()
@@ -3162,6 +3592,23 @@ class StrategyTab(QWidget):
                     if auto_session != self._auto_play_session:
                         self._auto_play_log(f"{profile_id}: bỏ xếp vì phiên Auto đã đổi.")
                         return
+                    if not self._is_profile_auto_hand_ready(profile_id):
+                        self._auto_play_log(f"{profile_id}: bo xep vi dang cho bai moi.")
+                        self._auto_release_pending_group(expected_group_keys)
+                        return
+                    if self._auto_profile_apply_key(profile_id) != expected_key:
+                        self._auto_play_log(f"{profile_id}: bo xep vi bai/van da doi.")
+                        self._auto_release_pending_group(expected_group_keys)
+                        return
+                    if room_context_key:
+                        current_context = self._current_room_context_safe()
+                        if (
+                            current_context is None
+                            or self._auto_room_context_key(current_context) != str(room_context_key)
+                        ):
+                            self._auto_play_log(f"{profile_id}: bo xep vi boi canh ban da doi.")
+                            self._auto_release_pending_group(expected_group_keys)
+                            return
                     self._auto_play_reservations[expected_key] = "applied"
                     if callable(on_apply_started):
                         on_apply_started(profile_id)

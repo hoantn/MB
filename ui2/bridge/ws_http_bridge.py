@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import queue
 import threading
+import time
+from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Optional
 from core.config import load_config
@@ -57,6 +59,98 @@ class _WSBridgeHandler(BaseHTTPRequestHandler):
     _ev_q: "queue.Queue[Dict[str, Any]]" = WS_EVENT_QUEUE
     _cmd_q: "queue.Queue[Dict[str, Any]]" = WS_COMMAND_QUEUE
     _slot: int = 1
+    _stats_lock = threading.Lock()
+    _stats_window_start = time.monotonic()
+    _stats_received = 0
+    _stats_by_kind: "Counter[str]" = Counter()
+    _cmd_stats_lock = threading.Lock()
+    _cmd_stats_window_start = time.monotonic()
+    _cmd_stats_polls = 0
+    _cmd_stats_by_profile: "Counter[str]" = Counter()
+    _cmd_stats_by_status: "Counter[str]" = Counter()
+    _cmd_stats_by_action: "Counter[str]" = Counter()
+
+    def _record_event_post_stats(self, data: Dict[str, Any]) -> None:
+        if logger is None:
+            return
+        try:
+            cls = self.__class__
+            now = time.monotonic()
+            kind = str((data or {}).get("kind") or "?")
+            with cls._stats_lock:
+                cls._stats_received += 1
+                cls._stats_by_kind[kind] += 1
+                elapsed = now - float(cls._stats_window_start or now)
+                if elapsed < 60.0:
+                    return
+                try:
+                    qsize = int(cls._ev_q.qsize())
+                except Exception:
+                    qsize = -1
+                received = int(cls._stats_received)
+                by_kind = dict(cls._stats_by_kind)
+                cls._stats_window_start = now
+                cls._stats_received = 0
+                cls._stats_by_kind = Counter()
+            logger.info(
+                "[WS-BRIDGE-STATS] slot=%s window=%.1fs events=%d qsize=%s by_kind=%s",
+                getattr(cls, "_slot", "?"),
+                elapsed,
+                received,
+                qsize,
+                by_kind,
+            )
+        except Exception:
+            return
+
+    def _record_command_pop_stats(
+        self,
+        profile_id: Optional[str],
+        status: int,
+        selected: Optional[Dict[str, Any]],
+    ) -> None:
+        if logger is None:
+            return
+        try:
+            cls = self.__class__
+            now = time.monotonic()
+            pid = str(profile_id or "?")
+            status_key = str(status)
+            action = str((selected or {}).get("action") or "-")
+            with cls._cmd_stats_lock:
+                cls._cmd_stats_polls += 1
+                cls._cmd_stats_by_profile[pid] += 1
+                cls._cmd_stats_by_status[status_key] += 1
+                if selected:
+                    cls._cmd_stats_by_action[action] += 1
+                elapsed = now - float(cls._cmd_stats_window_start or now)
+                if elapsed < 60.0:
+                    return
+                try:
+                    qsize = int(cls._cmd_q.qsize())
+                except Exception:
+                    qsize = -1
+                polls = int(cls._cmd_stats_polls)
+                by_profile = dict(cls._cmd_stats_by_profile)
+                by_status = dict(cls._cmd_stats_by_status)
+                by_action = dict(cls._cmd_stats_by_action)
+                cls._cmd_stats_window_start = now
+                cls._cmd_stats_polls = 0
+                cls._cmd_stats_by_profile = Counter()
+                cls._cmd_stats_by_status = Counter()
+                cls._cmd_stats_by_action = Counter()
+            logger.info(
+                "[WS-COMMAND-STATS] slot=%s window=%.1fs polls=%d qsize=%s by_profile=%s by_status=%s by_action=%s",
+                getattr(cls, "_slot", "?"),
+                elapsed,
+                polls,
+                qsize,
+                by_profile,
+                by_status,
+                by_action,
+            )
+        except Exception:
+            return
 
     # ------------------------------------------------------------------
     # Extension -> Python: gửi event
@@ -79,6 +173,7 @@ class _WSBridgeHandler(BaseHTTPRequestHandler):
 
         try:
             self.__class__._ev_q.put_nowait(data)
+            self._record_event_post_stats(data)
         except queue.Full:
             if logger:
                 logger.warning("WS bridge event queue full, bỏ event: %s", data)
@@ -128,6 +223,7 @@ class _WSBridgeHandler(BaseHTTPRequestHandler):
                 break
 
         if not selected:
+            self._record_command_pop_stats(profile_id, 204, None)
             self.send_response(204)
             self.end_headers()
             return
@@ -140,6 +236,7 @@ class _WSBridgeHandler(BaseHTTPRequestHandler):
             )
 
         body = json.dumps(selected).encode("utf-8")
+        self._record_command_pop_stats(profile_id, 200, selected)
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -242,6 +339,16 @@ def start_ws_http_bridge(
         _ev_q = _ev
         _cmd_q = _cmd
         _slot = slot
+        _stats_lock = threading.Lock()
+        _stats_window_start = time.monotonic()
+        _stats_received = 0
+        _stats_by_kind: "Counter[str]" = Counter()
+        _cmd_stats_lock = threading.Lock()
+        _cmd_stats_window_start = time.monotonic()
+        _cmd_stats_polls = 0
+        _cmd_stats_by_profile: "Counter[str]" = Counter()
+        _cmd_stats_by_status: "Counter[str]" = Counter()
+        _cmd_stats_by_action: "Counter[str]" = Counter()
 
     server = ThreadingHTTPServer((host, port), _BoundHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)

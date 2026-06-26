@@ -12,6 +12,7 @@ from .logger import log
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 _CONFIG_WRITE_LOCKS: Dict[str, threading.RLock] = {}
 _CONFIG_WRITE_LOCKS_GUARD = threading.Lock()
+DEFAULT_STRATEGY2_ENGINE_MODE = "fast"
 
 # NEW: folder chứa tọa độ theo game
 GAMES_DIR = os.path.join(CONFIG_DIR, "games")
@@ -101,7 +102,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
             "verify_min_confidence": 0.70
         },
         "strategy2": {
-            "suggest_engine_mode": "stable"
+            "suggest_engine_mode": DEFAULT_STRATEGY2_ENGINE_MODE
         },
         "active_game": "hit",
     },
@@ -166,6 +167,24 @@ def _config_path(slot: int) -> str:
     return os.path.join(CONFIG_DIR, f"config-tool{slot}.json")
 
 
+def _ensure_strategy2_engine_mode(config: Dict[str, Any]) -> bool:
+    """Backfill Strategy2 engine mode without overwriting user config."""
+    if not isinstance(config, dict):
+        return False
+    ui = config.get("ui")
+    if not isinstance(ui, dict):
+        ui = {}
+        config["ui"] = ui
+    strategy2 = ui.get("strategy2")
+    if not isinstance(strategy2, dict):
+        strategy2 = {}
+        ui["strategy2"] = strategy2
+    if "suggest_engine_mode" in strategy2:
+        return False
+    strategy2["suggest_engine_mode"] = DEFAULT_STRATEGY2_ENGINE_MODE
+    return True
+
+
 def load_config(slot: int = 1) -> Dict[str, Any]:
     path = _config_path(slot)
     if not os.path.exists(path):
@@ -173,16 +192,21 @@ def load_config(slot: int = 1) -> Dict[str, Any]:
         if slot > 1:
             # Ghi tool_index vào config mới tạo cho slot 2+
             default.setdefault("ui", {})["tool_index"] = slot
+        _ensure_strategy2_engine_mode(default)
         save_config(default, slot)
         return default
     try:
         # utf-8-sig tự động strip BOM nếu có, đọc được cả file có/không BOM
         with open(path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
+        if _ensure_strategy2_engine_mode(data):
+            save_config(data, slot)
         return data
     except Exception as e:
         log.error(f"Failed to load config slot={slot}: {e}")
-        return copy.deepcopy(DEFAULT_CONFIG)
+        default = copy.deepcopy(DEFAULT_CONFIG)
+        _ensure_strategy2_engine_mode(default)
+        return default
 
 
 def _atomic_write_json(path: str, data: Dict[str, Any]) -> None:

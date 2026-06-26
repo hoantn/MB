@@ -5,6 +5,7 @@ from ui2.tabs.strategy2.modules.auto_plan_worker import (
     run_auto_opp_plan_snapshot,
 )
 from ui2.tabs.strategy2.modules.auto_play_controller import PROFILES, build_auto_play_plan
+from ui2.tabs.strategy2.modules.auto_play_controller import build_money_fallback_plan
 
 
 def _sug(c1, c2, c3, *, auto=False):
@@ -128,6 +129,21 @@ class AutoPlanWorkerTests(unittest.TestCase):
         self.assertNotIn("P1", result.plan.suggestions)
         self.assertIn("P2", result.plan.suggestions)
         self.assertIn("P3", result.plan.suggestions)
+
+    def test_money_fallback_uses_worker_money_rows_before_render(self):
+        tab = _SyncTab()
+        for pid in PROFILES:
+            tab._suggestions[pid][0].pop("_auto_profile_money", None)
+            tab._suggestions[pid][0]["_auto_engine_money"] = True
+            tab._suggestions_render[pid] = []
+
+        plan = build_money_fallback_plan(tab)
+
+        self.assertIsNotNone(plan)
+        self.assertEqual(plan.kind, "money_fallback")
+        self.assertEqual(set(plan.suggestions), set(PROFILES))
+        for pid in PROFILES:
+            self.assertTrue(plan.suggestions[pid].get("_auto_engine_money"))
 
 
 if __name__ == "__main__":

@@ -103,7 +103,7 @@ def _allow_ngu_room(tab, kind="external_opp"):
 
 
 class NguRefreshDebounceTests(unittest.TestCase):
-    def test_schedule_ngu_refresh_clears_opp_state_and_restarts_timer(self):
+    def test_schedule_ngu_refresh_preserves_visible_opp_while_pending(self):
         tab = StrategyTab.__new__(StrategyTab)
         tab.profiles = ["P1", "P2", "P3"]
         tab._p_render_core_sig = {pid: "valid" for pid in tab.profiles}
@@ -128,11 +128,12 @@ class NguRefreshDebounceTests(unittest.TestCase):
         self.assertEqual(tab._ngu_refresh_debounce.starts, 1)
         self.assertEqual(tab._ngu_base_codes, [])
         self.assertIsNone(tab._ngu_key)
-        self.assertEqual(tab._ngu_suggestions, [])
+        self.assertEqual(tab._ngu_suggestions, [{"mode": "old"}])
+        self.assertEqual(tab._ngu_selected_index, 1)
         self.assertEqual(tab._scheduled_hash["NGU"], None)
         self.assertEqual(set(tab._p_render_core_sig.values()), {None})
-        self.assertIn(("cards_ngu", []), tab.view.calls)
-        self.assertIn(("ngu_labels", [], 0), tab.view.calls)
+        self.assertNotIn(("cards_ngu", []), tab.view.calls)
+        self.assertNotIn(("ngu_labels", [], 0), tab.view.calls)
 
     def test_schedule_ngu_refresh_clears_without_start_when_room_not_eligible(self):
         tab = StrategyTab.__new__(StrategyTab)
@@ -202,9 +203,14 @@ class NguRefreshDebounceTests(unittest.TestCase):
         tab._auto_play_applied_profile_keys = set()
         tab._hand_generation = {pid: 1 for pid in tab.profiles}
         tab._ngu_key = "ngu-key"
+        tab._ngu_base_codes = _cards("N")
 
         tab._current_room_context_safe = lambda: SimpleNamespace(kind="external_opp")
         self.assertTrue(StrategyTab._current_auto_play_hand_key(tab).startswith("NGU:ngu-key|"))
+
+        tab._ngu_key = None
+        tab._ngu_base_codes = []
+        self.assertIsNone(StrategyTab._current_auto_play_hand_key(tab))
 
         tab._current_room_context_safe = lambda: SimpleNamespace(kind="internal_2p")
         self.assertTrue(StrategyTab._current_auto_play_hand_key(tab).startswith("ROOM:internal_2p|"))
@@ -220,9 +226,25 @@ class NguRefreshDebounceTests(unittest.TestCase):
 
         scheduler.enqueue_batch_jobs(tab)
 
-        self.assertEqual(tab._ngu_base_codes, [])
-        self.assertIsNone(tab._ngu_key)
+        self.assertEqual(tab._ngu_base_codes, _cards("N"))
+        self.assertEqual(tab._ngu_key, "old")
         self.assertEqual([job[0] for job in scheduler.job_q], ["P1"])
+
+    def test_ngu_uses_recent_hand_cohort_instead_of_equal_generation(self):
+        tab = StrategyTab.__new__(StrategyTab)
+        tab.profiles = ["P1", "P2", "P3"]
+        tab._codes_slot_order = {pid: _cards(pid) for pid in tab.profiles}
+        tab._hand_generation = {"P1": 8, "P2": 2, "P3": 5}
+        tab._hand_seen_at = {"P1": 100.0, "P2": 105.0, "P3": 108.0}
+        tab._current_room_context_safe = lambda: SimpleNamespace(kind="external_opp")
+
+        self.assertTrue(StrategyTab._has_all_3p_cards(tab))
+        self.assertTrue(StrategyTab._should_allow_ngu_work(tab))
+
+        tab._hand_seen_at = {"P1": 100.0, "P2": 105.0, "P3": 160.5}
+
+        self.assertFalse(StrategyTab._has_all_3p_cards(tab))
+        self.assertFalse(StrategyTab._should_allow_ngu_work(tab))
 
     def test_scheduler_skips_ngu_when_room_gate_blocks_it(self):
         tab = _SchedulerTab()

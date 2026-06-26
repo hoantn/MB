@@ -8,6 +8,81 @@
 
   const sockets = new Set();
 
+  const WS_STATS_INTERVAL_MS = 60000;
+  let wsStats = createWsStats();
+
+  function createWsStats() {
+    return {
+      framesTotal: 0,
+      framesSend: 0,
+      framesRecv: 0,
+      forwardedTotal: 0,
+      forwardedSend: 0,
+      forwardedRecv: 0,
+      parseErrors: 0,
+      forwardErrors: 0,
+      cmdCounts: {},
+    };
+  }
+
+  function bumpWsStatMap(map, key) {
+    try {
+      const k = String(key);
+      map[k] = (map[k] || 0) + 1;
+    } catch (e) {}
+  }
+
+  function extractCmdForStats(payload) {
+    try {
+      if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+        return payload.cmd ?? payload.CMD ?? null;
+      }
+      if (Array.isArray(payload)) {
+        for (let i = payload.length - 1; i >= 0; i -= 1) {
+          const item = payload[i];
+          if (item && typeof item === "object" && !Array.isArray(item)) {
+            return item.cmd ?? item.CMD ?? null;
+          }
+        }
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function recordWsFrame(direction, payload) {
+    wsStats.framesTotal += 1;
+    if (direction === "send") wsStats.framesSend += 1;
+    else if (direction === "recv") wsStats.framesRecv += 1;
+    const cmd = extractCmdForStats(payload);
+    if (cmd !== null && cmd !== undefined) bumpWsStatMap(wsStats.cmdCounts, cmd);
+  }
+
+  function recordWsForward(direction) {
+    wsStats.forwardedTotal += 1;
+    if (direction === "send") wsStats.forwardedSend += 1;
+    else if (direction === "recv") wsStats.forwardedRecv += 1;
+  }
+
+  function flushWsStats() {
+    try {
+      const stats = Object.assign({}, wsStats, {
+        cmdCounts: Object.assign({}, wsStats.cmdCounts),
+      });
+      window.postMessage(
+        {
+          source: "mb-ws-hook-stats",
+          reported_at_ms: Date.now(),
+          open_sockets: sockets.size,
+          stats,
+        },
+        "*"
+      );
+    } catch (e) {}
+    wsStats = createWsStats();
+  }
+
+  setInterval(flushWsStats, WS_STATS_INTERVAL_MS);
+
   function log() {
     try {
       console.log.apply(console, ["[MB WS INJECT]", ...arguments]);
@@ -15,14 +90,17 @@
   }
 
   function postFrameToContentScript(direction, ws, data) {
+    let payload = data;
     try {
-      let payload = data;
       try {
-        payload = JSON.parse(data);
+        if (typeof data === "string") {
+          payload = JSON.parse(data);
+        }
       } catch (e) {
-        // không phải JSON, giữ nguyên string
+        wsStats.parseErrors += 1;
       }
 
+      recordWsFrame(direction, payload);
       window.postMessage(
         {
           source: "mb-ws-hook",
@@ -32,8 +110,9 @@
         },
         "*"
       );
+      recordWsForward(direction);
     } catch (e) {
-      // ignore
+      wsStats.forwardErrors += 1;
     }
   }
 

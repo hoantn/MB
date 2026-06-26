@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Callable, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Callable, Tuple
 
 from core.logger import log
 from engine.ws_card_mapping import cards_to_tool_slot_order
@@ -13,6 +13,7 @@ class WSUpdate:
     codes_slot_order: List[str]  # slot 1..13 theo mapper WS chung
     hand_hash: str
     is_new_hand: bool
+    hand_context: Any = None
 
 
 class WSIngest:
@@ -37,6 +38,7 @@ class WSIngest:
         ws_snapshot: Dict[str, Optional[List[str]]],
         last_hand_hash: Dict[str, Optional[str]],
         hand_hash_fn: Callable[[List[str]], str],
+        ws_get_last_hand_context: Optional[Callable[[str], Any]] = None,
     ) -> Tuple[List[WSUpdate], List[str]]:
         """
         Returns:
@@ -63,6 +65,12 @@ class WSIngest:
 
             h = hand_hash_fn(codes)
             prev_h = last_hand_hash.get(pid)
+            hand_context = None
+            if callable(ws_get_last_hand_context):
+                try:
+                    hand_context = ws_get_last_hand_context(pid)
+                except Exception:
+                    hand_context = None
 
             log.debug(
                 "[WSIngest] pid=%s cards=%d prev_hash=%s new_hash=%s is_new_hand=%s first3=%s",
@@ -82,6 +90,7 @@ class WSIngest:
                         codes_slot_order=codes,
                         hand_hash=h,
                         is_new_hand=False,
+                        hand_context=hand_context,
                     )
                 )
                 continue
@@ -93,6 +102,7 @@ class WSIngest:
                     codes_slot_order=codes,
                     hand_hash=h,
                     is_new_hand=True,
+                    hand_context=hand_context,
                 )
             )
 

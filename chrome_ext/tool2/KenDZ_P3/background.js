@@ -1,7 +1,7 @@
-﻿const LOG_PREFIX = "[MB WS BG]";
+const LOG_PREFIX = "[MB WS BG]";
 const BRIDGE_BASE = "http://127.0.0.1:9528";
 const PROFILE_ID = "P3";  // extension nÃƒÂ y gÃ¡ÂºÂ¯n vÃ¡Â»â€ºi profile P3
-const EXTENSION_VERSION = "0.2.0";
+const EXTENSION_VERSION = "0.2.1";
 
 // ===== CPU SAFETY SWITCHES =====
 // TÃ¡ÂºÂ¯t log toÃƒÂ n bÃ¡Â»â„¢ frame Ã„â€˜Ã¡Â»Æ’ trÃƒÂ¡nh ngÃ¡Â»â€˜n CPU. BÃ¡ÂºÂ­t khi cÃ¡ÂºÂ§n debug.
@@ -11,6 +11,101 @@ const DEBUG_IMPORTANT_CMDS = false;
 
 // LÃ†Â°u vÃƒÂ i frame gÃ¡ÂºÂ§n nhÃ¡ÂºÂ¥t Ã„â€˜Ã¡Â»Æ’ debug (giÃ¡Â»Â¯ lÃ¡ÂºÂ¡i, nhÃ†Â°ng khÃƒÂ´ng log liÃƒÂªn tÃ¡Â»Â¥c)
 const lastFrames = [];
+
+const WS_STATS_INTERVAL_MS = 60000;
+let bgStats = createBgStats();
+let latestHookStats = null;
+let latestContentStats = null;
+let pendingStatsFlushTimer = null;
+let lastBackgroundStatsFlushAt = Date.now();
+
+function createBgStats() {
+  return {
+    framesFromContent: 0,
+    framesSend: 0,
+    framesRecv: 0,
+    hookStatsFromContent: 0,
+    contentStatsFromContent: 0,
+    parseErrors: 0,
+    pythonEvents: 0,
+    pythonEventsOk: 0,
+    pythonEventsFail: 0,
+    commandPolls: 0,
+    commandErrors: 0,
+    frameCmdCounts: {},
+    pythonEventsByKind: {},
+    pythonStatus: {},
+    commandStatus: {},
+  };
+}
+
+function bumpMap(map, key) {
+  try {
+    const k = String(key);
+    map[k] = (map[k] || 0) + 1;
+  } catch (e) {}
+}
+
+function cloneMap(map) {
+  return Object.assign({}, map || {});
+}
+
+function snapshotBgStats() {
+  return {
+    framesFromContent: bgStats.framesFromContent,
+    framesSend: bgStats.framesSend,
+    framesRecv: bgStats.framesRecv,
+    hookStatsFromContent: bgStats.hookStatsFromContent,
+    contentStatsFromContent: bgStats.contentStatsFromContent,
+    parseErrors: bgStats.parseErrors,
+    pythonEvents: bgStats.pythonEvents,
+    pythonEventsOk: bgStats.pythonEventsOk,
+    pythonEventsFail: bgStats.pythonEventsFail,
+    commandPolls: bgStats.commandPolls,
+    commandErrors: bgStats.commandErrors,
+    frameCmdCounts: cloneMap(bgStats.frameCmdCounts),
+    pythonEventsByKind: cloneMap(bgStats.pythonEventsByKind),
+    pythonStatus: cloneMap(bgStats.pythonStatus),
+    commandStatus: cloneMap(bgStats.commandStatus),
+    latestHookStats,
+    latestContentStats,
+  };
+}
+
+function flushBackgroundStats(reason = "timer") {
+  const reportedAt = Date.now();
+  lastBackgroundStatsFlushAt = reportedAt;
+  const stats = snapshotBgStats();
+  bgStats = createBgStats();
+  sendEventToPython({
+    kind: "extension_stats",
+    reported_at_ms: reportedAt,
+    reason,
+    stats,
+  });
+}
+
+function scheduleBackgroundStatsFlush(reason = "scheduled") {
+  try {
+    if (pendingStatsFlushTimer) return;
+    pendingStatsFlushTimer = setTimeout(() => {
+      pendingStatsFlushTimer = null;
+      flushBackgroundStats(reason);
+    }, 500);
+  } catch (e) {
+    flushBackgroundStats(reason);
+  }
+}
+
+function maybeFlushBackgroundStats(reason = "poll_loop") {
+  try {
+    if (Date.now() - lastBackgroundStatsFlushAt >= WS_STATS_INTERVAL_MS) {
+      flushBackgroundStats(reason);
+    }
+  } catch (e) {}
+}
+
+setInterval(flushBackgroundStats, WS_STATS_INTERVAL_MS);
 
 function pushFrame(frame) {
   try {
@@ -69,19 +164,25 @@ function tryExtractTaiXiuFrame(url, data) {
 // ===================== GÃ¡Â»Â¬I EVENT VÃ¡Â»â‚¬ PYTHON =====================
 
 async function sendEventToPython(event) {
+  const kind = String((event && event.kind) || "unknown");
+  bgStats.pythonEvents += 1;
+  bumpMap(bgStats.pythonEventsByKind, kind);
   try {
     const body = JSON.stringify({
       profile_id: PROFILE_ID,
       ...event,
     });
-    await fetch(BRIDGE_BASE + "/mb-ws-event", {
+    const resp = await fetch(BRIDGE_BASE + "/mb-ws-event", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body,
       keepalive: true,
     });
+    bgStats.pythonEventsOk += 1;
+    bumpMap(bgStats.pythonStatus, resp.status);
   } catch (e) {
-    // HTTP bridge chÃ†Â°a chÃ¡ÂºÂ¡y thÃƒÂ¬ thÃƒÂ´i
+    bgStats.pythonEventsFail += 1;
+    // HTTP bridge chua chay thi thoi
   }
 }
 
@@ -92,9 +193,37 @@ const activeTaiXiuWsUrls = new Set();
 // ===================== NHÃ¡ÂºÂ¬N FRAME TÃ¡Â»Âª CONTENT SCRIPT =====================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!message || message.type !== "MB_WS_FRAME") return;
+  if (!message) return;
+
+  if (message.type === "MB_WS_HOOK_STATS") {
+    bgStats.hookStatsFromContent += 1;
+    latestHookStats = {
+      reported_at_ms: message.reported_at_ms || Date.now(),
+      open_sockets: message.open_sockets,
+      stats: message.stats || {},
+    };
+    scheduleBackgroundStatsFlush("hook_stats");
+    if (sendResponse) sendResponse({ ok: true });
+    return true;
+  }
+
+  if (message.type === "MB_WS_CONTENT_STATS") {
+    bgStats.contentStatsFromContent += 1;
+    latestContentStats = {
+      reported_at_ms: message.reported_at_ms || Date.now(),
+      stats: message.stats || {},
+    };
+    scheduleBackgroundStatsFlush("content_stats");
+    if (sendResponse) sendResponse({ ok: true });
+    return true;
+  }
+
+  if (message.type !== "MB_WS_FRAME") return;
 
   const { direction, url, data } = message;
+  bgStats.framesFromContent += 1;
+  if (direction === "send") bgStats.framesSend += 1;
+  else if (direction === "recv") bgStats.framesRecv += 1;
   const frame = { direction, url, data };
   pushFrame(frame);
   // ===== TÃƒâ‚¬I/XÃ¡Â»Ë†U: forward raw WS vÃ¡Â»Â Python =====
@@ -150,7 +279,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           payload: { cmd: 606, cs: cards },
         });
       }
-    } catch (e) {}
+    } catch (e) {
+      bgStats.parseErrors += 1;
+    }
   }
 
   // ChÃ¡Â»â€° parse khi lÃƒÂ  frame RECV Ã„â€˜Ã¡Â»Æ’ tÃƒÂ¬m cmd=300/200/202/606/205
@@ -177,6 +308,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       if (payload && typeof payload === "object") {
         const cmd = payload.cmd;
+        if (cmd !== undefined && cmd !== null) bumpMap(bgStats.frameCmdCounts, cmd);
 
         // ThÃ¡ÂºÂ¥y cmd=300 hoÃ¡ÂºÂ·c cmd=202 Ã¢â€ â€™ gÃƒÂ¡n URL nÃƒÂ y lÃƒÂ m "game socket"
         if (cmd === 300 || cmd === 202) {
@@ -236,6 +368,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
       }
     } catch (e) {
+      bgStats.parseErrors += 1;
       if (DEBUG_ALL_FRAMES || DEBUG_IMPORTANT_CMDS) log("parse error", e);
     }
   }
@@ -275,12 +408,15 @@ function buildWsPayload(cmd) {
 
 async function pollCommandsLoop() {
   try {
+    bgStats.commandPolls += 1;
     const body = JSON.stringify({ profile_id: PROFILE_ID });
     const resp = await fetch(BRIDGE_BASE + "/mb-ws-command-pop", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body,
     });
+
+    bumpMap(bgStats.commandStatus, resp.status);
 
     if (resp.status === 200) {
       const cmd = await resp.json();
@@ -316,13 +452,16 @@ async function pollCommandsLoop() {
       });
     }
   } catch (e) {
+    bgStats.commandErrors += 1;
     // bridge chÃ†Â°a chÃ¡ÂºÂ¡y / lÃ¡Â»â€”i mÃ¡ÂºÂ¡ng
   } finally {
+    maybeFlushBackgroundStats("poll_loop");
     setTimeout(pollCommandsLoop, 150);
   }
 }
 
 sendEventToPython({ kind: "extension_ready", version: EXTENSION_VERSION });
+flushBackgroundStats("startup");
 pollCommandsLoop();
 log("service worker started");
 

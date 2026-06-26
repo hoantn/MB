@@ -73,6 +73,57 @@ class ConfigAtomicSaveTests(unittest.TestCase):
             self.assertIn("idx", data)
             self.assertFalse(list(Path(tmpdir).glob(".config.json.*.tmp")))
 
+    def test_load_config_backfills_fast_engine_when_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_dir = str(Path(tmpdir))
+            cfg_file = str(Path(tmpdir) / "config.json")
+            Path(cfg_file).write_text(json.dumps({"ui": {"tool_index": 1}}), encoding="utf-8")
+
+            with mock.patch.object(config_mod, "CONFIG_DIR", cfg_dir), mock.patch.object(
+                config_mod, "CONFIG_FILE", cfg_file
+            ):
+                cfg = config_mod.load_config(1)
+
+            self.assertEqual(
+                cfg["ui"]["strategy2"]["suggest_engine_mode"],
+                config_mod.DEFAULT_STRATEGY2_ENGINE_MODE,
+            )
+            saved = json.loads(Path(cfg_file).read_text(encoding="utf-8"))
+            self.assertEqual(saved["ui"]["strategy2"]["suggest_engine_mode"], "fast")
+
+    def test_load_config_preserves_existing_engine_mode(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_dir = str(Path(tmpdir))
+            cfg_file = str(Path(tmpdir) / "config.json")
+            Path(cfg_file).write_text(
+                json.dumps({"ui": {"strategy2": {"suggest_engine_mode": "stable"}}}),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(config_mod, "CONFIG_DIR", cfg_dir), mock.patch.object(
+                config_mod, "CONFIG_FILE", cfg_file
+            ):
+                cfg = config_mod.load_config(1)
+
+            self.assertEqual(cfg["ui"]["strategy2"]["suggest_engine_mode"], "stable")
+            saved = json.loads(Path(cfg_file).read_text(encoding="utf-8"))
+            self.assertEqual(saved["ui"]["strategy2"]["suggest_engine_mode"], "stable")
+
+    def test_new_slot_config_defaults_to_fast_engine(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_dir = str(Path(tmpdir))
+            cfg_file = str(Path(tmpdir) / "config.json")
+
+            with mock.patch.object(config_mod, "CONFIG_DIR", cfg_dir), mock.patch.object(
+                config_mod, "CONFIG_FILE", cfg_file
+            ):
+                cfg = config_mod.load_config(2)
+
+            self.assertEqual(cfg["ui"]["tool_index"], 2)
+            self.assertEqual(cfg["ui"]["strategy2"]["suggest_engine_mode"], "fast")
+            saved = json.loads((Path(tmpdir) / "config-tool2.json").read_text(encoding="utf-8"))
+            self.assertEqual(saved["ui"]["strategy2"]["suggest_engine_mode"], "fast")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -39,32 +39,55 @@ class StagedScheduler:
             except Exception:
                 allow_ngu_jobs = False
 
+        ngu_codes13 = None
         if pending_ngu_refresh:
-            tab._ngu_base_codes = []
-            tab._ngu_key = None
+            try:
+                tab._scheduled_hash["NGU"] = None
+            except Exception:
+                pass
         elif not allow_ngu_jobs:
-            clear_fn = getattr(tab, "_clear_ngu_for_ineligible_room", None)
-            if callable(clear_fn):
+            should_clear = True
+            should_clear_fn = getattr(tab, "_should_clear_ngu_when_jobs_blocked", None)
+            if callable(should_clear_fn):
                 try:
-                    clear_fn()
+                    should_clear = bool(should_clear_fn())
                 except Exception:
+                    should_clear = True
+            if should_clear:
+                clear_fn = getattr(tab, "_clear_ngu_for_ineligible_room", None)
+                if callable(clear_fn):
+                    try:
+                        clear_fn()
+                    except Exception:
+                        tab._ngu_base_codes = []
+                        tab._ngu_key = None
+                else:
                     tab._ngu_base_codes = []
                     tab._ngu_key = None
-            else:
-                tab._ngu_base_codes = []
-                tab._ngu_key = None
+            try:
+                tab._scheduled_hash["NGU"] = None
+            except Exception:
+                pass
         else:
             derived = tab._derive_ngu_from_3p()
             if derived is not None:
                 tab._ngu_base_codes = list(derived)
                 tab._ngu_key = hashlib.md5("|".join(derived).encode()).hexdigest()
+                cohort_fn = getattr(tab, "_current_3p_hand_cohort_key", None)
+                if callable(cohort_fn):
+                    try:
+                        tab._ngu_ready_cohort_key = cohort_fn()
+                        tab._ngu_pending_cohort_key = None
+                    except Exception:
+                        pass
+                ngu_codes13 = list(derived)
             else:
                 tab._ngu_base_codes = []
                 tab._ngu_key = None
 
         ps = tab._pipeline.build_snapshot(
             codes_slot_order=tab._codes_slot_order,
-            ngu_codes13=tab._ngu_base_codes if (tab._ngu_base_codes and len(tab._ngu_base_codes) == 13) else None,
+            ngu_codes13=ngu_codes13 if (ngu_codes13 and len(ngu_codes13) == 13) else None,
         )
         snapshot = ps.snapshot
         ordered_keys = ps.ordered_keys
@@ -284,12 +307,20 @@ class StagedScheduler:
                     except Exception:
                         allow_ngu_result = False
                 if not allow_ngu_result:
-                    clear_fn = getattr(tab, "_clear_ngu_for_ineligible_room", None)
-                    if callable(clear_fn):
+                    should_clear = True
+                    should_clear_fn = getattr(tab, "_should_clear_ngu_when_jobs_blocked", None)
+                    if callable(should_clear_fn):
                         try:
-                            clear_fn()
+                            should_clear = bool(should_clear_fn())
                         except Exception:
-                            pass
+                            should_clear = True
+                    if should_clear:
+                        clear_fn = getattr(tab, "_clear_ngu_for_ineligible_room", None)
+                        if callable(clear_fn):
+                            try:
+                                clear_fn()
+                            except Exception:
+                                pass
                     if h is not None and tab._scheduled_hash.get(key) == h:
                         tab._scheduled_hash[key] = None
                     self.job_running = False

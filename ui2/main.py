@@ -1388,6 +1388,30 @@ class MainWindow(QMainWindow, WebSocketGateway):
 
         kind = evt.get("kind")
 
+        if kind == "extension_stats":
+            try:
+                profile_id = str(evt.get("profile_id") or "P1")
+                stats = evt.get("stats") if isinstance(evt.get("stats"), dict) else {}
+                reported_at_ms = evt.get("reported_at_ms")
+                try:
+                    lag_ms = int(time.time() * 1000.0 - float(reported_at_ms))
+                except Exception:
+                    lag_ms = -1
+                try:
+                    qsize = int(self._ws_event_queue.qsize())
+                except Exception:
+                    qsize = -1
+                log.info(
+                    "[WS-EXT-STATS] slot=1 profile=%s qsize=%s lag_ms=%s stats=%s",
+                    profile_id,
+                    qsize,
+                    lag_ms,
+                    json.dumps(stats, ensure_ascii=False, sort_keys=True),
+                )
+            except Exception:
+                log.exception("extension_stats log failed")
+            return
+
         # Relay event sang AutoFourToolTab slot 1 context để mirror room/strategy view.
         # Việc relay xảy ra TRƯỚC khi main.py xử lý để ctx nhận payload gốc (chưa unwrap).
         try:
@@ -1764,8 +1788,28 @@ class MainWindow(QMainWindow, WebSocketGateway):
         # cmd=600 là nguồn duy nhất xác định 13 lá gốc của ván. cmd=606 có thể
         # mang thứ tự/layout sau thao tác nên tuyệt đối không ghi đè hand gốc.
         if cs is not None and cmd == 600:
+            hand_context = None
             try:
-                ws_card_store.update_cards(profile_id, cs)
+                if self.room_engine is not None and isinstance(payload, dict):
+                    lpi = payload.get("lpi")
+                    if isinstance(lpi, list):
+                        self.room_engine.on_room_roster(profile_id, lpi)
+                    from ui2.tabs.strategy2.modules.auto_play_controller import (
+                        classify_auto_room_context,
+                        classify_hand_start_room_context,
+                    )
+
+                    if isinstance(lpi, list) and lpi:
+                        hand_context = classify_hand_start_room_context(self.room_engine, lpi)
+                    else:
+                        hand_context = classify_auto_room_context(self.room_engine)
+            except Exception:
+                log.exception("room roster update failed: pid=%s payload=%s", profile_id, payload)
+            try:
+                try:
+                    ws_card_store.update_cards(profile_id, cs, hand_context=hand_context)
+                except TypeError:
+                    ws_card_store.update_cards(profile_id, cs)
                 from ui2.bridge.ws_layout_store import ws_layout_store
 
                 ws_layout_store.begin_hand(profile_id, cs)
@@ -1774,8 +1818,10 @@ class MainWindow(QMainWindow, WebSocketGateway):
                 
         # Keep room membership current even when no room snapshot is refreshed.
         try:
-            if cmd == 600 and self.room_engine is not None and isinstance(payload, dict):
-                self.room_engine.on_room_roster(profile_id, payload.get("lpi") or [])
+            if cmd == 600 and cs is None and self.room_engine is not None and isinstance(payload, dict):
+                lpi = payload.get("lpi")
+                if isinstance(lpi, list):
+                    self.room_engine.on_room_roster(profile_id, lpi)
         except Exception:
             log.exception("room roster update failed: pid=%s payload=%s", profile_id, payload)
 

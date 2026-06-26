@@ -241,6 +241,33 @@ class ToolContext:
         kind = evt.get("kind")
         profile_id = str(evt.get("profile_id") or "P1")
 
+        if kind == "extension_stats":
+            try:
+                import json
+                import time
+
+                stats = evt.get("stats") if isinstance(evt.get("stats"), dict) else {}
+                reported_at_ms = evt.get("reported_at_ms")
+                try:
+                    lag_ms = int(time.time() * 1000.0 - float(reported_at_ms))
+                except Exception:
+                    lag_ms = -1
+                try:
+                    qsize = int(self.event_queue.qsize())
+                except Exception:
+                    qsize = -1
+                log.info(
+                    "[WS-EXT-STATS] slot=%d profile=%s qsize=%s lag_ms=%s stats=%s",
+                    self.slot,
+                    profile_id,
+                    qsize,
+                    lag_ms,
+                    json.dumps(stats, ensure_ascii=False, sort_keys=True),
+                )
+            except Exception:
+                log.exception("[ToolContext] extension_stats log failed slot=%d", self.slot)
+            return
+
         # Unwrap payload list dạng [opcode, {...}]
         payload = evt.get("payload")
         if isinstance(payload, list) and len(payload) >= 2 and isinstance(payload[1], dict):
@@ -315,21 +342,38 @@ class ToolContext:
 
         # --- cmd=600: 13 lá gốc → per-tool card_store ---
         if cs is not None and cmd == 600:
+            hand_context = None
+            # Room roster từ cmd=600 payload
+            if self.room_engine is not None and isinstance(payload, dict):
+                try:
+                    lpi = payload.get("lpi")
+                    if isinstance(lpi, list):
+                        self.room_engine.on_room_roster(profile_id, lpi)
+                except Exception:
+                    pass
+                try:
+                    from ui2.tabs.strategy2.modules.auto_play_controller import (
+                        classify_auto_room_context,
+                        classify_hand_start_room_context,
+                    )
+
+                    if isinstance(lpi, list) and lpi:
+                        hand_context = classify_hand_start_room_context(self.room_engine, lpi)
+                    else:
+                        hand_context = classify_auto_room_context(self.room_engine)
+                except Exception:
+                    hand_context = None
             try:
-                self.card_store.update_cards(profile_id, cs)
+                try:
+                    self.card_store.update_cards(profile_id, cs, hand_context=hand_context)
+                except TypeError:
+                    self.card_store.update_cards(profile_id, cs)
             except Exception:
                 log.exception("[ToolContext] cmd600 card update failed slot=%d", self.slot)
             try:
                 self.layout_store.begin_hand(profile_id, cs)
             except Exception:
                 log.exception("[ToolContext] cmd600 layout hand begin failed slot=%d", self.slot)
-
-            # Room roster từ cmd=600 payload
-            if self.room_engine is not None and isinstance(payload, dict):
-                try:
-                    self.room_engine.on_room_roster(profile_id, payload.get("lpi") or [])
-                except Exception:
-                    pass
 
         # --- cmd=100: self info (bỏ qua mini-game socket có id != 0 — giống main.py) ---
         if isinstance(payload, dict) and cmd == 100:

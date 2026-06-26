@@ -4,6 +4,43 @@
 (function () {
   const LOG_PREFIX = "[MB WS CS]";
 
+  const WS_STATS_INTERVAL_MS = 60000;
+  let contentStats = createContentStats();
+
+  function createContentStats() {
+    return {
+      hookFramesReceived: 0,
+      hookStatsReceived: 0,
+      backgroundFramesSent: 0,
+      backgroundStatsSent: 0,
+      sendErrors: 0,
+    };
+  }
+
+  function sendRuntimeMessage(message) {
+    try {
+      chrome.runtime.sendMessage(message, () => {});
+      return true;
+    } catch (e) {
+      contentStats.sendErrors += 1;
+      return false;
+    }
+  }
+
+  function flushContentStats() {
+    const stats = Object.assign({}, contentStats);
+    if (sendRuntimeMessage({
+      type: "MB_WS_CONTENT_STATS",
+      reported_at_ms: Date.now(),
+      stats,
+    })) {
+      contentStats.backgroundStatsSent += 1;
+    }
+    contentStats = createContentStats();
+  }
+
+  setInterval(flushContentStats, WS_STATS_INTERVAL_MS);
+
   function log() {
     try {
       console.log.apply(console, [LOG_PREFIX, ...arguments]);
@@ -24,26 +61,39 @@
     }
   }
 
-  // 2) Nhận frame từ page → gửi lên background
+  // 2) Receive frame/stats from page -> background
   window.addEventListener("message", (event) => {
     const data = event.data;
-    if (!data || data.source !== "mb-ws-hook") return;
+    if (!data) return;
+
+    if (data.source === "mb-ws-hook-stats") {
+      contentStats.hookStatsReceived += 1;
+      if (sendRuntimeMessage({
+        type: "MB_WS_HOOK_STATS",
+        reported_at_ms: data.reported_at_ms || Date.now(),
+        open_sockets: data.open_sockets,
+        stats: data.stats || {},
+      })) {
+        contentStats.backgroundStatsSent += 1;
+      }
+      return;
+    }
+
+    if (data.source !== "mb-ws-hook") return;
 
     const { direction, url, payload } = data;
     if (!direction || !url) return;
 
-    try {
-      chrome.runtime.sendMessage(
-        {
-          type: "MB_WS_FRAME",
-          direction,
-          url,
-          data: payload,
-        },
-        () => {}
-      );
-    } catch (e) {
-      console.warn(LOG_PREFIX, "sendMessage error", e);
+    contentStats.hookFramesReceived += 1;
+    if (sendRuntimeMessage(
+      {
+        type: "MB_WS_FRAME",
+        direction,
+        url,
+        data: payload,
+      }
+    )) {
+      contentStats.backgroundFramesSent += 1;
     }
   });
 
