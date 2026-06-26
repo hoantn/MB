@@ -1,0 +1,80 @@
+<table class="table">
+  <thead>
+    <tr>
+      <th>License</th>
+      <th>Status</th>
+      <th>Expires (UTC)</th>
+	  <th>Note</th>
+      <th class="ta-right">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for lic in licenses %}
+      <tr>
+        <td class="mono">
+          <div class="stack">
+            <a class="link" href="/admin/licenses/{{ lic.id }}">
+              {{ (lic.id|string)[:8] }}…
+              <span class="copyhint muted small">({{ (lic.id|string)[-4:] }})</span>
+            </a>
+            <div class="muted small">hash: {{ (lic.key_hash or '')[:10] }}…</div>
+          </div>
+        </td>
+
+        <td>
+          {% if lic.status == 'blocked' %}
+            <span class="pill pill--danger"><span class="pill__dot"></span> BLOCKED</span>
+          {% else %}
+            <span class="pill pill--ok"><span class="pill__dot"></span> ACTIVE</span>
+          {% endif %}
+        </td>
+
+		<td class="mono">
+		  <div class="stack">
+			<div>{{ lic.expires_at }}</div>
+		  </div>
+		</td>
+
+		<td>
+			<div class="small muted" title="{{ lic.note or '' }}">
+			  {% if lic.note %}
+				{{ lic.note[:60] }}{% if lic.note|length > 60 %}…{% endif %}
+			  {% else %}
+				—
+			  {% endif %}
+			</div>
+		</td>
+
+		<td class="ta-right">
+		  <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+			<a class="btn btn--sm btn--ghost" href="/admin/licenses/{{ lic.id }}">
+			  <span class="btn__icon" aria-hidden="true">↗</span>
+			  View
+			</a>
+
+			{% if request.session.get("role") in ["super", "agent"] %}
+			<form method="post"
+				  action="/admin/licenses/{{ lic.id }}/delete"
+				  onsubmit="return confirm('Bạn có chắc muốn XÓA VĨNH VIỄN license này không?');"
+				  style="margin:0;">
+			  <button type="submit" class="btn btn--sm btn--danger">
+				<span class="btn__icon" aria-hidden="true">🗑</span>
+				Delete
+			  </button>
+			</form>
+			{% endif %}
+		  </div>
+		</td>
+      </tr>
+    {% endfor %}
+
+    {% if licenses|length == 0 %}
+      <tr>
+        <td colspan="5" class="empty">
+          <div class="empty__title">Không có dữ liệu</div>
+          <div class="empty__desc">Thử đổi từ khóa tìm kiếm.</div>
+        </td>
+      </tr>
+    {% endif %}
+  </tbody>
+</table>

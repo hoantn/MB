@@ -1,0 +1,18 @@
+<table>
+  <tr>
+    <th>Time</th>
+    <th>Event</th>
+    <th>License</th>
+    <th>Device</th>
+    <th>Session</th>
+  </tr>
+  {% for a in audits %}
+    <tr>
+      <td>{{ a.created_at }}</td>
+      <td><code>{{ a.event_type }}</code></td>
+      <td>{{ a.license_id[:8] if a.license_id else "-" }}</td>
+      <td>{{ a.device_id[:8] if a.device_id else "-" }}</td>
+      <td>{{ a.session_id[:8] if a.session_id else "-" }}</td>
+    </tr>
+  {% endfor %}
+</table>

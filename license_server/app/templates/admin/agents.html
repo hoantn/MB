@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quản lý Đại lý</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#f6faf7;color:#0f172a}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px;box-shadow:0 6px 20px rgba(15,23,42,.06)}
+    h1{margin:0 0 14px;font-size:20px}
+    h2{margin:0 0 10px;font-size:16px}
+    .grid{display:grid;grid-template-columns:1fr;gap:14px}
+    @media(min-width:900px){.grid{grid-template-columns:420px 1fr}}
+    input{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:10px;font-size:14px}
+    button{padding:10px 12px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-weight:700;cursor:pointer}
+    button.secondary{background:#0f766e}
+    button.danger{background:#dc2626}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px;border-bottom:1px solid #e5e7eb;text-align:left;font-size:14px;vertical-align:top}
+    th{font-size:12px;text-transform:uppercase;color:#64748b}
+    .pill{display:inline-block;padding:3px 8px;border-radius:999px;background:#e8f7ee;color:#166534;font-weight:700;font-size:12px}
+    .pill.off{background:#fee2e2;color:#991b1b}
+    .row{display:flex;gap:10px;align-items:center}
+    .muted{color:#64748b;font-size:13px}
+    .topnav{display:flex;gap:10px;align-items:center;margin-bottom:14px}
+    a{color:#16a34a;text-decoration:none;font-weight:700}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    form{margin:0}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topnav">
+      <a href="/admin">← Dashboard</a>
+      <a href="/admin/licenses">Licenses</a>
+      <a href="/admin/sessions">Sessions</a>
+      <a href="/admin/audit">Audit</a>
+      <span class="muted">/ Quản lý Đại lý</span>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h1>Tạo đại lý</h1>
+        <form method="post" action="/admin/agents/create">
+          <div class="row" style="flex-direction:column;align-items:stretch;gap:10px">
+            <div>
+              <div class="muted">Username</div>
+              <input name="username" placeholder="agent01" required />
+            </div>
+            <div>
+              <div class="muted">Password</div>
+              <input name="password" placeholder="mật khẩu" required />
+            </div>
+            <div>
+              <div class="muted">Giới hạn license active (0 = không giới hạn)</div>
+              <input name="max_active_licenses" type="number" min="0" value="0" />
+            </div>
+            <button type="submit">Tạo đại lý</button>
+          </div>
+        </form>
+        <p class="muted" style="margin:12px 0 0">
+          Lưu ý: Chỉ SUPER ADMIN xem được trang này. Đại lý chỉ thấy license của chính mình.
+        </p>
+      </div>
+
+      <div class="card">
+        <h1>Danh sách đại lý</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Trạng thái</th>
+              <th>Limit active</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in agents %}
+            <tr>
+              <td>
+                <div><b>{{ u.username }}</b></div>
+                <div class="muted">ID: {{ u.id }}</div>
+              </td>
+              <td>
+                {% if u.is_active %}
+                  <span class="pill">ACTIVE</span>
+                {% else %}
+                  <span class="pill off">DISABLED</span>
+                {% endif %}
+              </td>
+              <td>{{ u.max_active_licenses }}</td>
+              <td>
+                <div class="actions">
+                  <form method="post" action="/admin/agents/{{u.id}}/toggle">
+                    <button type="submit" class="secondary">
+                      {% if u.is_active %}Khoá{% else %}Mở{% endif %}
+                    </button>
+                  </form>
+                  <form method="post" action="/admin/agents/{{u.id}}/reset_password">
+                    <input name="new_password" placeholder="Mật khẩu mới" />
+                    <button type="submit" class="danger">Reset</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

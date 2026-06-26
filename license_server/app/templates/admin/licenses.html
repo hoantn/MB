@@ -1,0 +1,148 @@
+{% extends "admin/base.html" %}
+{% block title %}Licenses · Admin{% endblock %}
+{% set active_nav = 'licenses' %}
+
+{% block content %}
+<div class="pagehead">
+  <div>
+    <h1 class="h1">Licenses</h1>
+    <p class="subhead">Quản lý key, hạn dùng và trạng thái. Tập trung vào thông tin quan trọng, thao tác an toàn.</p>
+  </div>
+
+  <div class="pagehead__right">
+    <a class="btn btn--primary" href="#"
+       onclick="document.getElementById('create-modal').classList.add('is-open'); return false;">
+      <span class="btn__icon" aria-hidden="true">＋</span>
+      Tạo license
+    </a>
+  </div>
+</div>
+
+<section class="card">
+  <div class="card__body">
+    <form class="filters" method="get" action="/admin/licenses">
+      <div class="field">
+        <label class="label" for="q">Tìm kiếm</label>
+        <div class="inputgroup">
+          <span class="inputgroup__icon" aria-hidden="true">🔎</span>
+          <input class="input" id="q" name="q" placeholder="tìm theo license id hoặc ghi chú..." value="{{ q or '' }}"/>
+        </div>
+      </div>
+		<div class="field">
+		  <label class="label" for="note">Ghi chú</label>
+		  <div class="inputgroup">
+			<span class="inputgroup__icon" aria-hidden="true">📝</span>
+			<input class="input" id="note" name="note" placeholder="lọc theo nội dung ghi chú..." value="{{ note or '' }}"/>
+		  </div>
+		</div>
+
+		<div class="field">
+		  <label class="label" for="has_note">Bộ lọc</label>
+		  <div class="inputgroup">
+			<label style="display:flex; gap:8px; align-items:center;">
+			  <input type="checkbox" id="has_note" name="has_note" value="1"
+					 {% if has_note in ['1','true','yes','on'] %}checked{% endif %}>
+			  Chỉ hiện license có ghi chú
+			</label>
+		  </div>
+			<div class="field">
+			  <label class="label" for="exp">Hạn dùng</label>
+			  <div class="inputgroup">
+				<span class="inputgroup__icon" aria-hidden="true">⏳</span>
+				<select class="input" id="exp" name="exp">
+				  <option value="" {% if not exp %}selected{% endif %}>Tất cả</option>
+				  <option value="1d" {% if exp == '1d' %}selected{% endif %}>Gần hết hạn (≤ 1 ngày)</option>
+				  <option value="3d" {% if exp == '3d' %}selected{% endif %}>Gần hết hạn (≤ 3 ngày)</option>
+				  <option value="7d" {% if exp == '7d' or exp == 'soon' %}selected{% endif %}>Gần hết hạn (≤ 7 ngày)</option>
+				  <option value="30d" {% if exp == '30d' %}selected{% endif %}>Gần hết hạn (≤ 30 ngày)</option>
+				  <option value="expired" {% if exp == 'expired' %}selected{% endif %}>Đã hết hạn</option>
+				  <option value="none" {% if exp == 'none' %}selected{% endif %}>Không thời hạn</option>
+				</select>
+			  </div>
+			</div>
+			<div class="field">
+			  <label class="label" for="status">Trạng thái</label>
+			  <div class="inputgroup">
+				<span class="inputgroup__icon" aria-hidden="true">🏷️</span>
+				<select class="input" id="status" name="status">
+				  <option value="" {% if not status %}selected{% endif %}>Tất cả</option>
+				  <option value="active" {% if status == 'active' %}selected{% endif %}>Active</option>
+				  <option value="blocked" {% if status == 'blocked' %}selected{% endif %}>Blocked</option>
+				</select>
+			  </div>
+			</div>
+		</div>
+		{% if request.session.get("role") == "super" %}
+		  <div class="field">
+			<label class="label" for="agent">Đại lý</label>
+			<div class="inputgroup">
+			  <span class="inputgroup__icon" aria-hidden="true">👤</span>
+			  <select class="input" id="agent" name="agent">
+				<option value="">Tất cả</option>
+				{% for a in agents %}
+				  <option value="{{ a.id }}" {% if selected_agent == a.id %}selected{% endif %}>
+					{{ a.username }} ({{ (a.id|string)[:8] }})
+				  </option>
+				{% endfor %}
+			  </select>
+			</div>
+		  </div>
+		{% endif %}
+
+      <div class="field field--actions">
+        <button class="btn btn--ghost" type="submit">
+          <span class="btn__icon" aria-hidden="true">↻</span>
+          Lọc
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card__divider"></div>
+
+  <div class="card__body card__body--flush">
+    <div class="tablewrap">
+      {% include "admin/partials/license_table.html" %}
+    </div>
+  </div>
+</section>
+
+<div class="modal" id="create-modal" onclick="if(event.target===this){this.classList.remove('is-open')}">
+  <div class="modal__panel">
+    <div class="modal__head">
+      <div>
+        <div class="modal__title">Tạo license mới</div>
+        <div class="muted small">Key sẽ chỉ hiện 1 lần sau khi tạo.</div>
+      </div>
+      <button class="btn btn--sm btn--ghost"
+              onclick="document.getElementById('create-modal').classList.remove('is-open'); return false;">
+        Đóng
+      </button>
+    </div>
+
+    <form class="modal__body" method="post" action="/admin/licenses/create">
+      <div class="field">
+        <label class="label" for="days">Số ngày sử dụng</label>
+        <input class="input" id="days" type="number" name="days" min="1" step="1" value="30" required/>
+      </div>
+	  <div class="field">
+		<label class="label" for="note">Ghi chú</label>
+		<textarea class="input"
+				  id="note"
+				  name="note"
+				  rows="3"
+				  placeholder="Ví dụ: Khách A, gia hạn lần 2, dùng máy văn phòng..."></textarea>
+	  </div>
+      <button class="btn btn--primary" type="submit">
+        <span class="btn__icon" aria-hidden="true">🔑</span>
+        Generate Key
+      </button>
+
+      <div class="hint">
+        <span class="hint__icon" aria-hidden="true">ℹ️</span>
+        Bạn nên copy key ngay sau khi tạo, sau đó key sẽ bị ẩn.
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

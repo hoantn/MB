@@ -1,0 +1,236 @@
+{% extends "admin/base.html" %}
+{% block title %}License {{ (lic.id|string)[:8] }} · Admin{% endblock %}
+{% set active_nav = 'licenses' %}
+
+{% block content %}
+<div class="pagehead">
+  <div>
+    <a class="breadcrumb" href="/admin/licenses">← Licenses</a>
+    <h1 class="h1">License <span class="mono">{{ lic.id|string }}</span></h1>
+    <p class="subhead">Gia hạn (safe) · revoke/block (danger). UI ưu tiên rõ ràng, tránh thao tác nhầm.</p>
+  </div>
+</div>
+
+<div class="grid">
+  <section class="card">
+    <div class="card__header">
+      <div>
+        <h2 class="h2">Tổng quan</h2>
+        <p class="muted">Thông tin read-only.</p>
+      </div>
+      <div>
+        {% if lic.status == 'blocked' %}
+          <span class="pill pill--danger"><span class="pill__dot"></span> BLOCKED</span>
+        {% else %}
+          <span class="pill pill--ok"><span class="pill__dot"></span> ACTIVE</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card__body">
+      <div class="kv">
+		<div class="kv__row">
+		  <div class="kv__k">Ghi chú</div>
+		  <div class="kv__v">{{ lic.note or '—' }}</div>
+		</div>
+        <div class="kv__row">
+          <div class="kv__k">License ID</div>
+          <div class="kv__v mono">{{ lic.id|string }}</div>
+        </div>
+        <div class="kv__row">
+          <div class="kv__k">Key hash</div>
+          <div class="kv__v mono">{{ lic.key_hash }}</div>
+        </div>
+        <div class="kv__row">
+          <div class="kv__k">Created</div>
+          <div class="kv__v mono">{{ lic.created_at }}</div>
+        </div>
+        <div class="kv__row">
+          <div class="kv__k">Offline grace</div>
+          <div class="kv__v mono">{{ lic.offline_grace_hours }}h</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card__header">
+      <div>
+        <h2 class="h2">Gia hạn</h2>
+        <p class="muted">Thao tác an toàn (safe action).</p>
+      </div>
+    </div>
+
+    <div class="card__body">
+      <div class="kv">
+        <div class="kv__row">
+          <div class="kv__k">Expires (UTC)</div>
+          <div class="kv__v">
+            <span id="license-expiry" class="mono">{{ lic.expires_at }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="extend-msg" class="toastline"></div>
+
+		<form class="inline mt"
+			  action="/admin/licenses/{{ lic.id }}/extend"
+			  method="post"
+			  hx-post="/admin/licenses/{{ lic.id }}/extend"
+			  hx-target="#license-expiry"
+			  hx-swap="innerHTML"
+			  hx-on::after-request="document.getElementById('extend-msg').innerText = (event.detail.xhr.status === 200 ? '✓ Đã gia hạn xong.' : ('✕ Lỗi: HTTP ' + event.detail.xhr.status))">
+
+		  <div class="inputrow">
+			<input class="input input--sm" type="number" name="days" min="1" step="1" value="30" required>
+			<button class="btn btn--primary" type="submit">
+			  <span class="btn__icon" aria-hidden="true">🗓️</span>
+			  Gia hạn
+			</button>
+		  </div>
+
+		  <div class="muted small">Đơn vị: ngày</div>
+		</form>
+
+      <div class="danger mt">
+        <div class="danger__title">⚠️ Danger zone</div>
+        <div class="danger__desc">Chỉ dùng khi cần khóa key hoặc ép tool refresh.</div>
+
+        <div class="danger__actions">
+          {% if lic.status == 'blocked' %}
+            <form method="post" action="/admin/licenses/{{ lic.id }}/unblock">
+              <button class="btn btn--sm btn--ghost" type="submit">Unblock</button>
+            </form>
+          {% else %}
+            <form method="post" action="/admin/licenses/{{ lic.id }}/block">
+              <button class="btn btn--sm btn--danger" type="submit">Block</button>
+            </form>
+          {% endif %}
+
+          <form method="post" action="/admin/licenses/{{ lic.id }}/revoke">
+            <button class="btn btn--sm btn--danger" type="submit">Revoke sessions</button>
+          </form>
+			{% if request.session.get("role") in ["super", "agent"] %}
+			<form method="post"
+				  action="/admin/licenses/{{ lic.id }}/delete"
+				  onsubmit="return confirm('Bạn có chắc muốn XÓA VĨNH VIỄN license này không? Hành động này sẽ xóa luôn device, sessions, refresh tokens và audit liên quan.');">
+			  <button type="submit" class="btn btn--danger">
+				<span class="btn__icon" aria-hidden="true">🗑</span>
+				Delete license
+			  </button>
+			</form>
+			{% endif %}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card card--span">
+    <div class="card__header">
+      <div>
+        <h2 class="h2">Thiết bị gắn (Bound Device)</h2>
+        <p class="muted">PC name + fingerprint để phân biệt máy.</p>
+      </div>
+    </div>
+    <div class="card__body">
+      <div class="kv">
+        <div class="kv__row">
+          <div class="kv__k">PC Name</div>
+          <div class="kv__v mono">{{ dev.device_name if dev else '—' }}</div>
+        </div>
+        <div class="kv__row">
+          <div class="kv__k">Fingerprint</div>
+          <div class="kv__v mono">{{ dev.fingerprint_hash if dev else '—' }}</div>
+        </div>
+        <div class="kv__row">
+          <div class="kv__k">First seen</div>
+          <div class="kv__v mono">{{ dev.first_seen_at if dev else '—' }}</div>
+        </div>
+        <div class="kv__row">
+          <div class="kv__k">Last seen</div>
+          <div class="kv__v mono">{{ dev.last_seen_at if dev else '—' }}</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card card--span">
+    <div class="card__header">
+      <div>
+        <h2 class="h2">Sessions (last 50)</h2>
+        <p class="muted">Theo dõi hoạt động gần nhất.</p>
+      </div>
+    </div>
+
+    <div class="card__body card__body--flush">
+      <div class="tablewrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Issued</th>
+              <th>Session</th>
+              <th>Status</th>
+              <th>Device ID</th>
+              <th>Last HB</th>
+              <th>IP</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in sessions %}
+              <tr>
+                <td class="mono">{{ s.issued_at }}</td>
+                <td class="mono">{{ s.id }}</td>
+                <td>
+                  {% if s.status == 'active' %}
+                    <span class="pill pill--ok"><span class="pill__dot"></span> ACTIVE</span>
+                  {% else %}
+                    <span class="pill pill--neutral">{{ s.status|upper }}</span>
+                  {% endif %}
+                </td>
+                <td class="mono">{{ s.device_id }}</td>
+                <td class="mono">{{ s.last_heartbeat_at or '—' }}</td>
+                <td class="mono">{{ s.ip or '—' }}</td>
+              </tr>
+            {% endfor %}
+            {% if sessions|length == 0 %}
+              <tr><td colspan="6" class="empty">
+                <div class="empty__title">Chưa có session</div>
+                <div class="empty__desc">Session sẽ xuất hiện sau khi tool activate/heartbeat.</div>
+              </td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="card card--span">
+    <div class="card__header">
+      <div>
+        <h2 class="h2">Audit (last 100)</h2>
+        <p class="muted">Log truy vết – nguồn sự thật duy nhất khi support.</p>
+      </div>
+    </div>
+
+    <div class="card__body">
+      <div class="audit">
+        {% for a in audits %}
+          <div class="audit__row">
+            <div class="audit__ts mono">{{ a.created_at }}</div>
+            <div class="audit__event">
+              <div class="audit__event-title">
+                <span class="audit__icon" aria-hidden="true">🧾</span>
+                <span class="mono">{{ a.event_type }}</span>
+              </div>
+              <div class="muted small">{{ a.payload }}</div>
+            </div>
+          </div>
+        {% endfor %}
+        {% if audits|length == 0 %}
+          <div class="muted">Chưa có audit.</div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}

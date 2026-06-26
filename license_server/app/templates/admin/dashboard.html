@@ -1,0 +1,10 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h2>Dashboard</h2>
+<div class="row">
+  <div class="card"><div class="muted">Total licenses</div><h3>{{ lic_count }}</h3></div>
+  <div class="card"><div class="muted">Active licenses</div><h3>{{ active_lic }}</h3></div>
+  <div class="card"><div class="muted">Devices</div><h3>{{ devices }}</h3></div>
+  <div class="card"><div class="muted">Active sessions</div><h3>{{ active_sessions }}</h3></div>
+</div>
+{% endblock %}

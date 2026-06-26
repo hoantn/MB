@@ -1,0 +1,13 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h2>License Created</h2>
+<div class="card">
+  <div><b>License ID:</b> {{ license_id }}</div>
+  <div><b>Expires at (UTC):</b> {{ expires_at }}</div>
+  <hr>
+  <div><b>RAW KEY (show once):</b></div>
+  <div style="font-size:20px; letter-spacing:1px; margin-top:8px;"><code>{{ raw_key }}</code></div>
+  <p class="muted">Hãy copy và lưu key ngay. Trang này không lưu raw key.</p>
+  <a href="/admin/licenses/{{ license_id }}">Go to detail</a>
+</div>
+{% endblock %}

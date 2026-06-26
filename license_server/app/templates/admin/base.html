@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{% block title %}License Admin{% endblock %}</title>
+
+  <!-- HTMX (CDN) để tránh lệch path /static khi dev -->
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+  <link rel="stylesheet" href="/static/admin/admin.css"/>
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar__inner">
+      <a class="brand" href="/admin/">
+        <span class="brand__mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+            <path d="M12 2l8.5 5v10L12 22 3.5 17V7L12 2z" stroke="currentColor" stroke-width="2" />
+            <path d="M12 2v20" stroke="currentColor" stroke-width="2" opacity=".4"/>
+          </svg>
+        </span>
+        <span class="brand__name">License Admin</span>
+        <span class="brand__tag">Pro</span>
+      </a>
+
+      <nav class="nav">
+        <a class="nav__link {% if active_nav == 'licenses' %}is-active{% endif %}" href="/admin/licenses">Licenses</a>
+        <a class="nav__link {% if active_nav == 'sessions' %}is-active{% endif %}" href="/admin/sessions">Sessions</a>
+        <a class="nav__link {% if active_nav == 'audit' %}is-active{% endif %}" href="/admin/audit">Audit</a>
+      </nav>
+
+		<div class="topbar__actions">
+
+		  {# Chỉ hiện với Admin tổng #}
+		  {% set is_super =
+			  request.session.get('is_super')
+			  or request.session.get('is_root')
+			  or request.session.get('role') in ['super', 'admin']
+			  or (request.session.get('admin') and not request.session.get('agent_id'))
+		  %}
+
+		  {% if is_super %}
+			<a class="btn btn--ghost" href="/admin/agents">
+			  <span class="btn__icon" aria-hidden="true">👤</span>
+			  Tạo đại lý
+			</a>
+		  {% endif %}
+
+		  <form method="post" action="/admin/logout">
+			<button class="btn btn--ghost" type="submit">
+			  <span class="btn__icon" aria-hidden="true">⎋</span>
+			  Logout
+			</button>
+		  </form>
+		</div>
+
+    </div>
+  </header>
+
+  <main class="container page">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="container footer">
+    <div class="muted">Internal Admin</div>
+  </footer>
+
+  <script>
+    // Loading bar for HTMX
+    (function () {
+      const bar = document.createElement("div");
+      bar.className = "htmx-progress";
+      document.body.appendChild(bar);
+
+      let n = 0;
+      const set = (on) => {
+        if (on) { n++; bar.classList.add("is-on"); }
+        else { n = Math.max(0, n-1); if (n === 0) bar.classList.remove("is-on"); }
+      };
+
+      document.body.addEventListener("htmx:beforeRequest", () => set(true));
+      document.body.addEventListener("htmx:afterRequest", () => set(false));
+      document.body.addEventListener("htmx:responseError", () => set(false));
+    })();
+  </script>
+</body>
+</html>

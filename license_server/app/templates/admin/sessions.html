@@ -1,0 +1,7 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h2>Sessions (last 200)</h2>
+<div class="card">
+  {% include "admin/partials/session_table.html" %}
+</div>
+{% endblock %}

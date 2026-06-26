@@ -1,0 +1,20 @@
+<table>
+  <tr>
+    <th>Issued</th>
+    <th>Session ID</th>
+    <th>Status</th>
+    <th>Device ID</th>
+    <th>Last HB</th>
+    <th>IP</th>
+  </tr>
+  {% for s in sessions %}
+    <tr>
+      <td>{{ s.issued_at }}</td>
+      <td><code>{{ s.id[:8] }}</code></td>
+      <td>{{ s.status }}</td>
+      <td><code>{{ s.device_id[:8] }}</code></td>
+      <td>{{ s.last_heartbeat_at }}</td>
+      <td>{{ s.ip or "-" }}</td>
+    </tr>
+  {% endfor %}
+</table>

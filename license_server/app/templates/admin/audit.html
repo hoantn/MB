@@ -1,0 +1,14 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h2>Audit (last 300)</h2>
+<div class="card">
+  <form method="get" action="/admin/audit">
+    <label>Event type</label>
+    <input name="event" value="{{ event or '' }}" placeholder="e.g. activate_ok">
+    <button type="submit">Filter</button>
+  </form>
+</div>
+<div class="card">
+  {% include "admin/partials/audit_table.html" %}
+</div>
+{% endblock %}
